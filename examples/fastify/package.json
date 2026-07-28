@@ -1,0 +1,28 @@
+{
+  "name": "fastify-rpc-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build --outDir dist/client",
+    "build:server": "vite build --ssr src/entry-server.ts --outDir dist/server",
+    "preview": "pnpm build && pnpm start",
+    "start": "NODE_ENV=production node server"
+  },
+  "dependencies": {
+    "@fastify/compress": "^9.1.0",
+    "@fastify/static": "^10.1.2",
+    "@fastify/vite": "^9.2.0",
+    "fastify": "^5.10.0",
+    "@thednp/rpc": "link:../..",
+    "vite": "^8.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "compression": "^1.8.1",
+    "typescript": "~7.0.2",
+    "valibot": "^1.4.2"
+  }
+}

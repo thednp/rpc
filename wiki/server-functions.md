@@ -1,0 +1,93 @@
+# Server Functions
+
+## `createServerFunction(name, handler, options?)`
+
+The core API for defining server-side functions.
+
+### Signature
+
+```ts
+function createServerFunction<T>(
+  name: string,
+  handler: (signal: AbortSignal, ...args: JsonArray) => Promise<T>,
+  options?: { contentType: 'application/json' | 'text/plain'}
+): ServerFunction<T>;
+```
+
+### Parameters
+
+- **`name`** (`string`) — The registered name used in RPC routing. Must match the name used when calling the function on the client.
+- **`handler`** (`(signal: AbortSignal, ...args: JsonArray) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; remaining arguments come from the client. The return value must be JSON-serializable.
+- **`options`** (`{ contentType?: 'application/json' | 'text/plain' }`) — Optional serialization strategy. Defaults to `'application/json'`.
+
+### AbortSignal
+
+The first argument to every server function is an `AbortSignal`. This allows the client to cancel a request:
+
+```ts
+export const longTask = createServerFunction(
+  'long-task',
+  async (signal: AbortSignal, id: string) => {
+    signal.throwIfAborted(); // throws if client cancelled
+    // ... do work ...
+    signal.throwIfAborted(); // check again after each step
+    return result;
+  },
+);
+```
+
+Use `signal.aborted` or `signal.throwIfAborted()` in long-running functions to respond to cancellation promptly.
+
+### Registration
+
+When `createServerFunction` is called, it registers the function in a server-side map keyed by `name`. This map is used by the RPC middleware to route incoming requests to the correct implementation.
+
+### Return Type
+
+The return value of `handler` is serialized to JSON and sent as the HTTP response body. Ensure your return type is JSON-serializable.
+
+## Input Validation
+
+Server functions receive raw, untrusted client data. Always validate before use.
+
+**zod:**
+
+```ts
+import { z } from 'zod';
+import { createServerFunction } from '@thednp/rpc/server';
+
+const AddSchema = z.object({
+  a: z.number(),
+  b: z.number(),
+});
+
+export const add = createServerFunction('add', async (signal, raw) => {
+  const parsed = AddSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { error: parsed.error.flatten() };
+  }
+  return parsed.data.a + parsed.data.b;
+});
+```
+
+**valibot:**
+
+```ts
+import * as v from 'valibot';
+import { createServerFunction } from '@thednp/rpc/server';
+
+const AddSchema = v.object({
+  a: v.number(),
+  b: v.number(),
+});
+
+export const add = createServerFunction('add', async (signal, raw) => {
+  const parsed = v.safeParse(AddSchema, raw);
+  if (parsed.issues) {
+    return { error: v.flatten(parsed.issues).nested };
+  }
+  return parsed.output.a + parsed.output.b;
+});
+```
+
+Validation errors return structured data instead of throwing — the client's auto-generated `handleResponse` receives `{ error: ... }` and surfaces it as an `Error`.

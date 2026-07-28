@@ -1,0 +1,23 @@
+{
+  "name": "ssr-rpc-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types server.ts",
+    "build": "pnpm build:client && pnpm build:server",
+    "build:client": "vite build --outDir dist/client --mode=production",
+    "build:server": "vite build --ssr src/entry-server.ts --outDir dist/server --mode=production",
+    "preview": "pnpm build && pnpm start",
+    "start": "NODE_ENV=production node --experimental-strip-types server.ts"
+  },
+  "dependencies": {
+    "vite": "^8.1.5",
+    "@thednp/rpc": "link:../.."
+  },
+  "devDependencies": {
+    "valibot": "^1.4.2",
+    "@types/node": "^26.1.2",
+    "typescript": "~7.0.2"
+  }
+}

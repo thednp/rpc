@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+  tsdown: false
+minimumReleaseAgeExclude:
+  - '@types/node@26.1.2'
+packages:
+  - "examples/*"

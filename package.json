@@ -1,0 +1,80 @@
+{
+  "name": "@thednp/rpc",
+  "version": "0.0.1",
+  "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
+  "homepage": "https://github.com/thednp/rpc#readme",
+  "bugs": {
+    "url": "https://github.com/thednp/rpc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thednp/rpc.git"
+  },
+  "license": "MIT",
+  "author": "thednp",
+  "type": "module",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "wiki",
+    "README.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./express": "./dist/express/express.mjs",
+    "./fastify": "./dist/fastify/fastify.mjs",
+    "./fastify/plugin": "./dist/fastify/plugin/fastify/plugin.mjs",
+    "./helpers": "./dist/helpers/helpers.mjs",
+    "./hono": "./dist/hono/hono.mjs",
+    "./koa": "./dist/koa/koa.mjs",
+    "./server": "./dist/server/server.mjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "vitest",
+    "test-ui": "vitest --ui",
+    "test-dev": "node dev-test",
+    "test-prod": "node dev-test --mode=preview",
+    "format": "deno fmt src tests examples/**/src",
+    "clean": "rm -rf examples/**/dist examples/**/node_modules examples/**/package-lock.json examples/**/pnpm-lock.yaml examples/**/bun.lockb examples/**/deno.lock",
+    "dev": "cd examples/spa && pnpm up && pnpm dev",
+    "dev:koa": "cd examples/koa && pnpm up && pnpm dev",
+    "dev:express": "cd examples/express && pnpm up && pnpm dev",
+    "dev:fastify": "cd examples/fastify && pnpm up && pnpm dev",
+    "dev:hono": "cd examples/hono && pnpm up && pnpm dev",
+    "dev:ssr": "cd examples/ssr && pnpm up && pnpm dev",
+    "lint": "pnpm lint:ts && pnpm check:ts",
+    "lint:ts": "deno lint src",
+    "fix:ts": "deno lint src --fix",
+    "check:ts": "tsc -noEmit",
+    "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
+    "up:examples_1": "for d in examples/*/; do (cd \"$d\" && pnpm up --latest); done",
+    "up:root": "pnpm up --latest",
+    "upd": "pnpm up:examples && pnpm up:root",
+    "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm build",
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "vite": "^8.1.5"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.0.12",
+    "@types/express": "^5.0.6",
+    "@types/koa": "^3.0.3",
+    "@types/node": "^26.1.2",
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "@vitest/ui": "^4.1.10",
+    "fastify": "^5.10.0",
+    "fastify-plugin": "^6.0.0",
+    "hono": "^4.12.32",
+    "koa": "^3.2.1",
+    "picocolors": "^1.1.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^7.0.2",
+    "vite-plugin-strip-comments": "^0.0.10",
+    "vitest": "^4.1.10"
+  },
+  "packageManager": "pnpm@11.17.0"
+}

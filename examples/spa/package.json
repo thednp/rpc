@@ -1,0 +1,20 @@
+{
+  "name": "spa-rpc-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite build && vite preview",
+    "start": "vite preview"
+  },
+  "dependencies": {
+    "@thednp/rpc": "link:../..",
+    "vite": "^8.1.5"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2",
+    "valibot": "^1.4.2"
+  }
+}
