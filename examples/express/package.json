@@ -14,7 +14,7 @@
   "dependencies": {
     "compression": "^1.8.1",
     "express": "^5.2.1",
-    "@thednp/rpc": "link:../..",
+    "@thednp/rpc": "^0.0.1",
     "sirv": "^3.0.2",
     "valibot": "^1.4.2",
     "vite": "^8.1.5"

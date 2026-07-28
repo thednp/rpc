@@ -1,7 +1,7 @@
 # @thednp/rpc
 
-[![Coverage Status](https://coveralls.io/repos/github/thednp/rpcv/badge.svg)](https://coveralls.io/github/thednp/rpcv)
-[![ci](https://github.com/thednp/rpcv/actions/workflows/ci.yml/badge.svg)](https://github.com/thednp/rpcv/actions/workflows/ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/thednp/rpc/badge.svg)](https://coveralls.io/github/thednp/rpcv)
+[![ci](https://github.com/thednp/rpc/actions/workflows/ci.yml/badge.svg)](https://github.com/thednp/rpc/actions/workflows/ci.yml)
 [![NPM Version](https://img.shields.io/npm/v/@thednp/rpc.svg)](https://www.npmjs.com/package/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
 

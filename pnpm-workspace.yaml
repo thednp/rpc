@@ -3,5 +3,6 @@ allowBuilds:
   tsdown: false
 minimumReleaseAgeExclude:
   - '@types/node@26.1.2'
+  - '@thednp/rpc@0.0.1'
 packages:
   - "examples/*"
