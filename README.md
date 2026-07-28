@@ -1,6 +1,6 @@
 # @thednp/rpc
 
-[![Coverage Status](https://coveralls.io/repos/github/thednp/rpc/badge.svg)](https://coveralls.io/github/thednp/rpcv)
+[![Coverage Status](https://coveralls.io/repos/github/thednp/rpc/badge.svg)](https://coveralls.io/github/thednp/rpc)
 [![ci](https://github.com/thednp/rpc/actions/workflows/ci.yml/badge.svg)](https://github.com/thednp/rpc/actions/workflows/ci.yml)
 [![NPM Version](https://img.shields.io/npm/v/@thednp/rpc.svg)](https://www.npmjs.com/package/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
@@ -34,14 +34,14 @@ Most RPC solutions ask you to adopt a new way of thinking. You learn a complex A
 
 ## Demos
 
-| Example         | Source Code                                                                     | Try online                                                                                |
-| -----------------| ---------------------------------------------------------------------------------| -------------------------------------------------------------------------------------------|
-| SPA - node:http | [examples/spa](https://github.com/thednp/rpcv/tree/master/examples/spa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpcv/tree/master/examples/spa)     |
-| SSR - node:http | [examples/ssr](https://github.com/thednp/rpcv/tree/master/examples/ssr)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpcv/tree/master/examples/ssr)     |
-| Express         | [examples/express](https://github.com/thednp/rpcv/tree/master/examples/express) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpcv/tree/master/examples/express) |
-| Fastify         | [examples/fastify](https://github.com/thednp/rpcv/tree/master/examples/fastify) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpcv/tree/master/examples/fastify) |
-| Hono            | [examples/hono](https://github.com/thednp/rpcv/tree/master/examples/hono)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpcv/tree/master/examples/hono)    |
-| Koa             | [examples/koa](https://github.com/thednp/rpcv/tree/master/examples/koa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpcv/tree/master/examples/koa)     |
+| Example         | Source Code                                                                    | Try online                                                                               |
+| -----------------| --------------------------------------------------------------------------------| ------------------------------------------------------------------------------------------|
+| SPA - node:http | [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)     |
+| SSR - node:http | [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)     |
+| Express         | [examples/express](https://github.com/thednp/rpc/tree/master/examples/express) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express) |
+| Fastify         | [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify) |
+| Hono            | [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)    |
+| Koa             | [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)     |
 
 
 ## Examples
