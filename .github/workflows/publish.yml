@@ -17,11 +17,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22" # Or 'lts/*'
+          node-version: 22.13.1 # Or 'lts/*'
           registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
 
       - name: PNPM setup
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
 
       - name: Deno Setup
         uses: denoland/setup-deno@v2
