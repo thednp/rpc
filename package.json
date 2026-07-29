@@ -57,7 +57,6 @@
     "up:root": "pnpm up --latest",
     "upd": "pnpm up:examples && pnpm up:root",
     "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm build",
-    "prepare": "pnpm build",
     "build": "tsdown"
   },
   "dependencies": {
