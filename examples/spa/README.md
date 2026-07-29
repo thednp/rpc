@@ -18,10 +18,10 @@ Single-Page Application using Vite dev server with `@thednp/rpc` for automatic R
 
 ## Resources
 
-- [Getting Started](../../wiki/getting-started.md)
-- [Setup Guide](../../wiki/setup.md)
-- [Server Functions](../../wiki/server-functions.md)
-- [Client Usage](../../wiki/client-usage.md)
-- [Configuration](../../wiki/configuration.md)
-- [Best Practices](../../wiki/best-practices.md)
-- [Security](../../wiki/security.md)
+- [Getting Started](https://github.com/thednp/rpc/wiki/getting-started.md)
+- [Setup Guide](https://github.com/thednp/rpc/wiki/setup.md)
+- [Server Functions](https://github.com/thednp/rpc/wiki/server-functions.md)
+- [Client Usage](https://github.com/thednp/rpc/wiki/client-usage.md)
+- [Configuration](https://github.com/thednp/rpc/wiki/configuration.md)
+- [Best Practices](https://github.com/thednp/rpc/wiki/best-practices.md)
+- [Security](https://github.com/thednp/rpc/wiki/security.md)
