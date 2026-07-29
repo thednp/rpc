@@ -48,9 +48,9 @@ interface RpcPluginOptions {
    * @default "__rpc"
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix: "__rpc" | string;
+  rpcPrefix: "__rpc" | string;
   /**
    * Option to set an adapter for the middleware connection. The default is _express_,
    * which is the most popular and battle tested server app. The _express_ adapter is
@@ -83,9 +83,9 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * @default string
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix?: string | false;
+  rpcPrefix?: string | false;
   /**
    * Async handler for request processing.
    * Core middleware function that processes incoming requests.

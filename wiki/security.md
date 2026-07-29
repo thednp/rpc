@@ -2,10 +2,10 @@
 
 ## Prefix Boundary Check
 
-All adapters use `new RegExp(\`^/${rpcPreffix}/\`)` instead of `startsWith` to match the RPC endpoint path. This prevents path-segment bypass attacks:
+All adapters use `new RegExp(\`^/${rpcPrefix}/\`)` instead of `startsWith` to match the RPC endpoint path. This prevents path-segment bypass attacks:
 
 ```
-rpcPreffix = '__rpc'
+rpcPrefix = '__rpc'
 
 # Safe: matches /__rpc/foo
 // __rpc/foo  →  /__rpc/
@@ -38,7 +38,7 @@ app.use(authMiddleware);             // auth first
 app.use(createRPCMiddleware());      // RPC second
 ```
 
-Do not add auth hooks inside the plugin. Use your framework's standard middleware pattern.
+Do not add auth hooks inside the plugin. Use your framework's standard middleware pattern. Check [Best Practices Guide](./best-practices.md) for more detailed examples.
 
 ## Body Size Limits
 
@@ -52,3 +52,6 @@ JSON body size limits are handled by your framework's body-parser middleware:
 Since the RPC framework's `readBody` also accepts `text/plain` requests (not parsed by the JSON body parser), the raw stream path in the Express and Koa adapters has a built-in safety net — a `maxBodySize` parameter that defaults to **1 MiB**. Pass a custom value to `readBody(req, signal, myLimit)` to override.
 
 Register body parsing middleware before `createRPCMiddleware()`.
+
+## Input Validation
+Server functions receive raw, untrusted client data. Always validate before use. Check [Server Functions Guide](./server-functions.md) for more detailed examples.

@@ -42,7 +42,9 @@ h1 {
   text-align: center;
 }
 
-button, input, output {
+button,
+input,
+output {
   border-radius: 8px;
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
@@ -62,7 +64,8 @@ button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
-input, output {
+input,
+output {
   background-color: #1a1a1a;
   border-color: #333;
 }

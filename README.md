@@ -5,31 +5,83 @@
 [![NPM Version](https://img.shields.io/npm/v/@thednp/rpc.svg)](https://www.npmjs.com/package/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
 
-An isomorphic Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
+An Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
 
-Server functions defined in `src/api/server.ts` run exclusively on the server. The plugin transforms their imports into client-side fetch stubs, so calling a server function from the client looks and feels like a local call — but the execution stays on the server.
+## Isomorphic Design
 
-The name stands for RPC via Vite, because that's exactly what it is. No more, no less.
+Server functions defined in `src/api/server.ts` run exclusively on the server. The plugin transforms their imports into client-side fetch stubs, so calling a server function from the client looks and feels like a local call — but the actual execution stays on the server.
+
+The server functions run **isomorphically** within any Vite powered runtime.
 
 ## Why this exists
 
-Most RPC solutions ask you to adopt a new way of thinking. You learn a complex API, you organize your code into a specific structure, for sure they are powerful, they work well and provide excelent DX, but complexity comes with its own drawbacks.
+Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, force you to organize your code into a specific structure, for sure they are powerful, work well and provide excelent DX, but complexity comes with its own drawbacks.
 
-`@thednp/rpc` takes the opposite bet: your **server functions should just be functions**. You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client stub generation, middleware registration, request cancellation — without asking you to restructure your codebase or learn a new DSL (Domain-Specific Language).
+### Simplicity is bliss
 
-### The Mental model
+`@thednp/rpc` takes simplicity to the next level:
+<details>
+<summary><b>Server functions should just be functions</b></summary>
+
+You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client stub generation, middleware registration, request cancellation — without asking you to restructure your codebase or learn a new DSL.
+</details>
+
+<details>
+<summary><b>The architecture is clean and minimal</b></summary>
+
+* `createFunction.ts` — server-side definition (wraps handler + AbortController)
+* `getClientModules.ts` — build-time code generation (string template with validation)
+* `helpers.ts` — client-side runtime (innerModule + handleResponse)
+* `scanForServerFiles.ts` — discovery
+* **Adapters** — thin middleware wrappers
+</details>
+
+### Sound mental model
+
 * **Query Engine** — The Brain (something like `@tanstack/react-query` that handles caching, lifecycles, deduplication).
 * **@thednp/rpc** — The Nervous System (isomorphic transport, serialization, client/server bridge, request cancellation).
 * **UI Framework** — The Muscle (Reactive DOM updates).
 
-## Features
+## What you get
 
-- Framework-agnostic core with adapters for **Express**, **Fastify**, **Hono**, and **Koa**
-- Automatic RPC generation — server functions are auto-scanned; client `fetch` based modules are generated at build time
-- File-level server code isolation (no `'use server'` directives required)
-- System-wide configuration via `rpc.config.ts`
-- `AbortController` based request cancellation (via `.cancel()` on the returned handle)
-- TypeScript support with generic type inference
+<details>
+<summary><b>File-level server isolation, without directives</b></summary>
+
+Your server code lives in `src/api/server.ts`. The plugin knows it's server code because of where it lives, not because you annotated it. There's no `'use server'` string to forget, no build error when you accidentally leave it out. The boundary is **the file**. That's it.
+</details>
+
+<details>
+<summary><b>One config file for everything</b></summary>
+
+The plugin options live in `rpc.config.ts` at your project root. Adapter choice, URL prefix, middleware hooks — it's all in one place. You set it up once and then you don't think about it again.
+
+You can access config system wide by calling `loadRPCConfig()` within your project server-side code.
+</details>
+
+
+<details>
+<summary><b>Typed client modules, generated at build time</b></summary>
+
+When you import a server function on the client, the plugin generates a stub that matches your function's exact signature. Change an argument type on the server, and the client types update on the next build. There's no separate codegen command to run, no generated files to commit, no drift between your server and client types.
+</details>
+
+<details>
+<summary><b>Cancellation should be easy</b></summary>
+
+Every server function call returns a handle with a `cancel()` method. Under the hood, it's an `AbortController` wired into the fetch request. You don't have to create the controller, pass the signal, or clean up listeners. You just call `cancel()` and the request dies. The server function receives the `AbortSignal` as its first argument, so you can bail out of expensive work early if the client has already moved on.
+</details>
+
+<details>
+<summary><b>Your server framework is your business</b></summary>
+
+The core plugin doesn't care whether you're running Express, Fastify, Hono, or Koa. Adapters for all four are bundled with the package — you import the one you need, register it as middleware, and you're done. If you're building a plain SPA with no server framework at all, the Vite dev server handles RPC requests directly in development. No adapter needed.
+</details>
+
+<details>
+<summary><b>TypeScript throughout</b></summary>
+
+Generic type inference flows from your server function's arguments and return type all the way to the client stub. You get autocomplete for function names, argument types, and return types without writing a single type annotation on the client side.
+</details>
 
 ## Demos
 
@@ -42,6 +94,7 @@ Most RPC solutions ask you to adopt a new way of thinking. You learn a complex A
 | Hono            | [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)    |
 | Koa             | [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)     |
 
+> **NOTE**: Stackblitz is currently working on upgrading their platform. Demos may not work properly. 
 
 ## Examples
 
@@ -73,7 +126,7 @@ import { defineConfig } from "@thednp/rpc";
 
 export default defineConfig({
   adapter: "express",
-  rpcPreffix: "__rpc",
+  rpcPrefix: "__rpc",
 });
 ```
 
@@ -88,6 +141,8 @@ export default defineConfig({
 });
 
 ```
+
+Check [Configuration Guide](wiki/configuration.md) for details.
 
 ### 3. Define a server function
 
@@ -113,9 +168,11 @@ Create `src/api/index.ts`:
 export * from "./server";
 ```
 
-### 4. Call it from the client
+Check [Server Functions Guide](./wiki/server-functions.md) for details.
 
-Import the generated client module in any client-side file:
+### 4. Call it in your code
+
+Import the function in any client-side or server-side file:
 
 ```ts
 // src/app.ts
@@ -128,7 +185,20 @@ cancel(); // AbortController-based cancellation
 
 ### 5. Register the RPC middleware on the server
 
-Import and use the middleware from your chosen adapter package. See the [Adapters guide](./wiki/adapters.md) for full snippets for each framework.
+Import and use the middleware from your chosen adapter package.
+
+```ts
+// Express
+import express from "express";
+import { createRpcMiddleware } from "@thednp/rpc/express";
+
+const app = express();
+app.use(createRpcMiddleware());
+
+app.listen(3000);
+```
+
+See the [Adapters guide](./wiki/adapters.md) for full snippets for each framework.
 
 ## Testing
 
@@ -154,14 +224,58 @@ These tests check the following:
 * check if there is any issue generating the HTML
 * check if server functions work properly
 
+## Contributing
+
+Contributions are welcome. This project uses:
+
+- **pnpm** for package management
+- **deno** for linting and formatting
+- **tsdown** for bundling
+- **vitest** with **istanbul** for testing
+- **TypeScript** for type checking
+
+### Development
+
+```bash
+pnpm lint         # deno lint + tsc -noEmit
+pnpm format       # deno fmt src
+pnpm test         # Run tests with coverage
+pnpm build        # Bundle with tsdown
+```
+
+All changes should pass `pnpm lint && pnpm check:ts && pnpm format && pnpm test` before submitting. See [AGENTS.md](AGENTS.md) for the full command reference and project conventions.
+
 ## Security
 
-- Prefix boundary check via anchored regex — prevents `/__rpc-evil/foo` bypass
-- Body size limit: `readBody` caps raw text/plain streams at 1 MiB by default
-- Code injection prevention: all interpolated identifiers are validated before client module generation
-- Generic error responses — no stack traces or internal details exposed to the client
+RPC endpoints are, by definition, public surface area. Anything reachable over HTTP can be prodded, poked, and abused. We've tried to close the obvious doors:
 
-See [Security](./wiki/security.md) for full details.
+<details>
+<summary><b>Prefix boundary checking</b></summary>
+
+The URL prefix is validated with an anchored regex, not a simple `startsWith` check. This means a request to `/__rpc-evil/foo` won't accidentally match the `/__rpc` prefix and slip through to your server functions. It sounds like a small thing, but prefix bypass bugs are one of the most common mistakes in middleware-based routing, and they're the kind of thing that only shows up in a security audit at 2am.
+</details>
+
+<details>
+<summary><b>Code injection prevention</b></summary>
+
+When the plugin generates client modules, it interpolates your function names and type signatures into the generated code. Every identifier is validated before it's written into the output. A server function named `greet; drop table users` won't make it through the generator — it'll fail at build time with a clear error, rather than producing a client module with arbitrary code in it.
+</details>
+
+<details>
+<summary><b>Generic error responses</b></summary>
+
+When a server function throws, the client receives a clean, generic error message. Stack traces, file paths, database connection strings, and other internal details stay on the server, where they belong. Your server logs get the full error. The client gets `"Internal Server Error"` and nothing more.
+</details>
+
+<details>
+<summary><b>Body size limits</b></summary>
+
+The `readBody` utility doesn't cap raw request bodies by default. You need to use the middleware provided by your server framework of choice.
+</details>
+
+---
+The full threat model, including edge cases and configuration options for tightening things further, is documented in [Security](./wiki/security.md).
+
 
 ## Documentation
 

@@ -81,7 +81,7 @@ The tsdown.config.ts produces multiple entries:
 
 ## Important Notes
 
-- In dev mode, **only** the Vite dev server and Express/Connect middleware are available
+- In dev mode, **only** the Vite dev server and Express/Connect middleware are available, which means adapters don't work in DEV mode
 - Uses `deno` for linting and formatting (not eslint/prettier)
 - Uses `tsdown` for bundling (not rollup/vite directly)
 - Uses `vitest` for testing with `istanbul` coverage
@@ -97,11 +97,11 @@ The tsdown.config.ts produces multiple entries:
 
 ## Security & Hardening
 
-- **Prefix boundary check**: All adapters use `new RegExp(\`^/${escapeRegExp(rpcPreffix)}/\`)` instead of `startsWith` to prevent path segment bypassing (e.g., `/__rpc-evil/foo` no longer matches prefix `"__rpc"`)
-- **Prefix regex injection prevention**: `rpcPreffix` config string is escaped via `escapeRegExp()` before being embedded in the boundary regex, preventing ReDoS or unintended matching from metacharacters in the prefix
+- **Prefix boundary check**: All adapters use `new RegExp(\`^/${escapeRegExp(rpcPrefix)}/\`)` instead of `startsWith` to prevent path segment bypassing (e.g., `/__rpc-evil/foo` no longer matches prefix `"__rpc"`)
+- **Prefix regex injection prevention**: `rpcPrefix` config string is escaped via `escapeRegExp()` before being embedded in the boundary regex, preventing ReDoS or unintended matching from metacharacters in the prefix
 - **Regex compilation hoisted**: All prefix/path regexes are compiled once at middleware creation time (not per-request), eliminating per-request regex overhead
 - **Koa URL normalization**: Koa adapter parses `ctx.url` through `new URL()` to strip query strings and normalize encoding before prefix checking
-- **Code injection prevention in client module generation**: `getClientModules.ts` validates all interpolated identifiers (`fnName`, `fnEntry`, `rpcPreffix`) against `/^[A-Za-z_$][A-Za-z0-9_$]*$/` (and a path-safe variant allowing `/`) before interpolating into the generated client bundle. This prevents code injection via malicious export names or prefixes containing template literal interpolations (`${...}`), backticks, or `</script>` sequences.
+- **Code injection prevention in client module generation**: `getClientModules.ts` validates all interpolated identifiers (`fnName`, `fnEntry`, `rpcPrefix`) against `/^[A-Za-z_$][A-Za-z0-9_$]*$/` (and a path-safe variant allowing `/`) before interpolating into the generated client bundle. This prevents code injection via malicious export names or prefixes containing template literal interpolations (`${...}`), backticks, or `</script>` sequences.
 - **Body size limits**: Host frameworks cap parsed JSON bodies — Express (`express.json({ limit })`), Fastify (`bodyLimit`), Koa (`koa-body`), Hono (`hono/body-limit`). Rely on your framework's body parser middleware for size limits (see wiki/best-practices.md). The raw stream path in `readBody` does not impose a built-in limit — use framework middleware or a custom body limit handler for defense-in-depth.
 - **Generic 404 responses**: Error messages no longer echo the requested function name, preventing function enumeration
 - **Auth is middleware's responsibility**: Authentication should be handled by middleware registered before `createRPCMiddleware()`. The middleware chain naturally composes — no built-in auth hook is needed.
@@ -113,7 +113,7 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 
 | Input                 | Source                        | Trust Level         | Hardening Applied                                                        |
 | -----------------------| -------------------------------| ---------------------| --------------------------------------------------------------------------|
-| `rpcPreffix` (config) | `rpc.config.ts` / dev options | Developer-trusted   | Escaped before regex; validated before code gen                          |
+| `rpcPrefix` (config) | `rpc.config.ts` / dev options | Developer-trusted   | Escaped before regex; validated before code gen                          |
 | Function export name  | `src/api/server.ts` exports   | Developer-trusted   | Validated against identifier regex before client codegen                 |
 | HTTP request URL      | Untrusted client              | Boundary-filtered   | Prefix regex (escaped, anchored, hoisted); Koa URL normalization         |
 | HTTP request body | Untrusted client | Capped by framework | Framework body parsers cap JSON and raw bodies |

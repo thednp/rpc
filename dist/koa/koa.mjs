@@ -4,13 +4,19 @@ function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 //#endregion
+//#region src/constants.ts
+const FUNCTION_NOT_FOUND = "Function not found";
+const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const CLIENT_DISCONNECTED = "client disconnected";
+const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
+//#endregion
 //#region src/options.ts
 const defaultRPCOptions = {
-	rpcPreffix: "__rpc",
+	rpcPrefix: "__rpc",
 	adapter: "express"
 };
 const defaultMiddlewareOptions = {
-	rpcPreffix: void 0,
+	rpcPrefix: void 0,
 	path: void 0
 };
 //#endregion
@@ -91,7 +97,7 @@ const middlewareStack = /* @__PURE__ */ new Set();
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
-	const rpcPreffix = options.rpcPreffix;
+	const rpcPrefix = options.rpcPrefix;
 	const path = options.path;
 	const handler = options.handler;
 	let name = middlewareName;
@@ -99,9 +105,9 @@ const createMiddleware = (initialOptions = {}) => {
 		name = "viteRPCMiddleware-" + middlewareCount;
 		middlewareCount += 1;
 	}
-	if (middlewareStack.has(name)) throw new Error(`The middleware name "${name}" is already used.`);
+	if (middlewareStack.has(name)) throw new Error(MIDDLEWARE_NAME_USED(name));
 	middlewareStack.add(name);
-	const prefixRegex = rpcPreffix ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`) : null;
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (ctx, next) => {
 		const url = new URL(ctx.url, "http://localhost").pathname;
@@ -115,10 +121,10 @@ const createMiddleware = (initialOptions = {}) => {
 	return middlewareHandler;
 };
 const createRPCMiddleware = (initialOptions = {}) => {
-	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPreffix: defaultRPCOptions.rpcPreffix }, initialOptions);
-	const rpcPreffix = options.rpcPreffix;
-	const prefixRegex = rpcPreffix ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`) : null;
-	const prefixReplace = `/${rpcPreffix}/`;
+	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
+	const rpcPrefix = options.rpcPrefix;
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const prefixReplace = `/${rpcPrefix}/`;
 	return createMiddleware({
 		...options,
 		handler: async (ctx, _next) => {
@@ -128,14 +134,14 @@ const createRPCMiddleware = (initialOptions = {}) => {
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) {
 				ctx.status = 404;
-				ctx.body = { error: "Function not found" };
+				ctx.body = { error: FUNCTION_NOT_FOUND };
 				return;
 			}
 			try {
 				const body = await readBody(ctx);
 				const args = Array.isArray(body.data) ? body.data : [body.data];
 				const { data: resultData, cancel } = serverFunction.handler(...args);
-				const onClose = () => cancel("client disconnected");
+				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				ctx.req.on("close", onClose);
 				const result = await resultData;
 				ctx.req.off("close", onClose);
@@ -144,7 +150,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 			} catch (err) {
 				console.error(String(err));
 				ctx.status = 500;
-				ctx.body = { error: "Internal Server Error" };
+				ctx.body = { error: INTERNAL_SERVER_ERROR };
 			}
 		}
 	});

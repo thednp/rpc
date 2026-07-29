@@ -12,6 +12,12 @@ import type {
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { escapeRegExp } from "../tools.ts";
+import {
+  CLIENT_DISCONNECTED,
+  FUNCTION_NOT_FOUND,
+  INTERNAL_SERVER_ERROR,
+  MIDDLEWARE_NAME_USED,
+} from "../constants.ts";
 import { readBody } from "./helpers.ts";
 
 let middlewareCount = 0;
@@ -26,7 +32,7 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
   ) as FastifyMiddlewareOptions;
 
   const middlewareName = options.name;
-  const rpcPreffix = options.rpcPreffix;
+  const rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -36,14 +42,14 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
     middlewareCount += 1;
   }
   if (middlewareStack.has(name)) {
-    throw new Error(`The middleware name "${name}" is already used.`);
+    throw new Error(MIDDLEWARE_NAME_USED(name));
   }
   middlewareStack.add(name);
 
   // Hoist regex compilation out of per-request path. Escape the prefix to
   // prevent regex injection via metacharacters in the config string.
-  const prefixRegex: RegExp | null = rpcPreffix
-    ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`)
+  const prefixRegex: RegExp | null = rpcPrefix
+    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : null;
   const pathMatcher: RegExp | null = path
     ? (typeof path === "string" ? new RegExp(path) : path)
@@ -74,7 +80,7 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
       return;
     }
 
-    // rpcPreffix matching (boundary-safe via escaped regex)
+    // rpcPrefix matching (boundary-safe via escaped regex)
     if (prefixRegex && !prefixRegex.test(url)) {
       done();
       return;
@@ -97,17 +103,17 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
   const options = Object.assign(
     {},
     defaultMiddlewareOptions,
-    { rpcPreffix: defaultRPCOptions.rpcPreffix },
+    { rpcPrefix: defaultRPCOptions.rpcPrefix },
     initialOptions,
   ) as FastifyMiddlewareOptions;
 
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
-  const rpcPreffix = options.rpcPreffix;
-  const prefixRegex = rpcPreffix
-    ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`)
+  const rpcPrefix = options.rpcPrefix;
+  const prefixRegex = rpcPrefix
+    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
-  const prefixReplace = `/${rpcPreffix}/`;
+  const prefixReplace = `/${rpcPrefix}/`;
 
   return createMiddleware({
     ...options,
@@ -131,7 +137,7 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
 
       if (!serverFunction) {
         reply.status(404).send({
-          error: "Function not found",
+          error: FUNCTION_NOT_FOUND,
         });
         return;
       }
@@ -140,7 +146,7 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         const body = await readBody(req);
         const args = Array.isArray(body.data) ? body.data : [body.data];
         const { data: dataResult, cancel } = serverFunction.handler(...args);
-        const onClose = () => cancel("client disconnected");
+        const onClose = () => cancel(CLIENT_DISCONNECTED);
 
         req.raw.on("close", onClose);
         const data = await dataResult;
@@ -150,7 +156,7 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         if (!reply.raw.headersSent) reply.status(200).send({ data });
       } catch (err) {
         console.error(String(err));
-        reply.status(500).send({ error: "Internal Server Error" });
+        reply.status(500).send({ error: INTERNAL_SERVER_ERROR });
       }
     },
   });

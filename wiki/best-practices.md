@@ -2,12 +2,14 @@
 
 ## @thednp/rpc is a Transport Pipe
 
-`@thednp/rpc` handles serialization and **transport only**. It does not provide:
+The best thing to do **first** is to understand `@thednp/rpc` is that it only handles **transport** and **serialization**.
 
+It does not provide:
 - Caching
 - Authentication
 - Validation
 - State management
+- Request limits
 - Retry logic
 
 Use dedicated tools for these concerns.
@@ -85,23 +87,107 @@ export const updateProfile = createServerFunction(
 );
 ```
 
-Return validation errors as structured data — the client's `handleResponse` will surface them as an `Error`.
+Return validation errors as structured data — the client's `handleResponse` will surface them as an `Error`. Check [Server Functions Guide](./server-functions.md) for more detailed examples.
 
 ## Authentication
 
-Use middleware before `createRPCMiddleware()`:
+> Never add auth hooks inside server functions.
+
+Use authentication middleware **before** `createRPCMiddleware()`.
 
 ```ts
-// Express
 app.use(authMiddleware);
 app.use(createRPCMiddleware());
 ```
 
-> Never add auth hooks inside the plugin.
+
+### Basic Authorization
+
+A typical auth middleware reads credentials from the request, validates them, and sets `req.user`:
+
+```ts
+// Express
+const authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    req.user = verifyToken(token); // { id, role, ... }
+    next();
+  } catch {
+    res.status(401).json({ error: "Unauthorized" });
+  }
+};
+```
+
+> In your production apps, **use best solutions** provided by server of your choice. The above code is only to showcase how to wire pieces together.
+
+### Per-Function Authorization
+
+When some server functions should be public and others require authentication, use `createMiddleware` with a handler that inspects the function name:
+
+```ts
+import type { Request } from "express";
+import { createMiddleware } from "@thednp/rpc/express";
+import { loadRPCConfig } from "@thednp/rpc";
+
+const publicFns = new Set(["login", "register", "publicData"]);
+const config = await loadRPCConfig();
+
+// use a type to better describe your requests
+type UserRequest = Request & {
+  user: YourUserType
+}
+
+const rpcAuthz = createMiddleware({
+  rpcPrefix: config.rpcPrefix,
+  handler: async (req: UserRequest, res, next) => {
+    const url = new URL(req.url, "http://localhost").pathname;
+    const fnName = url.replace(config.rpcPrefix, "");
+    const user = req.user; // set by earlier auth middleware
+
+    // Allow public functions through
+    if (publicFns.has(fnName)) return next();
+
+    // Reject unauthenticated
+    if (!user) {
+      res.statusCode = 401;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+
+    next();
+  },
+});
+```
+
+Wire it between auth and the RPC handler:
+
+```ts
+app.use(authMiddleware);      // sets req.user
+app.use(rpcAuthz);            // per-function guard
+app.use(createRPCMiddleware());
+```
+
+For role-based access, extend with a map:
+
+```ts
+const roleAccess: Record<string, string[]> = {
+  deleteUser: ["admin"],
+  updateProfile: ["user", "admin"],
+};
+
+if (!user || !roleAccess[fnName]?.includes(user.role)) {
+  // 401 or 403
+}
+```
 
 ## Body Limits
 
-In most cases you can rely on your framework's body-parser middleware:
+In most cases you should rely on your framework's body-parser middleware:
 
 ```ts
 // Express
@@ -136,8 +222,9 @@ const app = new Koa();
 app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1MB
 ```
 
+In other cases, your custom [server app](../examples/ssr/http-express.ts) can use something like this:
 ```ts
-// SSR (custom http server with Vite middleware mode)
+// SSR (custom node:http server with Vite middleware mode)
 import { createMiddleware, readBody } from "@thednp/rpc/express";
 import { loadRPCConfig } from "@thednp/rpc";
 
@@ -145,7 +232,7 @@ const config = await loadRPCConfig();
 const MAX_BODY_SIZE = 1024 * 1024;
 
 app.use(createMiddleware({
-  rpcPreffix: config.rpcPreffix,
+  rpcPrefix: config.rpcPrefix,
   handler: async (req, res, next) => {
     const { data } = await readBody(req);
     if (Buffer.byteLength(typeof data === "string" ? data : JSON.stringify(data)) > MAX_BODY_SIZE) {
@@ -159,6 +246,7 @@ app.use(createMiddleware({
 }));
 ```
 
+For SPA you can make use of the vite runtime [proxy](../examples/spa/vite.config.ts)
 ```ts
 // SPA (dedicated RPC proxy server)
 import { readBody } from "@thednp/rpc/express";
@@ -180,7 +268,7 @@ const bodyLimit = async (req, res, next) => {
 ## SSR Guidance
 
 - On the **server**, `createServerFunction` runs directly (not Vite-transformed).
-- On the **client**, the plugin replaces server function calls with `fetch`-based client modules.
+- On the **client**, the plugin replaces server function calls with `fetch` based client modules.
 - Keep `src/entry-client.ts` and `src/entry-server.ts` separate for proper hydration.
 
 ## File Naming

@@ -1,11 +1,11 @@
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/options.ts
 const defaultRPCOptions = {
-	rpcPreffix: "__rpc",
+	rpcPrefix: "__rpc",
 	adapter: "express"
 };
 const defaultMiddlewareOptions = {
-	rpcPreffix: void 0,
+	rpcPrefix: void 0,
 	path: void 0
 };
 //#endregion
@@ -111,13 +111,19 @@ function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 //#endregion
+//#region src/constants.ts
+const FUNCTION_NOT_FOUND = "Function not found";
+const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const CLIENT_DISCONNECTED = "client disconnected";
+const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
+//#endregion
 //#region src/express/createMiddleware.ts
 let middlewareCount = 0;
 const middlewareStack = /* @__PURE__ */ new Set();
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
-	const rpcPreffix = options.rpcPreffix;
+	const rpcPrefix = options.rpcPrefix;
 	const path = options.path;
 	const handler = options.handler;
 	let name = middlewareName;
@@ -125,9 +131,9 @@ const createMiddleware = (initialOptions = {}) => {
 		name = "viteRPCMiddleware-" + middlewareCount;
 		middlewareCount += 1;
 	}
-	if (middlewareStack.has(name)) throw new Error(`The middleware name "${name}" is already used.`);
+	if (middlewareStack.has(name)) throw new Error(MIDDLEWARE_NAME_USED(name));
 	middlewareStack.add(name);
-	const prefixRegex = rpcPreffix ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`) : null;
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (req, _res, next) => {
 		const { url } = getRequestDetails(req);
@@ -141,10 +147,10 @@ const createMiddleware = (initialOptions = {}) => {
 	return middlewareHandler;
 };
 const createRPCMiddleware = (initialOptions = {}) => {
-	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPreffix: defaultRPCOptions.rpcPreffix }, initialOptions);
-	const rpcPreffix = options.rpcPreffix;
-	const prefixRegex = rpcPreffix ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`) : null;
-	const prefixReplace = `/${rpcPreffix}/`;
+	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
+	const rpcPrefix = options.rpcPrefix;
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const prefixReplace = `/${rpcPrefix}/`;
 	return createMiddleware({
 		...options,
 		handler: async (req, res, _next) => {
@@ -154,21 +160,21 @@ const createRPCMiddleware = (initialOptions = {}) => {
 			const functionName = url.replace(prefixReplace, "");
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) {
-				sendResponse(404, { error: "Function not found" });
+				sendResponse(404, { error: FUNCTION_NOT_FOUND });
 				return;
 			}
 			try {
 				const body = await readBody(req);
 				const args = Array.isArray(body.data) ? body.data : [body.data];
 				const { data, cancel } = serverFunction.handler(...args);
-				const onClose = () => cancel("client disconnected");
+				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.on("close", onClose);
 				const result = await data;
 				req.off("close", onClose);
 				if (!res.headersSent) sendResponse(200, { data: result });
 			} catch (err) {
 				console.error(String(err));
-				sendResponse(500, { error: "Internal Server Error" });
+				sendResponse(500, { error: INTERNAL_SERVER_ERROR });
 			}
 		}
 	});

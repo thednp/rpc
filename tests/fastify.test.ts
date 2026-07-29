@@ -131,7 +131,7 @@ describe("Fastify helpers", () => {
 
     it("should call app.register with plugin", async () => {
       const app = { register: vi.fn() };
-      const options = { rpcPreffix: "__rpc" };
+      const options = { rpcPrefix: "__rpc" };
       app.register(fastifyPlugin, options);
       expect(app.register).toHaveBeenCalledOnce();
       expect(app.register).toHaveBeenCalledWith(fastifyPlugin, options);
@@ -199,7 +199,7 @@ describe("Fastify plugin", () => {
     const addHook = vi.fn();
     const fastify = { addHook } as never;
     const done = vi.fn();
-    const options = { rpcPreffix: "__rpc" };
+    const options = { rpcPrefix: "__rpc" };
     fastifyPlugin(fastify, options, done);
     expect(addHook).toHaveBeenCalledWith("preHandler", expect.any(Function));
     expect(done).toHaveBeenCalledOnce();
@@ -211,7 +211,7 @@ describe("Fastify plugin", () => {
     const done = vi.fn();
     const f = { addHook } as never;
     seedServerMap();
-    fastifyPlugin(f, { rpcPreffix: "other" }, done);
+    fastifyPlugin(f, { rpcPrefix: "other" }, done);
     const hookFn = hooks[0];
     const request = {
       url: "/not-matching",
@@ -234,7 +234,7 @@ describe("Fastify createMiddleware", () => {
   it("should scan for server files when map is empty", async () => {
     serverFunctionsMap.clear();
     const handler = vi.fn();
-    const mw = createMiddleware({ handler, rpcPreffix: "_server" });
+    const mw = createMiddleware({ handler, rpcPrefix: "_server" });
     const req = makeFastifyReq({ url: "/_server/testFn" });
     const reply = makeFastifyReply();
     const done = vi.fn();
@@ -310,9 +310,9 @@ describe("Fastify createMiddleware", () => {
     expect(done).toHaveBeenCalledOnce();
   });
 
-  it("should filter by rpcPreffix match", async () => {
+  it("should filter by rpcPrefix match", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "rpc", handler });
     const req = makeFastifyReq({ url: "/rpc/hello" }) as never;
     const reply = makeFastifyReply() as never;
     const done = makeFastifyDone() as never;
@@ -320,9 +320,9 @@ describe("Fastify createMiddleware", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("should skip when rpcPreffix mismatch", async () => {
+  it("should skip when rpcPrefix mismatch", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "rpc", handler });
     const req = makeFastifyReq({ url: "/other/path" }) as never;
     const reply = makeFastifyReply() as never;
     const done = makeFastifyDone() as never;
@@ -333,7 +333,7 @@ describe("Fastify createMiddleware", () => {
 
   it("should NOT match on prefix boundary bypass", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const req = makeFastifyReq({ url: "/__rpc-evil/hello" }) as never;
     const reply = makeFastifyReply() as never;
     const done = makeFastifyDone() as never;
@@ -404,7 +404,7 @@ describe("Fastify createRPCMiddleware", () => {
         cancel: vi.fn(),
       }),
     });
-    const mw = createRPCMiddleware({ rpcPreffix: "__A_server" });
+    const mw = createRPCMiddleware({ rpcPrefix: "__A_server" });
     const req = makeFastifyReq({
       url: "/__A_server/testFn",
       method: "POST",
@@ -490,9 +490,9 @@ describe("Fastify createRPCMiddleware", () => {
     expect(reply.send).toHaveBeenCalledWith({ error: "Internal Server Error" });
   });
 
-  it("should skip non-matching rpcPreffix (fallthrough)", async () => {
+  it("should skip non-matching rpcPrefix (fallthrough)", async () => {
     seedServerMap();
-    const mw = createRPCMiddleware({ rpcPreffix: "custom-prefix" });
+    const mw = createRPCMiddleware({ rpcPrefix: "custom-prefix" });
     const req = makeFastifyReq({ url: "/other/path", method: "POST" });
     const reply = makeFastifyReply();
     const done = makeFastifyDone();

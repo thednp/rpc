@@ -8,7 +8,7 @@ Create `rpc.config.ts` in your project root for system-wide configuration:
 import { defineConfig } from '@thednp/rpc';
 
 export default defineConfig({
-  rpcPreffix: '__rpc',
+  rpcPrefix: '__rpc',
   adapter: 'express',
 });
 ```
@@ -34,7 +34,7 @@ export default defineConfig({
 
 | Option       | Type     | Default     | Description                                                  |
 | --------------| ----------| -------------| --------------------------------------------------------------|
-| `rpcPreffix` | `string` | `'__rpc'`   | RPC endpoint prefix used in URL routing                      |
+| `rpcPrefix` | `string` | `'__rpc'`   | RPC endpoint prefix used in URL routing                      |
 | `adapter`    | `string` | `'express'` | Target adapter (`'express'`, `'fastify'`, `'hono'`, `'koa'`) |
 
 ## Config File Discovery
@@ -60,7 +60,7 @@ Type-safe helper for creating the config object. Provides autocomplete and type 
 import { defineConfig } from '@thednp/rpc';
 
 export default defineConfig({
-  rpcPreffix: '__rpc',
+  rpcPrefix: '__rpc',
 });
 ```
 
@@ -72,6 +72,6 @@ Programmatically load the RPC config, useful in custom server setups:
 import { loadRPCConfig } from '@thednp/rpc';
 
 const config = await loadRPCConfig();
-console.log(config.rpcPreffix); // '__rpc'
+console.log(config.rpcPrefix); // '__rpc'
 console.log(config.adapter);    // 'express'
 ```

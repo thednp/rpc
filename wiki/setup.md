@@ -6,6 +6,7 @@
 project/
 ├── src/
 │   ├── api/
+│   │   └── index.ts         # All server functions exports
 │   │   └── server.ts        # Auto-scanned server functions
 │   ├── entry-client.ts      # Client entry (SSR projects)
 │   └── entry-server.ts      # Server entry (SSR projects)
@@ -36,7 +37,7 @@ Each matched file is loaded with `vite.ssrLoadModule`, and all named exports are
 
 ### SSR Projects
 
-Create both `src/entry-client.ts` and `src/entry-server.ts`. The client bundle imports from `./api`, which gets transformed by the plugin. On the server, `createServerFunction` runs directly (not transformed).
+Create both `src/entry-client.ts` and `src/entry-server.ts`. The client and server bundles both import from `./api`. On the client your server function gets transformed by the plugin. On the server, `createServerFunction` runs directly (not transformed).
 
 ### SPA Projects
 
@@ -74,4 +75,4 @@ await attachRPC(app);  // production
 attachVite(app, vite); // development
 ```
 
-See [Adapters](adapters.md) for full server setup examples.
+See [Adapters](./adapters.md) for full server setup examples.

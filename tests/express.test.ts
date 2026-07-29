@@ -244,7 +244,7 @@ describe("Express createMiddleware extended", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("createRPCMiddleware should call next() on rpcPreffix mismatch", async () => {
+  it("createRPCMiddleware should call next() on rpcPrefix mismatch", async () => {
     seedServerMap();
     const mw = createRPCMiddleware();
     const req = makeReq({ originalUrl: "/not-rpc/path", method: "POST" });
@@ -286,9 +286,9 @@ describe("Express createMiddleware extended", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("should filter by rpcPreffix match with handler", async () => {
+  it("should filter by rpcPrefix match with handler", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const req = makeReq({ originalUrl: "/__rpc/hello" });
     const res = makeRes();
     const next = makeNext();
@@ -298,7 +298,7 @@ describe("Express createMiddleware extended", () => {
 
   it("should NOT match on prefix boundary bypass", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const req = makeReq({ originalUrl: "/__rpc-evil/hello" });
     const res = makeRes();
     const next = makeNext();
@@ -403,7 +403,7 @@ describe("Express createRPCMiddleware handler", () => {
         cancel: vi.fn(),
       }),
     });
-    const mw = createRPCMiddleware({ rpcPreffix: "__A_server" });
+    const mw = createRPCMiddleware({ rpcPrefix: "__A_server" });
     const req = makeReq({
       originalUrl: "/__A_server/testFn",
       method: "POST",
@@ -445,7 +445,7 @@ describe("plugin lifecycle", () => {
   it("defineConfig should merge options with defaults", async () => {
     const cfg = defineConfig({ adapter: "hono" });
     expect(cfg.adapter).toBe("hono");
-    expect(cfg.rpcPreffix).toBe("__rpc");
+    expect(cfg.rpcPrefix).toBe("__rpc");
   });
 
   // it("config() should return SSR noExternal config", async () => {
@@ -556,6 +556,6 @@ describe("plugin lifecycle", () => {
     // Second call without args should return cached config
     const secondResult = await loadRPCConfig();
     expect(secondResult.adapter).toBe("hono");
-    expect(secondResult.rpcPreffix).toBe("_sv");
+    expect(secondResult.rpcPrefix).toBe("_sv");
   });
 });

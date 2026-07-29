@@ -3,8 +3,11 @@ import { readBody } from "@thednp/rpc/express";
 
 const MAX_BODY_SIZE = 1024 * 1024;
 
+type Request = IncomingMessage & {
+  body?: string
+}
 
-export const bodyLimit = async (req: IncomingMessage, res: ServerResponse, next: ((r?: Response) => void)) => {
+export const bodyLimit = async (req: Request, res: ServerResponse, next: ((r?: Response) => void)) => {
   const { data } = await readBody(req);
   const size = Buffer.byteLength(
     typeof data === "string" ? data : JSON.stringify(data)
@@ -14,6 +17,6 @@ export const bodyLimit = async (req: IncomingMessage, res: ServerResponse, next:
     res.end("Payload Too Large");
     return;
   }
-  req.body = data as never; // pass to RPC middleware
+  req.body = data as string; // pass to RPC middleware
   next();
 };

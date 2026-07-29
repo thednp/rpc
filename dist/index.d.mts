@@ -48,6 +48,7 @@ interface FrameworkMiddlewareFn {
 }
 type SupportableContentType = "multipart/form-data" | "application/json" | "text/plain" | "application/octet-stream";
 type ContentType = "application/json" | "text/plain";
+type Credentials = "same-origin" | "include" | "omit";
 type BodyResult = {
   contentType: "application/json";
   data: JsonValue;
@@ -56,7 +57,10 @@ type BodyResult = {
   data: string;
 };
 interface ServerFunctionOptions {
+  /* @default "application/json" */
   contentType: ContentType;
+  /* @default "same-origin" */
+  credentials?: Credentials;
 }
 // primitives and their compositions
 type JsonPrimitive = string | number | boolean | null | undefined;
@@ -97,11 +101,6 @@ interface ServerFnEntry {
   options?: ServerFunctionOptions;
   exportName?: string;
 }
-interface CacheEntry<T> {
-  data?: T;
-  timestamp: number;
-  promise?: Promise<T>;
-}
 /**
  * ### @thednp/rpc
  * The plugin configuration allows for granular control of your
@@ -117,9 +116,9 @@ interface RpcPluginOptions {
    * @default "__rpc"
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix: "__rpc" | string;
+  rpcPrefix: "__rpc" | string;
   /**
    * Option to set an adapter for the middleware connection. The default is _express_,
    * which is the most popular and battle tested server app. The _express_ adapter is
@@ -152,9 +151,9 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * @default string
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix?: string | false;
+  rpcPrefix?: string | false;
   /**
    * Async handler for request processing.
    * Core middleware function that processes incoming requests.
@@ -188,5 +187,5 @@ declare const defineConfig: (uniConfig: Partial<RpcPluginOptions>) => RpcPluginO
 declare function loadRPCConfig(configFile?: string): Promise<RpcPluginOptions>;
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin<unknown>;
 //#endregion
-export { type BodyResult, type CacheEntry, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type FrameworkHooks, type FrameworkMiddlewareFn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
+export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map

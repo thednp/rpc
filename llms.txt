@@ -1,0 +1,19 @@
+# @thednp/rpc
+
+Vite plugin for automatic RPC generation from server functions.
+
+## Core API
+- `createServerFunction(name, handler, options?)` — define a server function
+- `import { fn } from "./api"` — call it from the client (auto-transformed to fetch) or server (the actual function)
+- Returns `{ data: Promise<T>, cancel: (reason) => void }`
+
+## Config
+- `rpc.config.ts` with `defineConfig({ adapter, rpcPrefix })`
+- Adapters: "express" | "fastify" | "hono" | "koa"
+
+## Rules
+- Server functions live in `src/api/server.ts`
+- Re-export from `src/api/index.ts`
+- First argument of server functions is always `AbortSignal`
+- Arguments must be JSON-serializable
+- Do NOT pass DOM nodes, functions, or class instances as arguments

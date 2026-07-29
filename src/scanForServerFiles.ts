@@ -6,6 +6,7 @@ import { join } from "node:path";
 import process from "node:process";
 
 import { serverFunctionsMap } from "./functionsMap.ts";
+import { ERROR_LOADING_FILE, NO_SERVER_FUNCTION_FOUND } from "./constants.ts";
 
 type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
   server?: Partial<ResolvedConfig["server"]>;
@@ -60,7 +61,7 @@ export const scanForServerFiles = async (
         >;
         const moduleEntries = Object.entries(moduleExports);
         if (!moduleEntries.length) {
-          console.warn("No server function found.");
+          console.warn(NO_SERVER_FUNCTION_FOUND);
           return;
         }
 
@@ -75,7 +76,7 @@ export const scanForServerFiles = async (
           });
         }
       } catch (error) {
-        console.error("Error loading file:", file, error);
+        console.error(ERROR_LOADING_FILE, file, error);
       }
     }
   } finally {

@@ -2,11 +2,11 @@ import fp from "fastify-plugin";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/options.ts
 const defaultRPCOptions = {
-	rpcPreffix: "__rpc",
+	rpcPrefix: "__rpc",
 	adapter: "express"
 };
 const defaultMiddlewareOptions = {
-	rpcPreffix: void 0,
+	rpcPrefix: void 0,
 	path: void 0
 };
 //#endregion
@@ -14,6 +14,12 @@ const defaultMiddlewareOptions = {
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+//#endregion
+//#region src/constants.ts
+const FUNCTION_NOT_FOUND = "Function not found";
+const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const CLIENT_DISCONNECTED = "client disconnected";
+const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/fastify/helpers.ts
 const readBody = (req) => {
@@ -68,7 +74,7 @@ const middlewareStack = /* @__PURE__ */ new Set();
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
-	const rpcPreffix = options.rpcPreffix;
+	const rpcPrefix = options.rpcPrefix;
 	const path = options.path;
 	const handler = options.handler;
 	let name = middlewareName;
@@ -76,9 +82,9 @@ const createMiddleware = (initialOptions = {}) => {
 		name = "viteRPCMiddleware-" + middlewareCount;
 		middlewareCount += 1;
 	}
-	if (middlewareStack.has(name)) throw new Error(`The middleware name "${name}" is already used.`);
+	if (middlewareStack.has(name)) throw new Error(MIDDLEWARE_NAME_USED(name));
 	middlewareStack.add(name);
-	const prefixRegex = rpcPreffix ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`) : null;
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (req, _reply, done) => {
 		const url = new URL(req.url, "http://localhost").pathname;
@@ -101,10 +107,10 @@ const createMiddleware = (initialOptions = {}) => {
 	return middlewareHandler;
 };
 const createRPCMiddleware = (initialOptions = {}) => {
-	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPreffix: defaultRPCOptions.rpcPreffix }, initialOptions);
-	const rpcPreffix = options.rpcPreffix;
-	const prefixRegex = rpcPreffix ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`) : null;
-	const prefixReplace = `/${rpcPreffix}/`;
+	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
+	const rpcPrefix = options.rpcPrefix;
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const prefixReplace = `/${rpcPrefix}/`;
 	return createMiddleware({
 		...options,
 		handler: async (req, reply, _done) => {
@@ -113,21 +119,21 @@ const createRPCMiddleware = (initialOptions = {}) => {
 			const functionName = url.replace(prefixReplace, "");
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) {
-				reply.status(404).send({ error: "Function not found" });
+				reply.status(404).send({ error: FUNCTION_NOT_FOUND });
 				return;
 			}
 			try {
 				const body = await readBody(req);
 				const args = Array.isArray(body.data) ? body.data : [body.data];
 				const { data: dataResult, cancel } = serverFunction.handler(...args);
-				const onClose = () => cancel("client disconnected");
+				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.raw.on("close", onClose);
 				const data = await dataResult;
 				req.raw.off("close", onClose);
 				if (!reply.raw.headersSent) reply.status(200).send({ data });
 			} catch (err) {
 				console.error(String(err));
-				reply.status(500).send({ error: "Internal Server Error" });
+				reply.status(500).send({ error: INTERNAL_SERVER_ERROR });
 			}
 		}
 	});

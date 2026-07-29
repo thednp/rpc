@@ -6,6 +6,11 @@ import { existsSync } from "node:fs";
 import { createRPCMiddleware } from "./express/createMiddleware.ts";
 import { defaultRPCOptions } from "./options.ts";
 import type { RpcPluginOptions } from "./types.d.ts";
+import {
+  CONFIG_FILE_NOT_FOUND,
+  FAILED_LOAD_CONFIG,
+  NO_CONFIG_FOUND,
+} from "./constants.ts";
 
 import {
   getClientModules,
@@ -59,9 +64,7 @@ async function loadRPCConfig(configFile?: string) {
     if (configFile) {
       const configFilePath = resolve(env.root, configFile);
       if (!existsSync(configFilePath)) {
-        console.warn(
-          `  ⚠︎ The specified RPC config file ${configFile} cannot be found at ${configFilePath}, loading the defaults..`,
-        );
+        console.warn(CONFIG_FILE_NOT_FOUND(configFile, configFilePath));
         RPCConfig = defaultRPCOptions;
         return defaultRPCOptions as RpcPluginOptions;
       }
@@ -111,17 +114,12 @@ async function loadRPCConfig(configFile?: string) {
     }
     RPCConfig = defaultRPCOptions;
     // Last call load defaults no matter what
-    console.warn(
-      ` ⚡︎ No RPC config found, loading the defaults..`,
-    );
+    console.warn(NO_CONFIG_FOUND);
     // return defaultRPCOptions as RpcPluginOptions;
     // RPCConfig = defaultRPCOptions;
   } catch (error) {
     RPCConfig = defaultRPCOptions;
-    console.warn(
-      ` ⚠︎ Failed to load RPC config:`,
-      error,
-    );
+    console.warn(FAILED_LOAD_CONFIG, error);
     // return defaultRPCOptions as RpcPluginOptions;
   }
 
@@ -132,7 +130,7 @@ function rpcPlugin(
   devOptions: Partial<RpcPluginOptions> = {},
 ): Plugin<unknown> {
   // Internal type - adapters are handled at runtime
-  let options: RpcPluginOptions & { rpcPreffix: string };
+  let options: RpcPluginOptions & { rpcPrefix: string };
   let config: ResolvedConfig;
   let viteServer: ViteDevServer;
   let isOxc = true;
@@ -198,7 +196,7 @@ function rpcPlugin(
       const transformer = isOxc ? "transformWithOxc" : "transformWithEsbuild";
       const langProp = isOxc ? "lang" : "loader";
       const source = getClientModules({
-        rpcPreffix: options.rpcPreffix,
+        rpcPrefix: options.rpcPrefix,
         adapter: options.adapter,
       });
 

@@ -26,12 +26,13 @@ deno add npm:@thednp/rpc@latest
 import { defineConfig } from "@thednp/rpc";
 
 export default defineConfig({
-  rpcPreffix: "__server",
+  rpcPrefix: "__server",
   adapter: "express",
 });
 ```
 
 Currently `@thednp/rpc` supports `'express'`, `'fastify'`, `'hono'` and `'koa'`. Check [adapters](./adapters.md) for more guides.
+
 Also check [configuration](./configuration.md) for more guides.
 
 
@@ -63,7 +64,13 @@ export const sayHi = createServerFunction(
 );
 ```
 
-### 4. Use it on the client
+Expose it in `src/api/index.ts`
+
+```ts
+export * from "./server"
+```
+
+### 4. Use it in your code
 
 ```ts
 import { sayHi } from './api';

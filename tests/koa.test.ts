@@ -253,7 +253,7 @@ describe("Koa createMiddleware", () => {
   it("should scan for server files when map is empty", async () => {
     serverFunctionsMap.clear();
     const handler = vi.fn();
-    const mw = createMiddleware({ handler, rpcPreffix: "__A_server" });
+    const mw = createMiddleware({ handler, rpcPrefix: "__A_server" });
     const ctx = makeKoaCtx({ url: "/__A_server/testFn" });
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -323,18 +323,18 @@ describe("Koa createMiddleware", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("should filter by rpcPreffix match", async () => {
+  it("should filter by rpcPrefix match", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const ctx = makeKoaCtx({ url: "/__rpc/hello" });
     const next = makeKoaNext();
     await mw(ctx, next);
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("should skip when rpcPreffix mismatch", async () => {
+  it("should skip when rpcPrefix mismatch", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const ctx = makeKoaCtx({ url: "/other/path" });
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -344,7 +344,7 @@ describe("Koa createMiddleware", () => {
 
   it("should NOT match on prefix boundary bypass", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const ctx = makeKoaCtx({ url: "/__rpc-evil/hello" });
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -354,7 +354,7 @@ describe("Koa createMiddleware", () => {
 
   it("should strip query string from URL", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const ctx = makeKoaCtx({ url: "/__rpc/hello?auth=token" });
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -403,7 +403,7 @@ describe("Koa createRPCMiddleware", () => {
         cancel: vi.fn(),
       }),
     });
-    const mw = createRPCMiddleware({ rpcPreffix: "__A_server" });
+    const mw = createRPCMiddleware({ rpcPrefix: "__A_server" });
     const ctx = makeKoaCtx({
       url: "/__A_server/testFn",
       headers: { "content-type": "application/json" },
@@ -477,7 +477,7 @@ describe("Koa createRPCMiddleware", () => {
 
   it("should call next() when prefix doesn't match", async () => {
     seedServerMap();
-    const mw = createRPCMiddleware({ rpcPreffix: "rpc" });
+    const mw = createRPCMiddleware({ rpcPrefix: "rpc" });
     const ctx = makeKoaCtx({ url: "/other/path" });
     const next = makeKoaNext();
     await mw(ctx, next);

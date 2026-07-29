@@ -15,7 +15,7 @@ export default defineConfig(async (config) => {
     preview: {
       port: 5173,
       proxy: {
-        [`/${rpcConfig.rpcPreffix}`]: {
+        [`/${rpcConfig.rpcPrefix}`]: {
           target: `http://localhost:${proxyPort}`,
           changeOrigin: true,
           secure: false,

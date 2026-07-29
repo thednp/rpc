@@ -15,6 +15,12 @@ import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { getRequestDetails, getResponseDetails, readBody } from "./helpers.ts";
 import { escapeRegExp } from "../tools.ts";
+import {
+  CLIENT_DISCONNECTED,
+  FUNCTION_NOT_FOUND,
+  INTERNAL_SERVER_ERROR,
+  MIDDLEWARE_NAME_USED,
+} from "../constants.ts";
 
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
@@ -26,7 +32,7 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
     initialOptions,
   ) as ExpressMiddlewareOptions;
   const middlewareName = options.name;
-  const rpcPreffix = options.rpcPreffix;
+  const rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -36,14 +42,14 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
     middlewareCount += 1;
   }
   if (middlewareStack.has(name)) {
-    throw new Error(`The middleware name "${name}" is already used.`);
+    throw new Error(MIDDLEWARE_NAME_USED(name));
   }
   middlewareStack.add(name);
 
   // Hoist regex compilation out of per-request path. Escape the prefix to
   // prevent regex injection via metacharacters in the config string.
-  const prefixRegex: RegExp | null = rpcPreffix
-    ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`)
+  const prefixRegex: RegExp | null = rpcPrefix
+    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : null;
   const pathMatcher: RegExp | null = path
     ? (typeof path === "string" ? new RegExp(path) : path)
@@ -69,7 +75,7 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
     // Path matching
     if (pathMatcher && !pathMatcher.test(url)) return next?.();
 
-    // rpcPreffix matching (boundary-safe via escaped regex)
+    // rpcPrefix matching (boundary-safe via escaped regex)
     if (prefixRegex && !prefixRegex.test(url)) {
       return next?.();
     }
@@ -92,17 +98,17 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
   const options = Object.assign(
     {},
     defaultMiddlewareOptions,
-    { rpcPreffix: defaultRPCOptions.rpcPreffix },
+    { rpcPrefix: defaultRPCOptions.rpcPrefix },
     initialOptions,
   ) as ExpressMiddlewareOptions;
 
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
-  const rpcPreffix = options.rpcPreffix;
-  const prefixRegex = rpcPreffix
-    ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`)
+  const rpcPrefix = options.rpcPrefix;
+  const prefixRegex = rpcPrefix
+    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
-  const prefixReplace = `/${rpcPreffix}/`;
+  const prefixReplace = `/${rpcPrefix}/`;
 
   return createMiddleware({
     ...options,
@@ -126,7 +132,7 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
       const serverFunction = serverFunctionsMap.get(functionName);
 
       if (!serverFunction) {
-        sendResponse(404, { error: "Function not found" });
+        sendResponse(404, { error: FUNCTION_NOT_FOUND });
         return;
       }
 
@@ -134,7 +140,7 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
         const body = await readBody(req);
         const args = Array.isArray(body.data) ? body.data : [body.data];
         const { data, cancel } = serverFunction.handler(...args);
-        const onClose = () => cancel("client disconnected");
+        const onClose = () => cancel(CLIENT_DISCONNECTED);
 
         req.on("close", onClose);
         const result = await data;
@@ -144,7 +150,7 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
         if (!res.headersSent) sendResponse(200, { data: result });
       } catch (err) {
         console.error(String(err));
-        sendResponse(500, { error: "Internal Server Error" });
+        sendResponse(500, { error: INTERNAL_SERVER_ERROR });
       }
     },
   });

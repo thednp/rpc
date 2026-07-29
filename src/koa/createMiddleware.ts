@@ -3,6 +3,12 @@ import type { Context, Next } from "koa";
 // import type { JsonArray, JsonValue } from "@thednp/rpc";
 import type { KoaMiddlewareFn, KoaMiddlewareOptions } from "./types.d.ts";
 import { escapeRegExp } from "../tools.ts";
+import {
+  CLIENT_DISCONNECTED,
+  FUNCTION_NOT_FOUND,
+  INTERNAL_SERVER_ERROR,
+  MIDDLEWARE_NAME_USED,
+} from "../constants.ts";
 
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
@@ -19,7 +25,7 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   ) as KoaMiddlewareOptions;
 
   const middlewareName = options.name;
-  const rpcPreffix = options.rpcPreffix;
+  const rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -29,14 +35,14 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
     middlewareCount += 1;
   }
   if (middlewareStack.has(name)) {
-    throw new Error(`The middleware name "${name}" is already used.`);
+    throw new Error(MIDDLEWARE_NAME_USED(name));
   }
   middlewareStack.add(name);
 
   // Hoist regex compilation out of per-request path. Escape the prefix to
   // prevent regex injection via metacharacters in the config string.
-  const prefixRegex: RegExp | null = rpcPreffix
-    ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`)
+  const prefixRegex: RegExp | null = rpcPrefix
+    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : null;
   const pathMatcher: RegExp | null = path
     ? (typeof path === "string" ? new RegExp(path) : path)
@@ -76,23 +82,23 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
     defaultMiddlewareOptions,
-    { rpcPreffix: defaultRPCOptions.rpcPreffix },
+    { rpcPrefix: defaultRPCOptions.rpcPrefix },
     initialOptions,
   ) as KoaMiddlewareOptions;
 
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
-  const rpcPreffix = options.rpcPreffix;
-  const prefixRegex = rpcPreffix
-    ? new RegExp(`^/${escapeRegExp(rpcPreffix)}/`)
+  const rpcPrefix = options.rpcPrefix;
+  const prefixRegex = rpcPrefix
+    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
-  const prefixReplace = `/${rpcPreffix}/`;
+  const prefixReplace = `/${rpcPrefix}/`;
 
   return createMiddleware({
     ...options,
     handler: async (ctx: Context, _next: Next) => {
       const url = new URL(ctx.url, "http://localhost").pathname;
-      // const { rpcPreffix } = options;
+      // const { rpcPrefix } = options;
 
       // Defense-in-depth: validate prefix match via escaped regex even though
       // the outer createMiddleware gates on the same prefix already.
@@ -106,7 +112,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
 
       if (!serverFunction) {
         ctx.status = 404;
-        ctx.body = { error: "Function not found" };
+        ctx.body = { error: FUNCTION_NOT_FOUND };
         return;
       }
 
@@ -114,7 +120,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
         const body = await readBody(ctx);
         const args = Array.isArray(body.data) ? body.data : [body.data];
         const { data: resultData, cancel } = serverFunction.handler(...args);
-        const onClose = () => cancel("client disconnected");
+        const onClose = () => cancel(CLIENT_DISCONNECTED);
         ctx.req.on("close", onClose);
         const result = await resultData;
         ctx.req.off("close", onClose);
@@ -123,7 +129,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
       } catch (err) {
         console.error(String(err));
         ctx.status = 500;
-        ctx.body = { error: "Internal Server Error" };
+        ctx.body = { error: INTERNAL_SERVER_ERROR };
       }
     },
   });

@@ -5,6 +5,13 @@ import process from "node:process";
 //#region src/functionsMap.ts
 const serverFunctionsMap = /* @__PURE__ */ new Map();
 //#endregion
+//#region src/constants.ts
+const OPERATION_ABORTED = "Operation aborted";
+const NO_SERVER_FUNCTION_FOUND = "No server function found.";
+const ERROR_LOADING_FILE = "Error loading file:";
+const INVALID_IDENTIFIER = (label, name) => `Invalid ${label}: "${name}" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/`;
+const INVALID_PATH_SEGMENT = (label, segment) => `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/`;
+//#endregion
 //#region src/scanForServerFiles.ts
 let isScanned = false;
 const scanForServerFiles = async (initialCfg, devServer) => {
@@ -42,7 +49,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 			const moduleExports = await server.ssrLoadModule(file);
 			const moduleEntries = Object.entries(moduleExports);
 			if (!moduleEntries.length) {
-				console.warn("No server function found.");
+				console.warn(NO_SERVER_FUNCTION_FOUND);
 				return;
 			}
 			for (const [exportName, exportValue] of moduleEntries) {
@@ -55,7 +62,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 				});
 			}
 		} catch (error) {
-			console.error("Error loading file:", file, error);
+			console.error(ERROR_LOADING_FILE, file, error);
 		}
 	} finally {
 		if (!devServer && server) await server.close();
@@ -64,13 +71,16 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 };
 //#endregion
 //#region src/options.ts
-const defaultServerFnOptions = { contentType: "application/json" };
+const defaultServerFnOptions = {
+	contentType: "application/json",
+	credentials: "same-origin"
+};
 const defaultRPCOptions = {
-	rpcPreffix: "__rpc",
+	rpcPrefix: "__rpc",
 	adapter: "express"
 };
 const defaultMiddlewareOptions = {
-	rpcPreffix: void 0,
+	rpcPrefix: void 0,
 	path: void 0
 };
 //#endregion
@@ -81,7 +91,7 @@ function createServerFunction(name, handler, fnOptions = {}) {
 		const controller = new AbortController();
 		const cancel = (reason) => controller.abort(reason);
 		const fetcher = async () => {
-			if (controller.signal.aborted) throw new Error("Operation aborted");
+			if (controller.signal.aborted) throw new Error(OPERATION_ABORTED);
 			return await handler(controller.signal, ...args);
 		};
 		return {
@@ -109,21 +119,34 @@ function createServerFunction(name, handler, fnOptions = {}) {
 	return wrappedFunction;
 }
 //#endregion
-//#region src/getClientModules.ts
+//#region src/validate.ts
 const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/;
+const CREDENTIALS_VALUES = [
+	"same-origin",
+	"include",
+	"omit"
+];
 function validateIdentifier(name, label) {
-	if (!SAFE_IDENTIFIER.test(name)) throw new Error(`Invalid ${label}: "${name}" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/`);
+	if (!SAFE_IDENTIFIER.test(name)) throw new Error(INVALID_IDENTIFIER(label, name));
 	return name;
 }
 function validatePathSegment(segment, label) {
-	if (!SAFE_PATH_SEGMENT.test(segment)) throw new Error(`Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/`);
+	if (!SAFE_PATH_SEGMENT.test(segment)) throw new Error(INVALID_PATH_SEGMENT(label, segment));
 	return segment;
 }
+function validateCredentials(value) {
+	const creds = value || "same-origin";
+	if (!CREDENTIALS_VALUES.includes(creds)) throw new Error(`Invalid credentials: "${value}" must be one of ${CREDENTIALS_VALUES.join(", ")}`);
+	return creds;
+}
+//#endregion
+//#region src/getClientModules.ts
 const getModule = (fnName, fnEntry, options) => {
 	const safeFnName = validatePathSegment(fnName, "function name");
 	const safeFnEntry = validateIdentifier(fnEntry, "export name");
-	const safePrefix = validatePathSegment(options.rpcPreffix, "rpcPreffix");
+	const safePrefix = validatePathSegment(options.rpcPrefix, "rpcPrefix");
+	const credentials = validateCredentials(options.credentials);
 	let body = "";
 	let headers = "{}";
 	switch (options.contentType) {
@@ -139,13 +162,14 @@ const getModule = (fnName, fnEntry, options) => {
 export const ${safeFnEntry} = (...args) => {
   const body = ${body};
   const headers = ${headers};
-  const preffix = "${safePrefix}";
+  const prefix = "${safePrefix}";
   const name = "${safeFnName}";
-  return innerModule(body, headers, preffix, name);
+  const credentials = "${credentials}";
+  return innerModule(body, headers, credentials, prefix, name);
 }`.trim();
 };
 const getClientModules = (initialOptions) => {
-	validatePathSegment(initialOptions.rpcPreffix, "rpcPreffix");
+	validatePathSegment(initialOptions.rpcPrefix, "rpcPrefix");
 	return `
 
 import { innerModule } from "@thednp/rpc/helpers";

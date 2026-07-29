@@ -26,7 +26,7 @@ const { loadRPCConfig } = await import("@thednp/rpc");
 const rpcConfig = await loadRPCConfig();
 
 app.use(createMiddleware({
-  rpcPreffix: rpcConfig.rpcPreffix,
+  rpcPrefix: rpcConfig.rpcPrefix,
   handler: async (req: IncomingMessage, res: ServerResponse, next) => {
     const { data } = await readBody(req);
     const size = Buffer.byteLength(
@@ -70,7 +70,7 @@ if (!isProduction) {
     const url = req.url || "/";
     
     // Skip RPC paths and root - those are handled by SSR
-    if (url.startsWith(config.rpcPreffix) || url === "/") {
+    if (url.startsWith(config.rpcPrefix) || url === "/") {
       return; 
     }
 
@@ -135,7 +135,7 @@ app.use(async (req: IncomingMessage, res: ServerResponse) => {
   config = await loadRPCConfig();
   
   // Skip RPC paths
-  if (url.startsWith(config.rpcPreffix)) return;
+  if (url.startsWith(config.rpcPrefix)) return;
 
   try {
     let template: string;

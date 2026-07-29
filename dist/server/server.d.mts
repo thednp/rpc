@@ -7,8 +7,12 @@ import "fastify";
 import "koa";
 //#region src/types.d.ts
 type ContentType = "application/json" | "text/plain";
+type Credentials = "same-origin" | "include" | "omit";
 interface ServerFunctionOptions {
+  /* @default "application/json" */
   contentType: ContentType;
+  /* @default "same-origin" */
+  credentials?: Credentials;
 }
 // primitives and their compositions
 type JsonPrimitive = string | number | boolean | null | undefined;
@@ -47,9 +51,9 @@ interface RpcPluginOptions {
    * @default "__rpc"
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix: "__rpc" | string;
+  rpcPrefix: "__rpc" | string;
   /**
    * Option to set an adapter for the middleware connection. The default is _express_,
    * which is the most popular and battle tested server app. The _express_ adapter is
@@ -73,7 +77,7 @@ declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResu
 //#endregion
 //#region src/getClientModules.d.ts
 interface RpcPluginOptionsInternal {
-  rpcPreffix: string;
+  rpcPrefix: string;
   adapter?: string | undefined;
 }
 declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => string;
@@ -81,10 +85,11 @@ declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => st
 //#region src/options.d.ts
 declare const defaultServerFnOptions: {
   contentType: "application/json";
+  credentials: "same-origin";
 };
 declare const defaultRPCOptions: RpcPluginOptions;
 declare const defaultMiddlewareOptions: {
-  rpcPreffix: undefined;
+  rpcPrefix: undefined;
   path: undefined;
 };
 //#endregion

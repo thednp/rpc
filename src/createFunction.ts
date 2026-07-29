@@ -8,6 +8,7 @@ import type {
 } from "./types.d.ts";
 import { serverFunctionsMap } from "./functionsMap.ts";
 import { defaultServerFnOptions } from "./options.ts";
+import { OPERATION_ABORTED } from "./constants.ts";
 
 export function createServerFunction<
   TArgs extends JsonArray = JsonArray,
@@ -25,7 +26,7 @@ export function createServerFunction<
 
     const fetcher = async () => {
       if (controller.signal.aborted) {
-        throw new Error("Operation aborted");
+        throw new Error(OPERATION_ABORTED);
       }
 
       return await handler(controller.signal, ...args);

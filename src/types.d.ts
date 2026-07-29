@@ -35,12 +35,17 @@ export type SupportableContentType =
 
 export type ContentType = "application/json" | "text/plain";
 
+export type Credentials = "same-origin" | "include" | "omit";
+
 export type BodyResult =
   | { contentType: "application/json"; data: JsonValue }
   | { contentType: "text/plain"; data: string };
 
 export interface ServerFunctionOptions {
+  /* @default "application/json" */
   contentType: ContentType;
+  /* @default "same-origin" */
+  credentials?: Credentials;
 }
 
 // primitives and their compositions
@@ -99,12 +104,6 @@ export interface ServerFnEntry {
   exportName?: string;
 }
 
-export interface CacheEntry<T> {
-  data?: T;
-  timestamp: number;
-  promise?: Promise<T>;
-}
-
 /**
  * ### @thednp/rpc
  * The plugin configuration allows for granular control of your
@@ -120,9 +119,9 @@ export interface RpcPluginOptions {
    * @default "__rpc"
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix: "__rpc" | string;
+  rpcPrefix: "__rpc" | string;
 
   /**
    * Option to set an adapter for the middleware connection. The default is _express_,
@@ -161,9 +160,9 @@ export interface MiddlewareOptions<
    * @default string
    * @example
    * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPreffix: "api/rpc"
+   * rpcPrefix: "api/rpc"
    */
-  rpcPreffix?: string | false;
+  rpcPrefix?: string | false;
 
   /**
    * Async handler for request processing.

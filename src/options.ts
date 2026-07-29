@@ -6,14 +6,15 @@ import type {
 
 export const defaultServerFnOptions = {
   contentType: "application/json",
+  credentials: "same-origin",
 } satisfies ServerFunctionOptions;
 
 export const defaultRPCOptions: RpcPluginOptions = {
-  rpcPreffix: "__rpc",
+  rpcPrefix: "__rpc",
   adapter: "express",
 };
 
 export const defaultMiddlewareOptions = {
-  rpcPreffix: undefined,
+  rpcPrefix: undefined,
   path: undefined,
 } satisfies MiddlewareOptions;

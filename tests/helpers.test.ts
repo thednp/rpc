@@ -80,6 +80,7 @@ describe("innerModule", () => {
     const result = innerModule(
       '"test"',
       { "Content-Type": "application/json" },
+      "same-origin",
       "__rpc",
       "say-hi",
     );
@@ -97,6 +98,7 @@ describe("innerModule", () => {
     const result = innerModule(
       '{"a":1}',
       { "Content-Type": "application/json" },
+      "same-origin",
       "__rpc",
       "say-hi",
     );
@@ -106,7 +108,7 @@ describe("innerModule", () => {
     expect(fetchMock).toHaveBeenCalledWith("/__rpc/say-hi", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      credentials: "same-origin",
       body: '{"a":1}',
       signal: expect.any(AbortSignal),
     });
@@ -117,7 +119,7 @@ describe("innerModule", () => {
       new Response(JSON.stringify({ data: "hello world" }), { status: 200 }),
     );
 
-    const result = innerModule("{}", {}, "__rpc", "echo");
+    const result = innerModule("{}", {}, "same-origin", "__rpc", "echo");
     await expect(result.data).resolves.toBe("hello world");
   });
 
@@ -126,7 +128,7 @@ describe("innerModule", () => {
       new Response(null, { status: 404, statusText: "Not Found" }),
     );
 
-    const result = innerModule("{}", {}, "__rpc", "missing");
+    const result = innerModule("{}", {}, "same-origin", "__rpc", "missing");
     await expect(result.data).rejects.toThrow("Fetch error: Not Found");
   });
 
@@ -135,7 +137,7 @@ describe("innerModule", () => {
       new Response(null, { status: 499, statusText: "Canceled" }),
     );
 
-    const result = innerModule("{}", {}, "__rpc", "fn");
+    const result = innerModule("{}", {}, "same-origin", "__rpc", "fn");
     await result.data;
     expect(console.warn).toHaveBeenCalledWith("Request was cancelled");
   });
@@ -157,7 +159,7 @@ describe("innerModule", () => {
         }),
     );
 
-    const result = innerModule("{}", {}, "__rpc", "fn");
+    const result = innerModule("{}", {}, "same-origin", "__rpc", "fn");
     result.cancel("user cancelled");
     await expect(result.data).rejects.toThrow("The operation was aborted");
   });

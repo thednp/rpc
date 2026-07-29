@@ -2,6 +2,8 @@
 
 `@thednp/rpc` provides adapters for ExpressJS, Fastify, Hono, and Koa. Each adapter exports `attachRPC` for production and `attachVite` for development.
 
+All adapters have an example each, feel free to explore [examples](../examples).
+
 ## Common Pattern
 
 All adapters share the same two-function API:

@@ -1,6 +1,6 @@
 import { defineConfig } from '@thednp/rpc';
 
 export default defineConfig({
-  rpcPreffix: '_server',
+  rpcPrefix: '_server',
   adapter: "hono",
 });

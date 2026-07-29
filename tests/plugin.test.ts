@@ -6,6 +6,11 @@ import { createServerFunction } from "../src/createFunction";
 import { serverFunctionsMap } from "../src/functionsMap";
 import { getClientModules } from "../src/getClientModules";
 import {
+  validateCredentials,
+  validateIdentifier,
+  validatePathSegment,
+} from "../src/validate";
+import {
   defaultMiddlewareOptions,
   defaultRPCOptions,
   defaultServerFnOptions,
@@ -61,13 +66,13 @@ describe("loadRPCConfig", () => {
   it("should load default config", async () => {
     const cfg = await loadRPCConfig();
     expect(cfg.adapter).toBe("express");
-    expect(cfg.rpcPreffix).toBe("__rpc");
+    expect(cfg.rpcPrefix).toBe("__rpc");
   });
 
   it("should load config from file", async () => {
     const cfg = await loadRPCConfig("examples/hono/rpc.config.ts");
     expect(cfg.adapter).toBe("hono");
-    expect(cfg.rpcPreffix).toBe("_server");
+    expect(cfg.rpcPrefix).toBe("_server");
   });
 
   it("should fallback to defaults for missing file", async () => {
@@ -77,7 +82,7 @@ describe("loadRPCConfig", () => {
 
   it("should work with valid path", async () => {
     const cfg = await loadRPCConfig("tests/fixtures/good.config.ts");
-    expect(cfg.rpcPreffix).toBe("_sv");
+    expect(cfg.rpcPrefix).toBe("_sv");
     expect(cfg.adapter).toBe("hono");
   });
 
@@ -101,7 +106,7 @@ describe("loadRPCConfig", () => {
         "../src"
       );
       const cfg = await loadRPCConfigFresh();
-      expect(cfg.rpcPreffix).toBe("_sv");
+      expect(cfg.rpcPrefix).toBe("_sv");
       expect(cfg.adapter).toBe("express");
     } finally {
       process.chdir(prev);
@@ -117,12 +122,12 @@ describe("default options", () => {
   });
 
   it("should have sensible RPC options", () => {
-    expect(defaultRPCOptions.rpcPreffix).toBe("__rpc");
+    expect(defaultRPCOptions.rpcPrefix).toBe("__rpc");
     expect(defaultRPCOptions.adapter).toBe("express");
   });
 
   it("should have sensible middleware options", () => {
-    expect(defaultMiddlewareOptions.rpcPreffix).toBeUndefined();
+    expect(defaultMiddlewareOptions.rpcPrefix).toBeUndefined();
     expect(defaultMiddlewareOptions.path).toBeUndefined();
   });
 });
@@ -240,7 +245,7 @@ describe("getClientModules", () => {
   });
 
   it("should only include handleResponse when no functions mapped", () => {
-    const code = getClientModules({ rpcPreffix: "__rpc" });
+    const code = getClientModules({ rpcPrefix: "__rpc" });
     expect(code).not.toContain("export const");
   });
 
@@ -254,7 +259,7 @@ describe("getClientModules", () => {
       exportName: "sayHi",
     });
 
-    const code = getClientModules({ rpcPreffix: "__rpc" });
+    const code = getClientModules({ rpcPrefix: "__rpc" });
     expect(code).toContain("export const sayHi");
   });
 
@@ -266,7 +271,7 @@ describe("getClientModules", () => {
       exportName: "echo",
     });
 
-    const code = getClientModules({ rpcPreffix: "rpc" });
+    const code = getClientModules({ rpcPrefix: "rpc" });
     expect(code).toContain("Content-Type': 'text/plain'");
     expect(code).toContain("body = args[0]");
   });
@@ -279,8 +284,32 @@ describe("getClientModules", () => {
       exportName: "add",
     });
 
-    const code = getClientModules({ rpcPreffix: "api" });
+    const code = getClientModules({ rpcPrefix: "api" });
     expect(code).toContain("const body");
+  });
+
+  it("should generate include credentials when set", () => {
+    serverFunctionsMap.set("secureFn", {
+      name: "secure-fn",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/json", credentials: "include" },
+      exportName: "secureFn",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(code).toContain('credentials = "include"');
+  });
+
+  it("should default to same-origin credentials", () => {
+    serverFunctionsMap.set("defaultFn", {
+      name: "default-fn",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/json" },
+      exportName: "defaultFn",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(code).toContain('credentials = "same-origin"');
   });
 
   it("should handle abort error in generated code", () => {
@@ -290,7 +319,7 @@ describe("getClientModules", () => {
       exportName: "fn",
     });
 
-    const code = getClientModules({ rpcPreffix: "__rpc" });
+    const code = getClientModules({ rpcPrefix: "__rpc" });
     expect(code).toContain("const name");
   });
 
@@ -301,7 +330,7 @@ describe("getClientModules", () => {
       exportName: "fn",
     });
 
-    const code = getClientModules({ rpcPreffix: "__rpc" });
+    const code = getClientModules({ rpcPrefix: "__rpc" });
     expect(code).toContain("innerModule");
     // expect(code).toContain("408");
   });
@@ -334,6 +363,105 @@ describe("getClientModules", () => {
 
     expect(result?.code.length).toBeGreaterThan(0);
     expect(result?.map).toBeDefined();
+  });
+});
+
+// ─── validateIdentifier ────────────────────────────────────────────────
+
+describe("validateIdentifier", () => {
+  it("should pass valid identifiers", () => {
+    expect(validateIdentifier("sayHi", "fn")).toBe("sayHi");
+    expect(validateIdentifier("_private", "fn")).toBe("_private");
+    expect(validateIdentifier("$value", "fn")).toBe("$value");
+    expect(validateIdentifier("a1", "fn")).toBe("a1");
+    expect(validateIdentifier("_", "fn")).toBe("_");
+    expect(validateIdentifier("$", "fn")).toBe("$");
+  });
+
+  it("should throw for identifiers starting with a digit", () => {
+    expect(() => validateIdentifier("1bad", "fn"))
+      .toThrow('Invalid fn: "1bad" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/');
+  });
+
+  it("should throw for identifiers with special characters", () => {
+    expect(() => validateIdentifier("bad!", "fn"))
+      .toThrow('Invalid fn: "bad!" must match');
+    expect(() => validateIdentifier("a b", "fn"))
+      .toThrow('Invalid fn: "a b" must match');
+    expect(() => validateIdentifier("foo-bar", "fn"))
+      .toThrow('Invalid fn: "foo-bar" must match');
+  });
+
+  it("should throw for empty string", () => {
+    expect(() => validateIdentifier("", "fn"))
+      .toThrow('Invalid fn: "" must match');
+  });
+
+  it("should throw for code injection patterns", () => {
+    expect(() => validateIdentifier("${evil()}", "fn"))
+      .toThrow('Invalid fn: "${evil()}" must match');
+    expect(() => validateIdentifier("greet; drop table", "fn"))
+      .toThrow('Invalid fn: "greet; drop table" must match');
+  });
+});
+
+// ─── validatePathSegment ───────────────────────────────────────────────
+
+describe("validatePathSegment", () => {
+  it("should pass valid path segments", () => {
+    expect(validatePathSegment("say-hi", "fn")).toBe("say-hi");
+    expect(validatePathSegment("api/rpc", "prefix")).toBe("api/rpc");
+    expect(validatePathSegment("hello", "fn")).toBe("hello");
+    expect(validatePathSegment("_foo/bar_", "fn")).toBe("_foo/bar_");
+    expect(validatePathSegment("a1", "fn")).toBe("a1");
+  });
+
+  it("should throw for segments starting with /", () => {
+    expect(() => validatePathSegment("/start", "fn"))
+      .toThrow('Invalid fn: "/start" must match');
+  });
+
+  it("should throw for segments with special characters", () => {
+    expect(() => validatePathSegment("bad!", "fn"))
+      .toThrow('Invalid fn: "bad!" must match');
+    expect(() => validatePathSegment("a b", "fn"))
+      .toThrow('Invalid fn: "a b" must match');
+    expect(() => validatePathSegment("foo..bar", "fn"))
+      .toThrow('Invalid fn: "foo..bar" must match');
+  });
+
+  it("should throw for empty string", () => {
+    expect(() => validatePathSegment("", "fn"))
+      .toThrow('Invalid fn: "" must match');
+  });
+
+  it("should throw for code injection patterns in segments", () => {
+    expect(() => validatePathSegment("${evil()}", "fn"))
+      .toThrow('Invalid fn: "${evil()}" must match');
+    expect(() => validatePathSegment("foo/../bar", "fn"))
+      .toThrow('Invalid fn: "foo/../bar" must match');
+  });
+});
+
+// ─── validateCredentials ───────────────────────────────────────────────
+
+describe("validateCredentials", () => {
+  it("should default to same-origin when undefined", () => {
+    expect(validateCredentials()).toBe("same-origin");
+    expect(validateCredentials(undefined)).toBe("same-origin");
+  });
+
+  it("should pass valid credentials values", () => {
+    expect(validateCredentials("same-origin")).toBe("same-origin");
+    expect(validateCredentials("include")).toBe("include");
+    expect(validateCredentials("omit")).toBe("omit");
+  });
+
+  it("should throw for invalid credentials values", () => {
+    expect(() => validateCredentials("same-site"))
+      .toThrow('Invalid credentials: "same-site"');
+    expect(() => validateCredentials("invalid"))
+      .toThrow('Invalid credentials: "invalid"');
   });
 });
 

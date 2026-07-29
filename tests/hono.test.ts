@@ -144,7 +144,7 @@ describe("Hono createMiddleware", () => {
   it("should scan for server files when map is empty", async () => {
     serverFunctionsMap.clear();
     const handler = vi.fn();
-    const mw = createMiddleware({ handler, rpcPreffix: "_server" });
+    const mw = createMiddleware({ handler, rpcPrefix: "_server" });
     const c = makeHonoContext({ path: "/_server/testFn" });
     const next = makeHonoNext();
     await mw(c, next);
@@ -214,18 +214,18 @@ describe("Hono createMiddleware", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("should filter by rpcPreffix match", async () => {
+  it("should filter by rpcPrefix match", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "_server", handler });
+    const mw = createMiddleware({ rpcPrefix: "_server", handler });
     const c = makeHonoContext({ path: "/_server/hello" });
     const next = makeHonoNext();
     await mw(c, next);
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("should skip when rpcPreffix mismatch", async () => {
+  it("should skip when rpcPrefix mismatch", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "_server", handler });
+    const mw = createMiddleware({ rpcPrefix: "_server", handler });
     const c = makeHonoContext({ path: "/other/path" });
     const next = makeHonoNext();
     await mw(c, next);
@@ -235,7 +235,7 @@ describe("Hono createMiddleware", () => {
 
   it("should NOT match on prefix boundary bypass", async () => {
     const handler = vi.fn();
-    const mw = createMiddleware({ rpcPreffix: "__rpc", handler });
+    const mw = createMiddleware({ rpcPrefix: "__rpc", handler });
     const c = makeHonoContext({ path: "/__rpc-evil/hello" });
     const next = makeHonoNext();
     await mw(c, next);
@@ -345,7 +345,7 @@ describe("Hono createRPCMiddleware", () => {
 
   it("should call next() when prefix doesn't match", async () => {
     seedServerMap();
-    const mw = createRPCMiddleware({ rpcPreffix: "_sv" });
+    const mw = createRPCMiddleware({ rpcPrefix: "_sv" });
     const c = makeHonoContext({ path: "/other/path" });
     const next = makeHonoNext();
     await mw(c, next);

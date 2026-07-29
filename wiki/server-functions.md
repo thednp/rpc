@@ -18,7 +18,10 @@ The core API for defining server-side functions.
 function createServerFunction<T>(
   name: string,
   handler: (signal: AbortSignal, ...args: JsonArray) => Promise<T>,
-  options?: { contentType: 'application/json' | 'text/plain'}
+  options?: {
+    contentType?: 'application/json' | 'text/plain',
+    credentials?: "same-origin" | "include" | "omit",
+  }
 ): ServerFunction<T>;
 ```
 
@@ -26,7 +29,9 @@ function createServerFunction<T>(
 
 - **`name`** (`string`) — The registered name used in RPC routing. Must match the name used when calling the function on the client.
 - **`handler`** (`(signal: AbortSignal, ...args: JsonArray) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; remaining arguments come from the client. The return value must be JSON-serializable.
-- **`options`** (`{ contentType?: 'application/json' | 'text/plain' }`) — Optional serialization strategy. Defaults to `'application/json'`.
+- **`options`** — Optional credentials and serialization strategy
+  * `contentType?: 'application/json' | 'text/plain'` - Defaults to `'application/json'`.
+  * `credentials?: "include" | "same-origin" | "omit"` - Defaults to `'same-origin'`.
 
 ### AbortSignal
 
@@ -56,7 +61,7 @@ The return value of `handler` is serialized to JSON and sent as the HTTP respons
 
 ## Input Validation
 
-Server functions receive raw, untrusted client data. Always validate before use.
+Server functions receive raw, untrusted client data. Always validate data within your server functions before use.
 
 **zod:**
 
