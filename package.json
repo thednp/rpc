@@ -1,6 +1,8 @@
 {
   "name": "@thednp/rpc",
   "version": "0.0.2",
+  "license": "MIT",
+  "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "homepage": "https://github.com/thednp/rpc#readme",
   "bugs": {
@@ -10,8 +12,9 @@
     "type": "git",
     "url": "git+https://github.com/thednp/rpc.git"
   },
-  "license": "MIT",
-  "author": "thednp",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "types": "./dist/index.d.mts",
   "sideEffects": false,
@@ -51,10 +54,10 @@
     "fix:ts": "deno lint src --fix",
     "check:ts": "tsc -noEmit",
     "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
-    "up:examples_1": "for d in examples/*/; do (cd \"$d\" && pnpm up --latest); done",
     "up:root": "pnpm up --latest",
     "upd": "pnpm up:examples && pnpm up:root",
     "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm build",
+    "prepare": "pnpm build",
     "build": "tsdown"
   },
   "dependencies": {

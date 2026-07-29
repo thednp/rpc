@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "vite": "^8.1.5",
-    "@thednp/rpc": "^0.0.1"
+    "@thednp/rpc": "workspace:^"
   },
   "devDependencies": {
     "valibot": "^1.4.2",
