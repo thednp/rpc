@@ -1,9 +1,5 @@
 # Changelog
 
-## [0.0.3] - 2026-07-29
-
-No real change, just trying to publish.
-
 ## [0.0.2] - 2026-07-29
 
 ### Breaking
