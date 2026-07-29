@@ -16,5 +16,6 @@
   "devDependencies": {
     "typescript": "~7.0.2",
     "valibot": "^1.4.2"
-  }
+  },
+  "packageManager": "pnpm@11.17.0"
 }

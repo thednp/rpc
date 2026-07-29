@@ -27,5 +27,6 @@
     "@types/koa": "^3.0.3",
     "@types/node": "^26.1.2",
     "typescript": "~7.0.2"
-  }
+  },
+  "packageManager": "pnpm@11.17.0"
 }
