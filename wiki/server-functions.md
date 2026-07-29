@@ -1,5 +1,13 @@
 # Server Functions
 
+## Overview
+
+Server functions run exclusively on the server. They have access to server-only resources (databases, file system, environment variables, private APIs) and **never execute on the client**.
+
+The `@thednp/rpc` Vite plugin transforms imports of server functions into client-side stubs that call the real implementation over HTTP. This isomorphic bridge means you write your functions once and call them from either server-rendered pages or client-side code — the RPC middleware handles routing on the server while the generated client modules handle serialization, transport, and cancellation.
+
+All examples except the SPA use SSR to demonstrate this: the same server functions are imported directly during server-side rendering (in `entry-server.ts`) and also called from client-side JavaScript (via the auto-generated fetch stubs). The SPA example relies entirely on the client stubs.
+
 ## `createServerFunction(name, handler, options?)`
 
 The core API for defining server-side functions.

@@ -5,10 +5,9 @@
 [![NPM Version](https://img.shields.io/npm/v/@thednp/rpc.svg)](https://www.npmjs.com/package/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
 
-A Vite plugin for automatic RPC generation that is simple, framework agnostic and very simple to use.
+An isomorphic Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
 
-* Server functions defined in `src/api/server.ts` are auto-scanned, with client modules generated at build time.
-* Typed client `fetch` based modules are generated and available via the RPC plugin.
+Server functions defined in `src/api/server.ts` run exclusively on the server. The plugin transforms their imports into client-side fetch stubs, so calling a server function from the client looks and feels like a local call — but the execution stays on the server.
 
 The name stands for RPC via Vite, because that's exactly what it is. No more, no less.
 
@@ -19,9 +18,9 @@ Most RPC solutions ask you to adopt a new way of thinking. You learn a complex A
 `@thednp/rpc` takes the opposite bet: your **server functions should just be functions**. You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client stub generation, middleware registration, request cancellation — without asking you to restructure your codebase or learn a new DSL (Domain-Specific Language).
 
 ### The Mental model
-* **Query Engine** The Brain (something like `@tanstack/react-query` that handles caching, lifecycles, deduplication).
-* **@thednp/rpc** The Nervous System (transport, serialization, client/server bridge, request cancellation).
-* **UI Framework** = The Muscle (Reactive DOM updates).
+* **Query Engine** — The Brain (something like `@tanstack/react-query` that handles caching, lifecycles, deduplication).
+* **@thednp/rpc** — The Nervous System (isomorphic transport, serialization, client/server bridge, request cancellation).
+* **UI Framework** — The Muscle (Reactive DOM updates).
 
 ## Features
 
@@ -46,14 +45,16 @@ Most RPC solutions ask you to adopt a new way of thinking. You learn a complex A
 
 ## Examples
 
-| Example | Adapter                                       | Type | Run Command        |
-| ---------| -----------------------------------------------| ------| --------------------|
-| spa     | Vite dev server (Connect, Express-compatible) | SPA  | `pnpm dev`         |
-| express | Express                                       | SSR  | `pnpm dev:express` |
-| fastify | Fastify                                       | SSR  | `pnpm dev:fastify` |
-| hono    | Hono                                          | SSR  | `pnpm dev:hono`    |
-| koa     | Koa                                           | SSR  | `pnpm dev:koa`     |
-| ssr     | Custom `node:http` (Express-compatible)       | SSR  | `pnpm dev:ssr`     |
+| Example | Adapter                                       | Type | Run Command        | RPC Approach                              |
+| ---------| -----------------------------------------------| ------| --------------------| -------------------------------------------|
+| spa     | Vite dev server (Connect, Express-compatible) | SPA  | `pnpm dev`         | Client stubs only                         |
+| express | Express                                       | SSR  | `pnpm dev:express` | Direct import (SSR) + client stubs        |
+| fastify | Fastify                                       | SSR  | `pnpm dev:fastify` | Direct import (SSR) + client stubs        |
+| hono    | Hono                                          | SSR  | `pnpm dev:hono`    | Direct import (SSR) + client stubs        |
+| koa     | Koa                                           | SSR  | `pnpm dev:koa`     | Direct import (SSR) + client stubs        |
+| ssr     | Custom `node:http` (Express-compatible)       | SSR  | `pnpm dev:ssr`     | Direct import (SSR) + client stubs        |
+
+SSR examples demonstrate isomorphic usage: server functions are imported directly during server-side rendering (`entry-server.ts`) and also called from the client via auto-generated fetch stubs. The SPA example uses only the client-side stubs.
 
 ## Quick Start
 
