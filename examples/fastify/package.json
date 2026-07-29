@@ -16,7 +16,7 @@
     "@fastify/static": "^10.1.2",
     "@fastify/vite": "^9.2.0",
     "fastify": "^5.10.0",
-    "@thednp/rpc": "link:../..",
+    "@thednp/rpc": "^0.0.1",
     "vite": "^8.1.5"
   },
   "devDependencies": {
