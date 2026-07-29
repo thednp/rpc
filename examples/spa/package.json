@@ -10,7 +10,7 @@
     "start": "vite preview"
   },
   "dependencies": {
-    "@thednp/rpc": "workspace:^",
+    "@thednp/rpc": "link:../..",
     "vite": "^8.1.5"
   },
   "devDependencies": {

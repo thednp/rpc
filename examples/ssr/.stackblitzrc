@@ -1,0 +1,3 @@
+{
+  "startCommand": "cd ../.. && pnpm install && pnpm build && node --experimental-strip-types examples/ssr/server"
+}
