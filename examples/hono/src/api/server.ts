@@ -10,6 +10,7 @@ export const sayHi = createServerFunction(
     signal?.throwIfAborted();
     return `Hello ${name}!`;
   },
+  { contentType: "text/plain" },
 );
 
 const AddSchema = v.object({

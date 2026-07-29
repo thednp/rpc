@@ -5,11 +5,12 @@ import * as v from "valibot";
 export const sayHi = createServerFunction(
   "say-hi",
   async (signal, name: string) => {
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     await new Promise((res) => setTimeout(res, 1500));
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     return `Hello ${name}!`;
   },
+  { contentType: "text/plain" },
 );
 
 const AddSchema = v.object({
