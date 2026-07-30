@@ -41,19 +41,30 @@ jobs:
       # - name: Publish to jsr
       #   run: deno publish
 
-      - name: Diagnose npm auth
+      - name: Diagnose npm identity
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           node -e "console.log(process.env.NODE_AUTH_TOKEN ? 'NODE_AUTH_TOKEN=SET' : 'NODE_AUTH_TOKEN=NOT_SET')"
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           echo "Registry: $(npm config get registry)"
-          npm --registry=https://registry.npmjs.org whoami
-          npm config list
+          npm --registry=https://registry.npmjs.org whoami || true
+          npm --registry=https://registry.npmjs.org access ls-collaborators @thednp/rpc || true
+          npm --registry=https://registry.npmjs.org view @thednp/rpc versions --json || true
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public --no-git-checks
-        # run: pnpm publish --access public --no-git-checks
+      - name: Publish to npm (with debug dump on failure)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if npm publish --access public; then
+            echo "publish succeeded"
+          else
+            echo "Publish failed — dumping npm debug logs:"
+            ls -la /home/runner/.npm/_logs || true
+            for f in /home/runner/.npm/_logs/*-debug-*.log; do
+              echo "=== $f ==="
+              sed -n '1,400p' "$f" || true
+            done
+            exit 1
+          fi
