@@ -57,7 +57,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          if npm publish --access public; then
+          if pnpm publish --access public; then
             echo "publish succeeded"
           else
             echo "Publish failed — dumping npm debug logs:"
