@@ -22,7 +22,7 @@ jobs:
           registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
 
       - name: PNPM setup
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
 
       - name: Deno Setup
         uses: denoland/setup-deno@v2
@@ -44,5 +44,6 @@ jobs:
       - name: Publish to npm
         run: pnpm publish --provenance --access public --no-git-checks
         # run: pnpm publish --access public --no-git-checks
-        # env:
-        #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        env:
+          # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
