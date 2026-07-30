@@ -1,7 +1,9 @@
-import type { Credentials } from "./types.d.ts";
+import type { Credentials, JsonValue } from "./types.d.ts";
 import { FETCH_ERROR_PREFIX, REQUEST_CANCELLED } from "./constants.ts";
 
-export const handleResponse = async (response: Response) => {
+export const handleResponse = async (
+  response: Response,
+): Promise<JsonValue | void> => {
   if (!response.ok) {
     if (response.status === 499 || response.status === 408) {
       return console.warn(REQUEST_CANCELLED);
@@ -13,13 +15,18 @@ export const handleResponse = async (response: Response) => {
   return result.data;
 };
 
+type InnerModReturn = {
+  data: Promise<JsonValue | void>;
+  cancel: (reason: string) => void;
+};
+
 export const innerModule = (
   body: BodyInit,
   headers: HeadersInit,
   credentials: Credentials,
   prefix: string,
   name: string,
-) => {
+): InnerModReturn => {
   const controller = new AbortController();
   const cancel = (reason: string) => controller.abort(reason);
 

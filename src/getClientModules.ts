@@ -19,7 +19,7 @@ const getModule = (
     contentType: ServerFunctionOptions["contentType"];
     rpcPrefix: string;
   },
-) => {
+): string => {
   // Validate all interpolated strings to prevent code injection
   const safeFnName = validatePathSegment(fnName, "function name");
   const safeFnEntry = validateIdentifier(fnEntry, "export name");
@@ -53,7 +53,9 @@ export const ${safeFnEntry} = (...args) => {
   return output.trim();
 };
 
-export const getClientModules = (initialOptions: RpcPluginOptionsInternal) => {
+export const getClientModules = (
+  initialOptions: RpcPluginOptionsInternal,
+): string => {
   // Validate prefix once at the top level
   validatePathSegment(initialOptions.rpcPrefix, "rpcPrefix");
 

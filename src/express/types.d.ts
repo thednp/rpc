@@ -1,6 +1,14 @@
 import type { Connect } from "vite";
-import type { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type {
+  JsonValue,
+  MiddlewareOptions,
+  RpcPluginOptions,
+} from "@thednp/rpc";
+import type {
+  IncomingHttpHeaders,
+  IncomingMessage,
+  ServerResponse,
+} from "node:http";
 import type { NextFunction, Request, Response } from "express";
 
 export type ExpressMiddlewareOptions = MiddlewareOptions<"express">;
@@ -18,3 +26,19 @@ export interface ExpressMiddlewareHooks {
     next: Connect.NextFunction | NextFunction,
   ) => Promise<void>;
 }
+
+export type ResponseDetails = {
+  isResponseSent: boolean;
+  setHeader: (name: string, value: string) => void;
+  statusCode: number;
+  setStatusCode: (code: number) => void;
+  sendResponse: (code: number, output: Record<string, JsonValue>) => void;
+};
+
+export type RequestDetails = {
+  url: string;
+  search: string;
+  searchParams: URLSearchParams;
+  headers: IncomingHttpHeaders;
+  method: string | undefined;
+};

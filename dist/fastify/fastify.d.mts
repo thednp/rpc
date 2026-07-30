@@ -4,6 +4,7 @@ import { ViteDevServer } from "vite";
 import "express";
 import "hono";
 import "@hono/node-server";
+import "hono/factory";
 import "koa";
 //#region src/fastify/types.d.ts
 type FastifyMiddlewareOptions = MiddlewareOptions<"fastify">;

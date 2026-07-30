@@ -2,19 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
-import { serverFunctionsMap } from "../src/functionsMap";
-import { attachRPC, attachVite, readBody } from "../src/koa/helpers";
+import { serverFunctionsMap } from "../src/functionsMap.ts";
+import { attachRPC, attachVite, readBody } from "../src/koa/helpers.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
-} from "../src/koa/createMiddleware";
-import { createServerFunction } from "../src/createFunction";
+} from "../src/koa/createMiddleware.ts";
+import { createServerFunction } from "../src/createFunction.ts";
 import {
   makeKoaCtx,
   makeKoaNext,
   seedServerMap,
   simulateKoaBody,
-} from "./fixtures/koa";
+} from "./fixtures/koa.ts";
 
 beforeEach(() => {
   serverFunctionsMap.clear();
@@ -146,7 +146,10 @@ describe("Koa helpers", () => {
     });
 
     it("should skip scan when map already populated (attachRPC)", async () => {
-      serverFunctionsMap.set("test", { name: "test", handler: vi.fn() });
+      serverFunctionsMap.set("test", {
+        name: "test",
+        handler: vi.fn() as never,
+      });
       const app = { use: vi.fn() };
       await attachRPC(app as any);
       expect(app.use).toHaveBeenCalledOnce();
@@ -232,7 +235,10 @@ describe("Koa helpers", () => {
     });
 
     it("should skip scan when map already populated (attachVite)", async () => {
-      serverFunctionsMap.set("test", { name: "test", handler: vi.fn() });
+      serverFunctionsMap.set("test", {
+        name: "test",
+        handler: vi.fn() as never,
+      });
       const app: any = { use: vi.fn() };
       const vite: any = {
         middlewares: vi.fn((_req: any, _res: any, cb: any) => cb()),

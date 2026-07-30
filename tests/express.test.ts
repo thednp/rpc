@@ -1,29 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
-
-import type { ServerFnEntry } from "../src";
-import { serverFunctionsMap } from "../src/functionsMap";
+// import type { ServerFnEntry } from "../src";
+import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
   attachRPC,
   attachVite,
   getRequestDetails,
   getResponseDetails,
   readBody,
-} from "../src/express/helpers";
+} from "../src/express/helpers.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
-} from "../src/express/createMiddleware";
-import { createServerFunction } from "../src/createFunction";
-import rpcPlugin, { defineConfig, loadRPCConfig } from "../src";
+} from "../src/express/createMiddleware.ts";
+import { createServerFunction } from "../src/createFunction.ts";
+import rpcPlugin, { defineConfig, loadRPCConfig } from "../src/index.ts";
 import {
   makeNext,
   makeReq,
   makeRes,
   seedServerMap,
   simulateBody,
-} from "./fixtures/express";
+} from "./fixtures/express.ts";
 
 beforeEach(() => {
   serverFunctionsMap.clear();

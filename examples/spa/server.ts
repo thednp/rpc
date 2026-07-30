@@ -1,3 +1,5 @@
+import type { ExpressMiddlewareOptions } from "@thednp/rpc/express";
+
 export const startProxyServer = async (port: number = 3000) => {
   const { createServer } = await import("node:http");
   const { bodyLimit } = await import("./body-limit.ts");
@@ -5,7 +7,7 @@ export const startProxyServer = async (port: number = 3000) => {
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { createRPCMiddleware } = await import("@thednp/rpc/express");
   const rpcConfig = await loadRPCConfig();
-  const rpc = createRPCMiddleware(rpcConfig);
+  const rpc = createRPCMiddleware(rpcConfig as ExpressMiddlewareOptions);
   const stack = [bodyLimit, rpc];
 
   const httpServer = createServer(async (req, res) => {

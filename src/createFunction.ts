@@ -17,7 +17,7 @@ export function createServerFunction<
   name: string,
   handler: ServerFunctionInit<TArgs, TResult>,
   fnOptions: Partial<ServerFunctionOptions> = {},
-) {
+): ClientFunction<TArgs, TResult> {
   const options = Object.assign({}, defaultServerFnOptions, fnOptions);
 
   const wrappedFunction: ClientFunction<TArgs, TResult> = (...args: TArgs) => {

@@ -1,7 +1,7 @@
 import EventEmitter from "node:events";
 import { vi } from "vitest";
-import type { ServerFnEntry } from "../../src";
-import { serverFunctionsMap } from "../../src/functionsMap";
+import type { ServerFnEntry } from "../../src/types.d.ts";
+import { serverFunctionsMap } from "../../src/functionsMap.ts";
 
 function seedServerMap() {
   serverFunctionsMap.set("__dummy", {

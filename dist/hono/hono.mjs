@@ -1,7 +1,5 @@
+import { createMiddleware as createMiddleware$1 } from "hono/factory";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
-//#region node_modules/.pnpm/hono@4.12.32/node_modules/hono/dist/helper/factory/index.js
-var createMiddleware$1 = (middleware) => middleware;
-//#endregion
 //#region src/options.ts
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -29,9 +27,9 @@ async function attachRPC(app) {
 	const { adapter: _adapter, ...options } = await loadRPCConfig();
 	app.use(createRPCMiddleware(options));
 }
-function attachVite(app, vite) {
+const attachVite = (app, vite) => {
 	app.use(viteMiddleware(vite));
-}
+};
 /**
 * Creates a hono compatible middleware for a given vite development server.
 * @see https://github.com/honojs/hono/issues/3162#issuecomment-2331118049

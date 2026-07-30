@@ -5,10 +5,11 @@ import type {
   Response as ExpressResponse,
 } from "express";
 import type { BodyResult, JsonValue } from "@thednp/rpc";
-import { Buffer } from "node:buffer";
+import type { Buffer } from "node:buffer";
 import type { ViteDevServer } from "vite";
 import type { Express } from "express";
 import { createRPCMiddleware } from "./createMiddleware.ts";
+import type { RequestDetails, ResponseDetails } from "./types.d.ts";
 
 export async function attachRPC(app: Express) {
   const { loadRPCConfig } = await import("@thednp/rpc");
@@ -97,7 +98,7 @@ export const hasPreParsedBody = (
 
 export const getRequestDetails = (
   request: ExpressRequest | IncomingMessage,
-) => {
+): RequestDetails => {
   const rawUrl = (
     isExpressRequest(request) ? request.originalUrl : request.url
   ) as string;
@@ -114,7 +115,7 @@ export const getRequestDetails = (
 
 export const getResponseDetails = (
   response: ExpressResponse | ServerResponse,
-) => {
+): ResponseDetails => {
   const isResponseSent = response.headersSent || response.writableEnded;
 
   const setHeader = (name: string, value: string) => {

@@ -1,21 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
-
-import type { ServerFnEntry } from "../src";
-import { serverFunctionsMap } from "../src/functionsMap";
+import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
   attachRPC,
   attachVite,
   readBody,
   viteMiddleware,
-} from "../src/hono/helpers";
+} from "../src/hono/helpers.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
-} from "../src/hono/createMiddleware";
-import { createServerFunction } from "../src/createFunction";
-import { makeHonoContext, makeHonoNext, seedServerMap } from "./fixtures/hono";
+} from "../src/hono/createMiddleware.ts";
+import { createServerFunction } from "../src/createFunction.ts";
+import {
+  makeHonoContext,
+  makeHonoNext,
+  seedServerMap,
+} from "./fixtures/hono.ts";
 
 beforeEach(() => {
   serverFunctionsMap.clear();

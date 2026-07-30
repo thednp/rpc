@@ -33,7 +33,9 @@ const loadConfigFile = async (env: ConfigEnv, file: string) => {
  * Utility to define `@thednp/rpc` configuration file similar to vite.
  * @param uniConfig a system wide RPC configuration
  */
-const defineConfig = (uniConfig: Partial<RpcPluginOptions>) => {
+const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions = (
+  uniConfig: Partial<RpcPluginOptions>,
+) => {
   return mergeConfig(defaultRPCOptions, uniConfig) as RpcPluginOptions;
 };
 
@@ -43,7 +45,9 @@ let RPCConfig: RpcPluginOptions;
  * Utility to load `@thednp/rpc` configuration file system wide.
  * @param configFile an optional parameter to specify a file within your project scope
  */
-async function loadRPCConfig(configFile?: string) {
+const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
+  configFile?: string,
+) => {
   try {
     // istanbul ignore next
     const env: ConfigEnv & { root: string } = {
@@ -124,7 +128,7 @@ async function loadRPCConfig(configFile?: string) {
   }
 
   return RPCConfig;
-}
+};
 
 function rpcPlugin(
   devOptions: Partial<RpcPluginOptions> = {},

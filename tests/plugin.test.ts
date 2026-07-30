@@ -1,25 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { default as rpcPlugin, loadRPCConfig } from "../src";
-import type { ServerFnEntry, ServerFunctionInit } from "../src";
-import { createServerFunction } from "../src/createFunction";
-import { serverFunctionsMap } from "../src/functionsMap";
-import { getClientModules } from "../src/getClientModules";
+import { default as rpcPlugin, loadRPCConfig } from "../src/index.ts";
+import type { ServerFnEntry, ServerFunctionInit } from "../src/types.d.ts";
+import { createServerFunction } from "../src/createFunction.ts";
+import { serverFunctionsMap } from "../src/functionsMap.ts";
+import { getClientModules } from "../src/getClientModules.ts";
 import {
   validateCredentials,
   validateIdentifier,
   validatePathSegment,
-} from "../src/validate";
+} from "../src/validate.ts";
 import {
   defaultMiddlewareOptions,
   defaultRPCOptions,
   defaultServerFnOptions,
-} from "../src/options";
-import { mockPlugin7Context, mockPlugin8Context } from "./fixtures/vite-mock";
+} from "../src/options.ts";
+import {
+  mockPlugin7Context,
+  mockPlugin8Context,
+} from "./fixtures/vite-mock.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
-} from "../src/express/createMiddleware";
+} from "../src/express/createMiddleware.ts";
 
 beforeEach(() => {
   serverFunctionsMap.clear();

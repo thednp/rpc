@@ -202,7 +202,7 @@ let RPCConfig;
 * Utility to load `@thednp/rpc` configuration file system wide.
 * @param configFile an optional parameter to specify a file within your project scope
 */
-async function loadRPCConfig(configFile) {
+const loadRPCConfig = async (configFile) => {
 	try {
 		const env = {
 			command: "serve",
@@ -254,7 +254,7 @@ async function loadRPCConfig(configFile) {
 		console.warn(FAILED_LOAD_CONFIG, error);
 	}
 	return RPCConfig;
-}
+};
 function rpcPlugin(devOptions = {}) {
 	let options;
 	let config;

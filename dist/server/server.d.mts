@@ -3,6 +3,7 @@ import "@thednp/rpc";
 import "express";
 import "hono";
 import "@hono/node-server";
+import "hono/factory";
 import "fastify";
 import "koa";
 //#region src/types.d.ts

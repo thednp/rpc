@@ -1,23 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
-
-import type { ServerFnEntry } from "../src";
-import { serverFunctionsMap } from "../src/functionsMap";
-import { attachRPC, attachVite, readBody } from "../src/fastify/helpers";
+import { serverFunctionsMap } from "../src/functionsMap.ts";
+import { attachRPC, attachVite, readBody } from "../src/fastify/helpers.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
-} from "../src/fastify/createMiddleware";
-import { createServerFunction } from "../src/createFunction";
-import fastifyPlugin from "../src/fastify/plugin";
+} from "../src/fastify/createMiddleware.ts";
+import { createServerFunction } from "../src/createFunction.ts";
+import fastifyPlugin from "../src/fastify/plugin.ts";
 import {
   makeFastifyDone,
   makeFastifyReply,
   makeFastifyReq,
   seedServerMap,
   simulateRawBody,
-} from "./fixtures/fastify";
+} from "./fixtures/fastify.ts";
 
 beforeEach(() => {
   serverFunctionsMap.clear();

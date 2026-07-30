@@ -14,6 +14,7 @@
     "vite": "^8.1.5"
   },
   "devDependencies": {
+    "picocolors": "^1.1.1",
     "typescript": "~7.0.2",
     "valibot": "^1.4.2"
   },

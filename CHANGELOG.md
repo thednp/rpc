@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.2] - 2026-07-29
+## [0.0.2] - 2026-07-30
 
 ### Breaking
 
@@ -18,14 +18,23 @@
 - Centralize all error/warning messages into `src/constants.ts`
 - Extract validation functions (`validateIdentifier`, `validatePathSegment`) into `src/validate.ts` with 100% test coverage
 - Move safe-identifier regex patterns from `constants.ts` to `validate.ts` (implementation detail)
+- Add explicit return types to all adapter helpers and core functions
+- Add `RequestDetails` and `ResponseDetails` types to Express adapter
+- Add `InnerModReturn` helper type to `helpers.ts`
+- Fully type Fastify plugin with explicit interface
+- Type `serverFunctionsMap` explicitly in `functionsMap.ts`
+- Convert `defineConfig` and `loadRPCConfig` to typed arrow functions
 
 ### Fixes
 
-- Publish workflow: remove `--provenance`, fix AGENTS.md express command, fix Koa adapter docs
+- Publish workflow: remove `--provenance`, Node version 24
+- Fix AGENTS.md express command, fix Koa adapter docs
 - README GitHub URLs: `rpcv` → `rpc`
 - Proper pnpm workspace setup for StackBlitz
 - StackBlitz compatibility for examples
 - Remove `prepare` script to prevent rolldown native binding error on StackBlitz
+- SPA proxy server: cast `createRPCMiddleware` options for type safety
+- Move adapter deps from `devDependencies` to `dependencies` for correct runtime resolution
 
 ### Docs
 
@@ -35,6 +44,8 @@
 - Clarify isomorphic nature of server functions in wiki
 - Add README.md to each example
 - Use full wiki URLs in example READMEs
+- Fix broken link in security.md (`best-practives.md` → `best-practices.md`)
+- Fix cancellation description in client-usage.md to match actual behavior
 
 ### Chores
 
@@ -42,6 +53,8 @@
 - Update `dist/` with latest builds
 - Update examples dependencies
 - Bump version to `0.0.2`
+- Add `keywords` field to package.json
+- Move `picocolors` from root to examples/spa
 
 ## [0.0.1] - 2026-07-28
 

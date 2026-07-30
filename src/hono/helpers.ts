@@ -1,9 +1,9 @@
 // src/hono/helpers.ts
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { type HttpBindings } from "@hono/node-server";
+import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import { type ViteDevServer } from "vite";
+import type { ViteDevServer } from "vite";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { BodyResult } from "../types.d.ts";
@@ -15,16 +15,19 @@ export async function attachRPC(app: Hono) {
   app.use(createRPCMiddleware(options));
 }
 
-export function attachVite(app: Hono, vite: ViteDevServer): void {
+export const attachVite = (app: Hono, vite: ViteDevServer): void => {
   app.use(viteMiddleware(vite));
-}
+};
 
 /**
  * Creates a hono compatible middleware for a given vite development server.
  * @see https://github.com/honojs/hono/issues/3162#issuecomment-2331118049
  * @param vite the vite development server
  */
-export const viteMiddleware = (vite: ViteDevServer) => {
+// export const viteMiddleware: ((v: ViteDevServer) => Promise<ReturnType<typeof createMiddleware>>) = (vite: ViteDevServer) => {
+export const viteMiddleware = (
+  vite: ViteDevServer,
+): ReturnType<typeof createMiddleware<{ Bindings: HttpBindings }>> => {
   return createMiddleware<{ Bindings: HttpBindings }>((c, next) => {
     return new Promise((resolve) => {
       // Node.js

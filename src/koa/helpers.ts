@@ -1,5 +1,5 @@
 // src/koa/helpers.ts
-import { Buffer } from "node:buffer";
+import type { Buffer } from "node:buffer";
 import type { ViteDevServer } from "vite";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { BodyResult } from "@thednp/rpc";

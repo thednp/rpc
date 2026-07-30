@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViteDevServer } from "vite";
-import { scanForServerFiles } from "../src/scanForServerFiles";
+import { scanForServerFiles } from "../src/scanForServerFiles.ts";
 
-import { serverFunctionsMap } from "../src/functionsMap";
+import { serverFunctionsMap } from "../src/functionsMap.ts";
 
 beforeEach(() => {
   serverFunctionsMap.clear();

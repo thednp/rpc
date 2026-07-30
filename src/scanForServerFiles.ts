@@ -16,7 +16,7 @@ let isScanned = false;
 export const scanForServerFiles = async (
   initialCfg?: ScanConfig,
   devServer?: ViteDevServer,
-) => {
+): Promise<void> => {
   if (isScanned && !devServer) {
     return;
   }

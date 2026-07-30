@@ -7,11 +7,17 @@ import { createRPCMiddleware } from "./createMiddleware.ts";
 
 export type { MiddlewareOptions };
 
-// Define the plugin factory
-const RpcPlugin = (
+type FastifyRPCPlugin = (
   fastify: FastifyInstance,
   initialOptions: Partial<MiddlewareOptions<"fastify">>,
   done: () => void,
+) => void;
+
+// Define the plugin factory
+const RpcPlugin: FastifyRPCPlugin = (
+  fastify,
+  initialOptions,
+  done,
 ) => {
   // Register RPC middleware as preHandler hook
   const rpcMiddleware = createRPCMiddleware(initialOptions);
@@ -26,9 +32,13 @@ const RpcPlugin = (
   done();
 };
 
+type FastifyPlugin = typeof fp;
+
+type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
+
 // Export the plugin wrapped with fastify-plugin
 const rpcPlugin = fp(RpcPlugin, {
   name: "uni-rpc-fastify-plugin",
-});
+}) as RegisteredFastifyRPCPlugin;
 
 export { rpcPlugin as default };

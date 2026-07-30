@@ -1,16 +1,17 @@
 import { Connect, Plugin } from "vite";
 import { MiddlewareOptions as MiddlewareOptions$1, RpcPluginOptions as RpcPluginOptions$1 } from "@thednp/rpc";
 import { IncomingMessage, ServerResponse } from "node:http";
-import { NextFunction, Request, Response as Response$1 } from "express";
+import { NextFunction, Request, Response } from "express";
 import { MiddlewareHandler } from "hono";
 import "@hono/node-server";
+import "hono/factory";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import { Context, Next } from "koa";
 //#region src/express/types.d.ts
 type ExpressMiddlewareOptions = MiddlewareOptions$1<"express">;
 type ExpressMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "express">(initialOptions?: Partial<ExpressMiddlewareOptions>) => ExpressMiddlewareHooks["handler"];
 interface ExpressMiddlewareHooks {
-  handler: (req: IncomingMessage | Request, res: ServerResponse | Response$1, next: Connect.NextFunction | NextFunction) => Promise<void>;
+  handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
 //#endregion
 //#region src/hono/types.d.ts
@@ -179,12 +180,12 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
  * Utility to define `@thednp/rpc` configuration file similar to vite.
  * @param uniConfig a system wide RPC configuration
  */
-declare const defineConfig: (uniConfig: Partial<RpcPluginOptions>) => RpcPluginOptions;
+declare const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions;
 /**
  * Utility to load `@thednp/rpc` configuration file system wide.
  * @param configFile an optional parameter to specify a file within your project scope
  */
-declare function loadRPCConfig(configFile?: string): Promise<RpcPluginOptions>;
+declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin<unknown>;
 //#endregion
 export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };

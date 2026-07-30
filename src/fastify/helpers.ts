@@ -2,7 +2,7 @@
 import type { FastifyRequest } from "fastify";
 import type { ViteDevServer } from "vite";
 import type { FastifyInstance } from "fastify";
-import { Buffer } from "node:buffer";
+import type { Buffer } from "node:buffer";
 import fastifyRpcPlugin from "./plugin.ts";
 import type { BodyResult, JsonValue } from "../types.d.ts";
 

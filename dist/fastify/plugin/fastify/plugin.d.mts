@@ -1,14 +1,16 @@
-import { FastifyInstance, FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
+import fp from "fastify-plugin";
 import { Connect } from "vite";
 import "@thednp/rpc";
 import { IncomingMessage, ServerResponse } from "node:http";
-import { NextFunction, Request, Response as Response$1 } from "express";
+import { NextFunction, Request, Response } from "express";
 import { MiddlewareHandler } from "hono";
 import "@hono/node-server";
+import "hono/factory";
+import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import { Context, Next } from "koa";
 //#region src/express/types.d.ts
 interface ExpressMiddlewareHooks {
-  handler: (req: IncomingMessage | Request, res: ServerResponse | Response$1, next: Connect.NextFunction | NextFunction) => Promise<void>;
+  handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
 //#endregion
 //#region src/hono/types.d.ts
@@ -107,8 +109,9 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
 }
 //#endregion
 //#region src/fastify/plugin.d.ts
-declare const RpcPlugin: (fastify: FastifyInstance, initialOptions: Partial<MiddlewareOptions<"fastify">>, done: () => void) => void;
-declare const rpcPlugin: typeof RpcPlugin;
+type FastifyPlugin = typeof fp;
+type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
+declare const rpcPlugin: RegisteredFastifyRPCPlugin;
 //#endregion
 export { type MiddlewareOptions, rpcPlugin as default };
 //# sourceMappingURL=plugin.d.mts.map

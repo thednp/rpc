@@ -1,0 +1,49 @@
+{
+  "name": "@thednp/rpc",
+  "version": "0.0.2",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./express": "./src/express/index.ts",
+    "./fastify": "./src/fastify/index.ts",
+    "./fastify/plugin": "./src/fastify/plugin.ts",
+    "./helpers": "./src/helpers.ts",
+    "./hono": "./src/hono/index.ts",
+    "./koa": "./src/koa/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "publish": {
+    "include": [
+      "deno.json",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "wiki",
+      "src",
+      "README.md",
+      "LICENSE"
+    ]
+  },
+  "tasks": {
+    "test": "vitest",
+    "test-ui": "vitest --ui",
+    "test-dev": "node dev-test.js",
+    "test-prod": "node dev-test.js --mode=preview",
+    "format": "deno fmt src tests examples/**/src",
+    "clean": "rm -rf examples/**/dist examples/**/node_modules examples/**/package-lock.json examples/**/pnpm-lock.yaml examples/**/bun.lockb examples/**/deno.lock",
+    "dev": "cd examples/spa && pnpm up && pnpm dev",
+    "dev:koa": "cd examples/koa && pnpm up && pnpm dev",
+    "dev:express": "cd examples/express && pnpm up && pnpm dev",
+    "dev:fastify": "cd examples/fastify && pnpm up && pnpm dev",
+    "dev:hono": "cd examples/hono && pnpm up && pnpm dev",
+    "dev:ssr": "cd examples/ssr && pnpm up && pnpm dev",
+    "lint": "pnpm lint:ts && pnpm check:ts",
+    "lint:ts": "deno lint src",
+    "fix:ts": "deno lint src --fix",
+    "check:ts": "tsc -noEmit",
+    "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
+    "up:root": "pnpm up --latest",
+    "upd": "pnpm up:examples && pnpm up:root",
+    "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm sync-exports && pnpm build",
+    "build": "tsdown"
+  }
+}
