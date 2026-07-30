@@ -8,7 +8,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read # For checkout
+      contents: write # For checkout
       id-token: write # The OIDC ID token is used for authentication with JSR.
 
     steps:
@@ -42,10 +42,10 @@ jobs:
       #   run: deno publish
 
       - name: Publish to npm
-        run: pnpm publish --access public
+        # run: pnpm publish --provenance --access public --no-git-checks
+        run: pnpm publish --access public --no-git-checks
         with:
           branch: master
-        # run: pnpm publish --provenance --access public --no-git-checks
         env:
           # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
