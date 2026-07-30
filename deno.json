@@ -12,6 +12,16 @@
     "./koa": "./src/koa/index.ts",
     "./server": "./src/server.ts"
   },
+  "imports": {
+    "@thednp/rpc": "./src/index.ts",
+    "@thednp/rpc/server": "./src/server.ts",
+    "@thednp/rpc/express": "./src/express/index.ts",
+    "@thednp/rpc/fastify": "./src/fastify/index.ts",
+    "@thednp/rpc/fastify/plugin": "./src/fastify/plugin.ts",
+    "@thednp/rpc/hono": "./src/hono/index.ts",
+    "@thednp/rpc/koa": "./src/koa/index.ts",
+    "@thednp/rpc/helpers": "./src/helpers.ts"
+  },
   "publish": {
     "include": [
       "deno.json",
