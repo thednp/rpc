@@ -13,16 +13,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24 # Or 'lts/*'
           registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
 
       - name: PNPM setup
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Deno Setup
         uses: denoland/setup-deno@v2
