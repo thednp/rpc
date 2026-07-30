@@ -177,15 +177,27 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
 //#endregion
 //#region src/index.d.ts
 /**
- * Utility to define `@thednp/rpc` configuration file similar to vite.
- * @param uniConfig a system wide RPC configuration
+ * Type-safe helper to create an RPC configuration object.
+ * Merges the provided partial config with built-in defaults.
+ * @param uniConfig - System-wide RPC configuration overrides
+ * @returns Complete RPC plugin options with defaults applied
  */
 declare const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions;
 /**
- * Utility to load `@thednp/rpc` configuration file system wide.
- * @param configFile an optional parameter to specify a file within your project scope
+ * Loads the RPC configuration by searching for config files in the project root.
+ * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
+ * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
+ * @param configFile - Optional explicit config file path; skips file search when provided
+ * @returns Resolved RPC plugin options
  */
 declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
+/**
+ * Vite plugin that enables automatic RPC generation.
+ * Transforms server function imports into fetch-based client stubs during development and production builds.
+ * In dev mode, attaches the RPC middleware to Vite's Connect server.
+ * @param devOptions - Development-only overrides (merged on top of config file values)
+ * @returns A Vite plugin object
+ */
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin<unknown>;
 //#endregion
 export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };

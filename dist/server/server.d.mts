@@ -71,9 +71,25 @@ declare const serverFunctionsMap: Map<string, ServerFnEntry>;
 type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
   server?: Partial<ResolvedConfig["server"]>;
 };
+/**
+ * Scans `src/api/` for server function files (`server.ts`, `server.js`, `server.mjs`, `server.mts`)
+ * and populates the global `serverFunctionsMap` with their exported functions.
+ * Uses Vite's SSR module loading to resolve and execute each file.
+ * @param initialCfg - Optional Vite config overrides (root, base, server)
+ * @param devServer - Optional running Vite dev server instance; when provided, skips creating a new one
+ */
 declare const scanForServerFiles: (initialCfg?: ScanConfig, devServer?: ViteDevServer) => Promise<void>;
 //#endregion
 //#region src/createFunction.d.ts
+/**
+ * Creates a server-side RPC function.
+ * Registers the function in the server functions map and returns a client-compatible
+ * wrapper that exposes `data` (Promise) and `cancel` (function) for request lifecycle control.
+ * @param name - Unique identifier used by the RPC router to dispatch requests
+ * @param handler - The actual implementation receiving an AbortSignal followed by JSON-serializable arguments
+ * @param fnOptions - Optional contentType and credentials settings
+ * @returns A client stub with `data` promise and `cancel` method, auto-registered in the server map
+ */
 declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: Partial<ServerFunctionOptions>): ClientFunction<TArgs, TResult>;
 //#endregion
 //#region src/getClientModules.d.ts
@@ -81,6 +97,13 @@ interface RpcPluginOptionsInternal {
   rpcPrefix: string;
   adapter?: string | undefined;
 }
+/**
+ * Generates the complete client-side module bundle by iterating all registered server functions
+ * and producing fetch-based stubs for each. The result is transformed by Vite (or Oxc) during
+ * the dev server or production build.
+ * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
+ * @returns A string of JavaScript code with all client RPC modules and their import dependencies
+ */
 declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => string;
 //#endregion
 //#region src/options.d.ts

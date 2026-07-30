@@ -17,6 +17,13 @@ import { readBody } from "./helpers.ts";
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
 
+/**
+ * Creates a Hono middleware with optional path and rpcPrefix filtering.
+ * Middleware names are deduplicated. Prefix and path regexes are compiled once at creation time.
+ * Uses Hono's factory `createMiddleware` to wrap the handler.
+ * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+ * @returns A Hono middleware function
+ */
 export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
@@ -84,6 +91,13 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   return middlewareHandler;
 };
 
+/**
+ * Creates the Hono RPC middleware that routes incoming requests to registered server functions.
+ * Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
+ * to the matching function, and returns the JSON-serialized result.
+ * @param initialOptions - Options including rpcPrefix for URL routing
+ * @returns A Hono middleware function
+ */
 export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},

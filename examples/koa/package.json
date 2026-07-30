@@ -12,13 +12,13 @@
     "start": "NODE_ENV=production node server"
   },
   "dependencies": {
+    "@thednp/rpc": "jsr:^0.0.2",
     "compression": "^1.8.1",
     "koa": "^3.2.1",
     "koa-body": "^8.0.0",
     "koa-connect": "^2.1.1",
     "koa-mount": "^4.2.0",
     "koa-static": "^5.0.0",
-    "@thednp/rpc": "^0.0.1",
     "sirv": "^3.0.2",
     "valibot": "^1.4.2",
     "vite": "^8.1.5"

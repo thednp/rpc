@@ -25,6 +25,13 @@ import {
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
 
+/**
+ * Creates an Express middleware with optional path and rpcPrefix filtering.
+ * Middleware names are deduplicated — reusing a name throws an error.
+ * Prefix and path regexes are compiled once at creation time (hoisted) for performance.
+ * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+ * @returns An Express middleware function
+ */
 export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
@@ -91,7 +98,13 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
   return middlewareHandler;
 };
 
-// Create RPC middleware
+/**
+ * Creates the Express RPC middleware that routes incoming requests to registered server functions.
+ * Reads the request body, dispatches to the matching function via serverFunctionsMap,
+ * and sends the JSON-serialized result. Handles client disconnection via abort signals.
+ * @param initialOptions - Options including rpcPrefix for URL routing
+ * @returns An Express middleware function
+ */
 export const createRPCMiddleware: ExpressMiddlewareFn = (
   initialOptions = {},
 ) => {

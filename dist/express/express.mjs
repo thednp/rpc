@@ -10,14 +10,31 @@ const defaultMiddlewareOptions = {
 };
 //#endregion
 //#region src/express/helpers.ts
+/**
+* Convenience function to load RPC config and attach the RPC middleware to an Express app.
+* Dynamically imports loadRPCConfig and creates the middleware with loaded options.
+* @param app - Express application instance
+*/
 async function attachRPC(app) {
 	const { loadRPCConfig } = await import("@thednp/rpc");
 	const { adapter: _adapter, ...options } = await loadRPCConfig();
 	app.use(createRPCMiddleware(options));
 }
+/**
+* Attaches Vite's dev server middlewares to an Express app for development mode.
+* @param app - Express application instance
+* @param vite - Running Vite dev server
+*/
 function attachVite(app, vite) {
 	app.use(vite.middlewares);
 }
+/**
+* Reads and parses the HTTP request body from an Express or Node IncomingMessage.
+* If a body parser middleware (e.g. express.json()) already consumed the stream,
+* uses the pre-parsed body from `req.body`.
+* @param req - Express or Node.js IncomingMessage
+* @returns A promise resolving to the parsed body with its content type
+*/
 const readBody = (req) => {
 	return new Promise((resolve, reject) => {
 		if (hasPreParsedBody(req) && req.body !== void 0) {
@@ -61,15 +78,37 @@ const readBody = (req) => {
 		toggleListeners(true);
 	});
 };
+/**
+* Type guard that checks whether a request is an Express Request (has `originalUrl`).
+* @param req - A Node IncomingMessage or Express Request
+* @returns True if the request is an Express Request
+*/
 const isExpressRequest = (req) => {
 	return "originalUrl" in req;
 };
+/**
+* Type guard that checks whether a response is an Express Response (has `json` and `send` methods).
+* @param res - A Node ServerResponse or Express Response
+* @returns True if the response is an Express Response
+*/
 const isExpressResponse = (res) => {
 	return "json" in res && "send" in res;
 };
+/**
+* Type guard that checks whether a request has a pre-parsed body (`body` property).
+* Used to detect if a body-parser middleware already consumed the stream.
+* @param req - A Node IncomingMessage or Express Request
+* @returns True if the request has a body property
+*/
 const hasPreParsedBody = (req) => {
 	return "body" in req;
 };
+/**
+* Extracts normalized request details from an Express or Node IncomingMessage.
+* Parses the URL to extract pathname, search string, and search params.
+* @param request - Express or Node.js request object
+* @returns Normalized request details including URL, headers, and method
+*/
 const getRequestDetails = (request) => {
 	const rawUrl = isExpressRequest(request) ? request.originalUrl : request.url;
 	const url = new URL(rawUrl, "http://localhost");
@@ -81,6 +120,12 @@ const getRequestDetails = (request) => {
 		method: request.method
 	};
 };
+/**
+* Wraps an Express or Node ServerResponse with a uniform API for setting headers,
+* status codes, and sending JSON responses. Handles the Express vs raw Node API differences.
+* @param response - Express or Node.js server response object
+* @returns A ResponseDetails object with setHeader, setStatusCode, and sendResponse helpers
+*/
 const getResponseDetails = (response) => {
 	const isResponseSent = response.headersSent || response.writableEnded;
 	const setHeader = (name, value) => {
@@ -107,6 +152,13 @@ const getResponseDetails = (response) => {
 };
 //#endregion
 //#region src/tools.ts
+/**
+* Escapes special regex metacharacters in a string.
+* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
+* preventing ReDoS and regex injection attacks.
+* @param s - The raw string to escape
+* @returns The escaped string safe for use in new RegExp()
+*/
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -115,11 +167,19 @@ function escapeRegExp(s) {
 const FUNCTION_NOT_FOUND = "Function not found";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
+/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/express/createMiddleware.ts
 let middlewareCount = 0;
 const middlewareStack = /* @__PURE__ */ new Set();
+/**
+* Creates an Express middleware with optional path and rpcPrefix filtering.
+* Middleware names are deduplicated — reusing a name throws an error.
+* Prefix and path regexes are compiled once at creation time (hoisted) for performance.
+* @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+* @returns An Express middleware function
+*/
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
@@ -146,6 +206,13 @@ const createMiddleware = (initialOptions = {}) => {
 	Object.defineProperty(middlewareHandler, "name", { value: name });
 	return middlewareHandler;
 };
+/**
+* Creates the Express RPC middleware that routes incoming requests to registered server functions.
+* Reads the request body, dispatches to the matching function via serverFunctionsMap,
+* and sends the JSON-serialized result. Handles client disconnection via abort signals.
+* @param initialOptions - Options including rpcPrefix for URL routing
+* @returns An Express middleware function
+*/
 const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;

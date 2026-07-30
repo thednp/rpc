@@ -13,6 +13,13 @@ type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
 };
 
 let isScanned = false;
+/**
+ * Scans `src/api/` for server function files (`server.ts`, `server.js`, `server.mjs`, `server.mts`)
+ * and populates the global `serverFunctionsMap` with their exported functions.
+ * Uses Vite's SSR module loading to resolve and execute each file.
+ * @param initialCfg - Optional Vite config overrides (root, base, server)
+ * @param devServer - Optional running Vite dev server instance; when provided, skips creating a new one
+ */
 export const scanForServerFiles = async (
   initialCfg?: ScanConfig,
   devServer?: ViteDevServer,

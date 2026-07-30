@@ -3,19 +3,33 @@
 ## Installation
 
 ```bash
-pnpm add @thednp/rpc@latest
+// jsr
+pnpm add jsr:@thednp/rpc
 ```
 
 ```bash
-npm install @thednp/rpc@latest
+// npm
+pnpm add @thednp/rpc
 ```
 
 ```bash
-bun add @thednp/rpc@latest
+// npm
+npm install @thednp/rpc
 ```
 
 ```bash
-deno add npm:@thednp/rpc@latest
+// npm
+bun add @thednp/rpc
+```
+
+```bash
+// npm
+deno add npm:@thednp/rpc
+```
+
+```bash
+// jsr
+deno add @thednp/rpc
 ```
 
 ## Quick Start

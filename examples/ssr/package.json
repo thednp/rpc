@@ -12,13 +12,13 @@
     "start": "NODE_ENV=production node --experimental-strip-types server.ts"
   },
   "dependencies": {
-    "vite": "^8.1.5",
-    "@thednp/rpc": "^0.0.1"
+    "@thednp/rpc": "jsr:^0.0.2",
+    "vite": "^8.1.5"
   },
   "devDependencies": {
-    "valibot": "^1.4.2",
     "@types/node": "^26.1.2",
-    "typescript": "~7.0.2"
+    "typescript": "~7.0.2",
+    "valibot": "^1.4.2"
   },
   "packageManager": "pnpm@11.17.0"
 }

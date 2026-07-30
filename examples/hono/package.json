@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",
+    "@thednp/rpc": "jsr:^0.0.2",
     "hono": "^4.12.32",
-    "@thednp/rpc": "^0.0.1",
     "vite": "^8.1.5"
   },
   "devDependencies": {

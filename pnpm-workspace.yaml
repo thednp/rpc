@@ -3,3 +3,4 @@ packages:
   - "examples/*"
 minimumReleaseAgeExclude:
   - '@thednp/rpc@0.0.1'
+  - '@jsr/thednp__rpc@0.0.2'

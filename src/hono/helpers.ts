@@ -8,6 +8,11 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { BodyResult } from "../types.d.ts";
 
+/**
+ * Convenience function to load RPC config and attach the RPC middleware to a Hono app.
+ * Dynamically imports loadRPCConfig and registers the middleware.
+ * @param app - Hono application instance
+ */
 export async function attachRPC(app: Hono) {
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { adapter: _adapter, ...options } = await loadRPCConfig();
@@ -15,16 +20,24 @@ export async function attachRPC(app: Hono) {
   app.use(createRPCMiddleware(options));
 }
 
+/**
+ * Attaches Vite's dev server middlewares to a Hono app for development mode.
+ * Uses the viteMiddleware wrapper to bridge Vite's Connect-compatible stack into Hono.
+ * @param app - Hono application instance
+ * @param vite - Running Vite dev server
+ */
 export const attachVite = (app: Hono, vite: ViteDevServer): void => {
   app.use(viteMiddleware(vite));
 };
 
 /**
- * Creates a hono compatible middleware for a given vite development server.
+ * Creates a Hono-compatible middleware from a Vite dev server middleware stack.
+ * Bridges the Connect/Express middleware interface to Hono's context-based request/response model.
+ * Supports both Node.js and Bun runtimes with separate polyfill paths.
+ * @param vite - Running Vite dev server
+ * @returns A Hono middleware function
  * @see https://github.com/honojs/hono/issues/3162#issuecomment-2331118049
- * @param vite the vite development server
  */
-// export const viteMiddleware: ((v: ViteDevServer) => Promise<ReturnType<typeof createMiddleware>>) = (vite: ViteDevServer) => {
 export const viteMiddleware = (
   vite: ViteDevServer,
 ): ReturnType<typeof createMiddleware<{ Bindings: HttpBindings }>> => {
@@ -69,6 +82,12 @@ export const viteMiddleware = (
   });
 };
 
+/**
+ * Reads and parses the HTTP request body from a Hono context.
+ * Supports JSON and text content types, with pre-parsed body detection for server-side environments.
+ * @param c - Hono request context
+ * @returns A promise resolving to the parsed body with its content type
+ */
 export const readBody = async (
   c: Context,
 ): Promise<BodyResult> => {

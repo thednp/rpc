@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # For checkout
+      id-token: write # The OIDC ID token is used for authentication with JSR.
 
     steps:
       - name: Checkout code
@@ -37,14 +38,11 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Configure npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-          npm --registry=https://registry.npmjs.org whoami || true
+      - name: Publish to jsr
+        run: deno publish
 
       - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --provenance --access public --no-git-checks
+        # run: pnpm publish --access public --no-git-checks
+        # env:
+        #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -12,6 +12,14 @@ import {
   validatePathSegment,
 } from "./validate.ts";
 
+/**
+ * Generates a JavaScript client module string for a single server function.
+ * All interpolated values are validated to prevent code injection.
+ * @param fnName - Registered RPC function name (validated as path segment)
+ * @param fnEntry - Export name used in the generated module (validated as identifier)
+ * @param options - Content type, credentials, and RPC prefix settings
+ * @returns A string of JavaScript code exporting the client stub
+ */
 const getModule = (
   fnName: string,
   fnEntry: string,
@@ -53,6 +61,13 @@ export const ${safeFnEntry} = (...args) => {
   return output.trim();
 };
 
+/**
+ * Generates the complete client-side module bundle by iterating all registered server functions
+ * and producing fetch-based stubs for each. The result is transformed by Vite (or Oxc) during
+ * the dev server or production build.
+ * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
+ * @returns A string of JavaScript code with all client RPC modules and their import dependencies
+ */
 export const getClientModules = (
   initialOptions: RpcPluginOptionsInternal,
 ): string => {

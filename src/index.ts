@@ -1,3 +1,4 @@
+/** @module Main entrypoint for the RPC Vite plugin. Exports `rpcPlugin` (default), `defineConfig`, and `loadRPCConfig`. */
 import type { ConfigEnv, Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { loadConfigFromFile, mergeConfig } from "vite";
 import { resolve } from "node:path";
@@ -18,6 +19,12 @@ import {
   serverFunctionsMap,
 } from "@thednp/rpc/server";
 
+/**
+ * Loads and transforms a single RPC config file using Vite's config loader.
+ * @param env - Vite config environment
+ * @param file - Config file path (e.g. "rpc.config.ts")
+ * @returns The loaded config augmented with the configFile path, or null on failure
+ */
 const loadConfigFile = async (env: ConfigEnv, file: string) => {
   const result = await loadConfigFromFile(env, file) as {
     path: string;
@@ -30,8 +37,10 @@ const loadConfigFile = async (env: ConfigEnv, file: string) => {
 };
 
 /**
- * Utility to define `@thednp/rpc` configuration file similar to vite.
- * @param uniConfig a system wide RPC configuration
+ * Type-safe helper to create an RPC configuration object.
+ * Merges the provided partial config with built-in defaults.
+ * @param uniConfig - System-wide RPC configuration overrides
+ * @returns Complete RPC plugin options with defaults applied
  */
 const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions = (
   uniConfig: Partial<RpcPluginOptions>,
@@ -42,8 +51,11 @@ const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions = (
 let RPCConfig: RpcPluginOptions;
 
 /**
- * Utility to load `@thednp/rpc` configuration file system wide.
- * @param configFile an optional parameter to specify a file within your project scope
+ * Loads the RPC configuration by searching for config files in the project root.
+ * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
+ * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
+ * @param configFile - Optional explicit config file path; skips file search when provided
+ * @returns Resolved RPC plugin options
  */
 const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
   configFile?: string,
@@ -130,6 +142,13 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
   return RPCConfig;
 };
 
+/**
+ * Vite plugin that enables automatic RPC generation.
+ * Transforms server function imports into fetch-based client stubs during development and production builds.
+ * In dev mode, attaches the RPC middleware to Vite's Connect server.
+ * @param devOptions - Development-only overrides (merged on top of config file values)
+ * @returns A Vite plugin object
+ */
 function rpcPlugin(
   devOptions: Partial<RpcPluginOptions> = {},
 ): Plugin<unknown> {

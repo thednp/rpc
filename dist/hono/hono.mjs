@@ -11,6 +11,13 @@ const defaultMiddlewareOptions = {
 };
 //#endregion
 //#region src/tools.ts
+/**
+* Escapes special regex metacharacters in a string.
+* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
+* preventing ReDoS and regex injection attacks.
+* @param s - The raw string to escape
+* @returns The escaped string safe for use in new RegExp()
+*/
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -19,21 +26,36 @@ function escapeRegExp(s) {
 const FUNCTION_NOT_FOUND = "Function not found";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
+/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/hono/helpers.ts
+/**
+* Convenience function to load RPC config and attach the RPC middleware to a Hono app.
+* Dynamically imports loadRPCConfig and registers the middleware.
+* @param app - Hono application instance
+*/
 async function attachRPC(app) {
 	const { loadRPCConfig } = await import("@thednp/rpc");
 	const { adapter: _adapter, ...options } = await loadRPCConfig();
 	app.use(createRPCMiddleware(options));
 }
+/**
+* Attaches Vite's dev server middlewares to a Hono app for development mode.
+* Uses the viteMiddleware wrapper to bridge Vite's Connect-compatible stack into Hono.
+* @param app - Hono application instance
+* @param vite - Running Vite dev server
+*/
 const attachVite = (app, vite) => {
 	app.use(viteMiddleware(vite));
 };
 /**
-* Creates a hono compatible middleware for a given vite development server.
+* Creates a Hono-compatible middleware from a Vite dev server middleware stack.
+* Bridges the Connect/Express middleware interface to Hono's context-based request/response model.
+* Supports both Node.js and Bun runtimes with separate polyfill paths.
+* @param vite - Running Vite dev server
+* @returns A Hono middleware function
 * @see https://github.com/honojs/hono/issues/3162#issuecomment-2331118049
-* @param vite the vite development server
 */
 const viteMiddleware = (vite) => {
 	return createMiddleware$1((c, next) => {
@@ -63,6 +85,12 @@ const viteMiddleware = (vite) => {
 		});
 	});
 };
+/**
+* Reads and parses the HTTP request body from a Hono context.
+* Supports JSON and text content types, with pre-parsed body detection for server-side environments.
+* @param c - Hono request context
+* @returns A promise resolving to the parsed body with its content type
+*/
 const readBody = async (c) => {
 	const isJSON = (c.req.header("content-type")?.toLowerCase() || "").includes("json");
 	const incoming = c.env.incoming;
@@ -87,6 +115,13 @@ const readBody = async (c) => {
 //#region src/hono/createMiddleware.ts
 let middlewareCount = 0;
 const middlewareStack = /* @__PURE__ */ new Set();
+/**
+* Creates a Hono middleware with optional path and rpcPrefix filtering.
+* Middleware names are deduplicated. Prefix and path regexes are compiled once at creation time.
+* Uses Hono's factory `createMiddleware` to wrap the handler.
+* @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+* @returns A Hono middleware function
+*/
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
@@ -122,6 +157,13 @@ const createMiddleware = (initialOptions = {}) => {
 	Object.defineProperty(middlewareHandler, "name", { value: name });
 	return middlewareHandler;
 };
+/**
+* Creates the Hono RPC middleware that routes incoming requests to registered server functions.
+* Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
+* to the matching function, and returns the JSON-serialized result.
+* @param initialOptions - Options including rpcPrefix for URL routing
+* @returns A Hono middleware function
+*/
 const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;

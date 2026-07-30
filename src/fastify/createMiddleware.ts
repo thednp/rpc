@@ -23,7 +23,12 @@ import { readBody } from "./helpers.ts";
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
 
-// Define the middleware function for Fastify
+/**
+ * Creates a Fastify preHandler hook with optional path and rpcPrefix filtering.
+ * Middleware names are deduplicated. Prefix and path regexes are compiled once at creation time.
+ * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+ * @returns A Fastify preHandler hook function
+ */
 export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
@@ -97,6 +102,13 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
   return middlewareHandler;
 };
 
+/**
+ * Creates the Fastify RPC middleware that routes incoming requests to registered server functions.
+ * Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
+ * to the matching function, and sends the JSON-serialized result.
+ * @param initialOptions - Options including rpcPrefix for URL routing
+ * @returns A Fastify preHandler hook function
+ */
 export const createRPCMiddleware: FastifyMiddlewareFn = (
   initialOptions = {},
 ) => {

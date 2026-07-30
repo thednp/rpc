@@ -91,6 +91,7 @@ code {
   button {
     background-color: #f9f9f9;
   }
+  output,
   input {
     background-color: #fff;
     border-color: #eee;

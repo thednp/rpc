@@ -1,5 +1,12 @@
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/tools.ts
+/**
+* Escapes special regex metacharacters in a string.
+* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
+* preventing ReDoS and regex injection attacks.
+* @param s - The raw string to escape
+* @returns The escaped string safe for use in new RegExp()
+*/
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -8,6 +15,7 @@ function escapeRegExp(s) {
 const FUNCTION_NOT_FOUND = "Function not found";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
+/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/options.ts
@@ -21,11 +29,23 @@ const defaultMiddlewareOptions = {
 };
 //#endregion
 //#region src/koa/helpers.ts
+/**
+* Convenience function to load RPC config and attach the RPC middleware to a Koa app.
+* Dynamically imports loadRPCConfig and registers the middleware.
+* @param app - Koa application instance
+*/
 async function attachRPC(app) {
 	const { loadRPCConfig } = await import("@thednp/rpc");
 	const { adapter: _adapter, ...options } = await loadRPCConfig();
 	app.use(createRPCMiddleware(options));
 }
+/**
+* Attaches Vite's dev server middlewares to a Koa app for development mode.
+* Bridges Koa's context-based middleware to Vite's Connect-compatible middleware stack
+* by forwarding Koa body, wrapping res.end, and delegating back to Koa on 404 or unhandled routes.
+* @param app - Koa application instance
+* @param vite - Running Vite dev server
+*/
 function attachVite(app, vite) {
 	app.use(async (ctx, next) => {
 		const req = ctx.req;
@@ -45,6 +65,13 @@ function attachVite(app, vite) {
 		if (!viteHandled || res.statusCode === 404) await next();
 	});
 }
+/**
+* Reads and parses the HTTP request body from a Koa context.
+* If koa-body or another body parser already consumed the stream,
+* uses the pre-parsed body from `ctx.request.body`.
+* @param ctx - Koa context
+* @returns A promise resolving to the parsed body with its content type
+*/
 const readBody = (ctx) => {
 	const contentType = ctx.request.headers["content-type"]?.toLowerCase() || "";
 	return new Promise((resolve, reject) => {
@@ -94,6 +121,13 @@ const readBody = (ctx) => {
 //#region src/koa/createMiddleware.ts
 let middlewareCount = 0;
 const middlewareStack = /* @__PURE__ */ new Set();
+/**
+* Creates a Koa middleware with optional path and rpcPrefix filtering.
+* Middleware names are deduplicated. Prefix and path regexes are compiled once at creation time.
+* Koa URL is normalized via `new URL()` to strip query strings before matching.
+* @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+* @returns A Koa middleware function
+*/
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
@@ -120,6 +154,13 @@ const createMiddleware = (initialOptions = {}) => {
 	Object.defineProperty(middlewareHandler, "name", { value: name });
 	return middlewareHandler;
 };
+/**
+* Creates the Koa RPC middleware that routes incoming requests to registered server functions.
+* Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
+* to the matching function, and sets the JSON-serialized result on ctx.body.
+* @param initialOptions - Options including rpcPrefix for URL routing
+* @returns A Koa middleware function
+*/
 const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;

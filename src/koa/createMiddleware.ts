@@ -17,6 +17,13 @@ import { readBody } from "./helpers.ts";
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
 
+/**
+ * Creates a Koa middleware with optional path and rpcPrefix filtering.
+ * Middleware names are deduplicated. Prefix and path regexes are compiled once at creation time.
+ * Koa URL is normalized via `new URL()` to strip query strings before matching.
+ * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+ * @returns A Koa middleware function
+ */
 export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
@@ -78,6 +85,13 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   return middlewareHandler;
 };
 
+/**
+ * Creates the Koa RPC middleware that routes incoming requests to registered server functions.
+ * Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
+ * to the matching function, and sets the JSON-serialized result on ctx.body.
+ * @param initialOptions - Options including rpcPrefix for URL routing
+ * @returns A Koa middleware function
+ */
 export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},

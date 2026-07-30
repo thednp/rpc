@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.3] - 2026-07-30
+
+### Docs
+
+- Add comprehensive JSDoc to all exported functions across the codebase (~50 symbols) with `@param` and `@returns` tags
+- Add `@module` JSDoc to all 8 entrypoints for JSR documentation generation
+
+### Chores
+
+- Add `description`, `author`, and `keywords` to `deno.json` for JSR metadata
+- Add `imports` map to `deno.json` for JSR self-referencing resolution
+- Add `sync-exports` script and task to sync `deno.json` exports from `package.json`
+
 ## [0.0.2] - 2026-07-30
 
 ### Breaking

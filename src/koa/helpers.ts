@@ -6,6 +6,11 @@ import type { BodyResult } from "@thednp/rpc";
 import type { Koa } from "./index.ts";
 import type { KoaContext } from "./types.d.ts";
 
+/**
+ * Convenience function to load RPC config and attach the RPC middleware to a Koa app.
+ * Dynamically imports loadRPCConfig and registers the middleware.
+ * @param app - Koa application instance
+ */
 export async function attachRPC(app: Koa) {
   const { loadRPCConfig } = await import("@thednp/rpc");
 
@@ -14,6 +19,13 @@ export async function attachRPC(app: Koa) {
   app.use(createRPCMiddleware(options));
 }
 
+/**
+ * Attaches Vite's dev server middlewares to a Koa app for development mode.
+ * Bridges Koa's context-based middleware to Vite's Connect-compatible middleware stack
+ * by forwarding Koa body, wrapping res.end, and delegating back to Koa on 404 or unhandled routes.
+ * @param app - Koa application instance
+ * @param vite - Running Vite dev server
+ */
 export function attachVite(app: Koa, vite: ViteDevServer): void {
   app.use(async (ctx: KoaContext, next) => {
     const req = ctx.req;
@@ -46,6 +58,13 @@ export function attachVite(app: Koa, vite: ViteDevServer): void {
   });
 }
 
+/**
+ * Reads and parses the HTTP request body from a Koa context.
+ * If koa-body or another body parser already consumed the stream,
+ * uses the pre-parsed body from `ctx.request.body`.
+ * @param ctx - Koa context
+ * @returns A promise resolving to the parsed body with its content type
+ */
 export const readBody = (
   ctx: KoaContext,
 ): Promise<BodyResult> => {

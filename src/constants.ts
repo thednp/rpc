@@ -14,15 +14,19 @@ export const INTERNAL_SERVER_ERROR = "Internal Server Error";
 
 export const CLIENT_DISCONNECTED = "client disconnected";
 
+/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 export const MIDDLEWARE_NAME_USED = (name: string) =>
   `The middleware name "${name}" is already used.`;
 
+/** Error message when a value fails the safe-identifier validation. @param label - What kind of value was being validated. @param name - The rejected value */
 export const INVALID_IDENTIFIER = (label: string, name: string) =>
   `Invalid ${label}: "${name}" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/`;
 
+/** Error message when a value fails the safe-path-segment validation. @param label - What kind of value was being validated. @param segment - The rejected value */
 export const INVALID_PATH_SEGMENT = (label: string, segment: string) =>
   `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/`;
 
+/** Warning message when a specified RPC config file cannot be resolved on disk. @param configFile - The requested config filename. @param configFilePath - The resolved absolute path */
 export const CONFIG_FILE_NOT_FOUND = (
   configFile: string,
   configFilePath: string,

@@ -11,17 +11,33 @@ import type { Express } from "express";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { RequestDetails, ResponseDetails } from "./types.d.ts";
 
+/**
+ * Convenience function to load RPC config and attach the RPC middleware to an Express app.
+ * Dynamically imports loadRPCConfig and creates the middleware with loaded options.
+ * @param app - Express application instance
+ */
 export async function attachRPC(app: Express) {
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { adapter: _adapter, ...options } = await loadRPCConfig();
   app.use(createRPCMiddleware(options));
 }
 
+/**
+ * Attaches Vite's dev server middlewares to an Express app for development mode.
+ * @param app - Express application instance
+ * @param vite - Running Vite dev server
+ */
 export function attachVite(app: Express, vite: ViteDevServer) {
   app.use(vite.middlewares);
 }
 
-// src/express/helpers.ts
+/**
+ * Reads and parses the HTTP request body from an Express or Node IncomingMessage.
+ * If a body parser middleware (e.g. express.json()) already consumed the stream,
+ * uses the pre-parsed body from `req.body`.
+ * @param req - Express or Node.js IncomingMessage
+ * @returns A promise resolving to the parsed body with its content type
+ */
 export const readBody = (
   req: ExpressRequest | IncomingMessage,
 ): Promise<BodyResult> => {
@@ -78,24 +94,46 @@ export const readBody = (
   });
 };
 
+/**
+ * Type guard that checks whether a request is an Express Request (has `originalUrl`).
+ * @param req - A Node IncomingMessage or Express Request
+ * @returns True if the request is an Express Request
+ */
 export const isExpressRequest = (
   req: IncomingMessage | ExpressRequest,
 ): req is ExpressRequest => {
   return "originalUrl" in req;
 };
 
+/**
+ * Type guard that checks whether a response is an Express Response (has `json` and `send` methods).
+ * @param res - A Node ServerResponse or Express Response
+ * @returns True if the response is an Express Response
+ */
 export const isExpressResponse = (
   res: ServerResponse | ExpressResponse,
 ): res is ExpressResponse => {
   return "json" in res && "send" in res;
 };
 
+/**
+ * Type guard that checks whether a request has a pre-parsed body (`body` property).
+ * Used to detect if a body-parser middleware already consumed the stream.
+ * @param req - A Node IncomingMessage or Express Request
+ * @returns True if the request has a body property
+ */
 export const hasPreParsedBody = (
   req: IncomingMessage | ExpressRequest,
 ): req is ExpressRequest => {
   return "body" in req;
 };
 
+/**
+ * Extracts normalized request details from an Express or Node IncomingMessage.
+ * Parses the URL to extract pathname, search string, and search params.
+ * @param request - Express or Node.js request object
+ * @returns Normalized request details including URL, headers, and method
+ */
 export const getRequestDetails = (
   request: ExpressRequest | IncomingMessage,
 ): RequestDetails => {
@@ -113,6 +151,12 @@ export const getRequestDetails = (
   };
 };
 
+/**
+ * Wraps an Express or Node ServerResponse with a uniform API for setting headers,
+ * status codes, and sending JSON responses. Handles the Express vs raw Node API differences.
+ * @param response - Express or Node.js server response object
+ * @returns A ResponseDetails object with setHeader, setStatusCode, and sendResponse helpers
+ */
 export const getResponseDetails = (
   response: ExpressResponse | ServerResponse,
 ): ResponseDetails => {

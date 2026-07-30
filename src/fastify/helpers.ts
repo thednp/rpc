@@ -6,12 +6,23 @@ import type { Buffer } from "node:buffer";
 import fastifyRpcPlugin from "./plugin.ts";
 import type { BodyResult, JsonValue } from "../types.d.ts";
 
+/**
+ * Convenience function to load RPC config and register the RPC plugin to a Fastify instance.
+ * Dynamically imports loadRPCConfig and registers the fastify-rpc plugin.
+ * @param app - Fastify instance
+ */
 export async function attachRPC(app: FastifyInstance) {
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { adapter: _adapter, ...options } = await loadRPCConfig();
   await app.register(fastifyRpcPlugin, options);
 }
 
+/**
+ * Attaches Vite's dev server middlewares to a Fastify instance for development mode.
+ * Uses an `onRequest` hook to delegate to Vite's connect-compatible middleware stack.
+ * @param app - Fastify instance
+ * @param vite - Running Vite dev server
+ */
 export function attachVite(app: FastifyInstance, vite: ViteDevServer) {
   app.addHook("onRequest", async (request, reply) => {
     const next = () =>
@@ -22,6 +33,12 @@ export function attachVite(app: FastifyInstance, vite: ViteDevServer) {
   });
 }
 
+/**
+ * Reads and parses the HTTP request body from a Fastify request.
+ * If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
+ * @param req - Fastify request object
+ * @returns A promise resolving to the parsed body with its content type
+ */
 export const readBody = (
   req: FastifyRequest,
 ): Promise<BodyResult> => {

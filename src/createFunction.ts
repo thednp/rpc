@@ -10,6 +10,15 @@ import { serverFunctionsMap } from "./functionsMap.ts";
 import { defaultServerFnOptions } from "./options.ts";
 import { OPERATION_ABORTED } from "./constants.ts";
 
+/**
+ * Creates a server-side RPC function.
+ * Registers the function in the server functions map and returns a client-compatible
+ * wrapper that exposes `data` (Promise) and `cancel` (function) for request lifecycle control.
+ * @param name - Unique identifier used by the RPC router to dispatch requests
+ * @param handler - The actual implementation receiving an AbortSignal followed by JSON-serializable arguments
+ * @param fnOptions - Optional contentType and credentials settings
+ * @returns A client stub with `data` promise and `cancel` method, auto-registered in the server map
+ */
 export function createServerFunction<
   TArgs extends JsonArray = JsonArray,
   TResult extends JsonValue = JsonValue,

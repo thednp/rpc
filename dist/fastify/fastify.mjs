@@ -11,6 +11,13 @@ const defaultMiddlewareOptions = {
 };
 //#endregion
 //#region src/tools.ts
+/**
+* Escapes special regex metacharacters in a string.
+* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
+* preventing ReDoS and regex injection attacks.
+* @param s - The raw string to escape
+* @returns The escaped string safe for use in new RegExp()
+*/
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -19,9 +26,16 @@ function escapeRegExp(s) {
 const FUNCTION_NOT_FOUND = "Function not found";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
+/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/fastify/plugin.ts
+/**
+* Fastify plugin factory that registers the RPC middleware as a preHandler hook.
+* @param fastify - Fastify instance
+* @param initialOptions - Middleware options including rpcPrefix
+* @param done - Callback to signal plugin registration completion
+*/
 const RpcPlugin = (fastify, initialOptions, done) => {
 	const rpcMiddleware = createRPCMiddleware(initialOptions);
 	fastify.addHook("preHandler", async (request, reply) => {
@@ -35,11 +49,22 @@ const RpcPlugin = (fastify, initialOptions, done) => {
 const rpcPlugin = fp(RpcPlugin, { name: "uni-rpc-fastify-plugin" });
 //#endregion
 //#region src/fastify/helpers.ts
+/**
+* Convenience function to load RPC config and register the RPC plugin to a Fastify instance.
+* Dynamically imports loadRPCConfig and registers the fastify-rpc plugin.
+* @param app - Fastify instance
+*/
 async function attachRPC(app) {
 	const { loadRPCConfig } = await import("@thednp/rpc");
 	const { adapter: _adapter, ...options } = await loadRPCConfig();
 	await app.register(rpcPlugin, options);
 }
+/**
+* Attaches Vite's dev server middlewares to a Fastify instance for development mode.
+* Uses an `onRequest` hook to delegate to Vite's connect-compatible middleware stack.
+* @param app - Fastify instance
+* @param vite - Running Vite dev server
+*/
 function attachVite(app, vite) {
 	app.addHook("onRequest", async (request, reply) => {
 		const next = () => new Promise((resolve) => {
@@ -48,6 +73,12 @@ function attachVite(app, vite) {
 		await next();
 	});
 }
+/**
+* Reads and parses the HTTP request body from a Fastify request.
+* If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
+* @param req - Fastify request object
+* @returns A promise resolving to the parsed body with its content type
+*/
 const readBody = (req) => {
 	return new Promise((resolve, reject) => {
 		const contentType = req.headers["content-type"]?.toLowerCase() || "";
@@ -97,6 +128,12 @@ const readBody = (req) => {
 //#region src/fastify/createMiddleware.ts
 let middlewareCount = 0;
 const middlewareStack = /* @__PURE__ */ new Set();
+/**
+* Creates a Fastify preHandler hook with optional path and rpcPrefix filtering.
+* Middleware names are deduplicated. Prefix and path regexes are compiled once at creation time.
+* @param initialOptions - Options for rpcPrefix, path matching, and the handler function
+* @returns A Fastify preHandler hook function
+*/
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
@@ -132,6 +169,13 @@ const createMiddleware = (initialOptions = {}) => {
 	Object.defineProperty(middlewareHandler, "name", { value: name });
 	return middlewareHandler;
 };
+/**
+* Creates the Fastify RPC middleware that routes incoming requests to registered server functions.
+* Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
+* to the matching function, and sends the JSON-serialized result.
+* @param initialOptions - Options including rpcPrefix for URL routing
+* @returns A Fastify preHandler hook function
+*/
 const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;

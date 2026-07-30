@@ -3,6 +3,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/thednp/rpc/badge.svg)](https://coveralls.io/github/thednp/rpc)
 [![ci](https://github.com/thednp/rpc/actions/workflows/ci.yml/badge.svg)](https://github.com/thednp/rpc/actions/workflows/ci.yml)
 [![NPM Version](https://img.shields.io/npm/v/@thednp/rpc.svg)](https://www.npmjs.com/package/@thednp/rpc)
+[![JSR Version](https://img.shields.io/jsr/v/@thednp/rpc.svg)](https://jsr.io/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
 
 An Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
@@ -114,7 +115,13 @@ SSR examples demonstrate isomorphic usage: server functions are imported directl
 ### 1. Installation
 
 ```bash
-pnpm add @thednp/rpc@latest
+// jsr
+pnpm add jsr:@thednp/rpc
+```
+
+```bash
+// npm
+pnpm add @thednp/rpc
 ```
 
 ### 2. Configuration
