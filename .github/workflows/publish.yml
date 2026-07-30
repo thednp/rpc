@@ -41,8 +41,18 @@ jobs:
       # - name: Publish to jsr
       #   run: deno publish
 
+      - name: Diagnose npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          node -e "console.log(process.env.NODE_AUTH_TOKEN ? 'NODE_AUTH_TOKEN=SET' : 'NODE_AUTH_TOKEN=NOT_SET')"
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          echo "Registry: $(npm config get registry)"
+          npm --registry=https://registry.npmjs.org whoami
+          npm config list
+
       - name: Publish to npm
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: npm publish --provenance --access public --no-git-checks
         # run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
