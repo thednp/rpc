@@ -11,6 +11,7 @@
 
 - Add `description`, `author`, and `keywords` to `deno.json` for JSR metadata
 - Add `imports` map to `deno.json` for JSR self-referencing resolution
+- Bump version to `0.0.3`
 
 ## [0.0.2] - 2026-07-30
 
