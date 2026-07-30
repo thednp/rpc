@@ -11,7 +11,6 @@
 
 - Add `description`, `author`, and `keywords` to `deno.json` for JSR metadata
 - Add `imports` map to `deno.json` for JSR self-referencing resolution
-- Add `sync-exports` script and task to sync `deno.json` exports from `package.json`
 
 ## [0.0.2] - 2026-07-30
 
