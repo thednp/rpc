@@ -14,10 +14,10 @@
   "dependencies": {
     "compression": "^1.8.1",
     "express": "^5.2.1",
-    "@thednp/rpc": "jsr:^0.0.2",
+    "@thednp/rpc": "^0.0.1",
     "sirv": "^3.0.2",
     "valibot": "^1.4.2",
-    "vite": "^8.1.5"
+    "vite": "^8.2.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

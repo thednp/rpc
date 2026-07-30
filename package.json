@@ -5,7 +5,13 @@
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "homepage": "https://github.com/thednp/rpc#readme",
-  "keywords": ["rpc", "express", "fastify", "hono", "koa"],
+  "keywords": [
+    "rpc",
+    "express",
+    "fastify",
+    "hono",
+    "koa"
+  ],
   "bugs": {
     "url": "https://github.com/thednp/rpc/issues"
   },
@@ -63,11 +69,11 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "fastify": "^5.10.0",
+    "fastify": "^5.11.0",
     "fastify-plugin": "^6.0.0",
     "hono": "^4.12.32",
     "koa": "^3.2.1",
-    "vite": "^8.1.5"
+    "vite": "^8.2.0"
   },
   "devDependencies": {
     "@hono/node-server": "^2.0.12",
@@ -76,10 +82,10 @@
     "@types/node": "^26.1.2",
     "@vitest/coverage-istanbul": "^4.1.10",
     "@vitest/ui": "^4.1.10",
-    "typescript": "^7.0.2",
     "tsdown": "^0.22.14",
+    "typescript": "^7.0.2",
     "vite-plugin-strip-comments": "^0.0.10",
     "vitest": "^4.1.10"
   },
-  "packageManager": "pnpm@11.17.0"
+  "packageManager": "pnpm@11.18.0"
 }

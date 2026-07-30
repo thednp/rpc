@@ -340,7 +340,8 @@ function rpcPlugin(devOptions = {}) {
 		name: "vite-plugin-universal-rpc",
 		enforce: "pre",
 		async configResolved(resolvedConfig) {
-			options = mergeConfig(await loadRPCConfig(), devOptions);
+			const uniConfig = await loadRPCConfig();
+			options = mergeConfig(uniConfig, devOptions);
 			config = resolvedConfig;
 		},
 		async configureServer(server) {

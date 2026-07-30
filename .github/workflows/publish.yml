@@ -8,7 +8,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read # For checkout
+      contents: write # For checkout
       id-token: write # The OIDC ID token is used for authentication with JSR.
 
     steps:
@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24" # Or 'lts/*'
+          node-version: 24 # Or 'lts/*'
           registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
 
       - name: PNPM setup
@@ -38,8 +38,8 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Publish to jsr
-        run: deno publish
+      # - name: Publish to jsr
+      #   run: deno publish
 
       - name: Publish to npm
         run: pnpm publish --provenance --access public --no-git-checks

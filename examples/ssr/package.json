@@ -12,8 +12,8 @@
     "start": "NODE_ENV=production node --experimental-strip-types server.ts"
   },
   "dependencies": {
-    "@thednp/rpc": "jsr:^0.0.2",
-    "vite": "^8.1.5"
+    "@thednp/rpc": "^0.0.1",
+    "vite": "^8.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

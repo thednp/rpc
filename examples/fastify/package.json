@@ -15,9 +15,9 @@
     "@fastify/compress": "^9.1.0",
     "@fastify/static": "^10.1.2",
     "@fastify/vite": "^9.2.0",
-    "fastify": "^5.10.0",
-    "@thednp/rpc": "jsr:^0.0.2",
-    "vite": "^8.1.5"
+    "@thednp/rpc": "^0.0.1",
+    "fastify": "^5.11.0",
+    "vite": "^8.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
