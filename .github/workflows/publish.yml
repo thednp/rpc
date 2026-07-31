@@ -9,7 +9,7 @@ jobs:
     permissions:
       contents: read # For checkout
       id-token: write # The OIDC ID token is used for authentication with JSR.
-    environment: publish
+    environment: Publish
     steps:
       - name: Checkout
         uses: actions/checkout@v7
