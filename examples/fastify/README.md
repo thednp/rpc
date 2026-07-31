@@ -16,7 +16,6 @@ Server-Side Rendering (SSR) application using Fastify with `@thednp/rpc` for aut
 - `fastify` — HTTP server framework
 - `@fastify/compress` — Compression plugin
 - `@fastify/static` — Static file serving
-- `@fastify/vite` — Vite integration for Fastify
 - `valibot` — Runtime validation
 - `vite` — Dev server and build tool
 
