@@ -3,21 +3,18 @@ name: Publish to npm
 on:
   release:
     types: [published] # Triggers on GitHub Release creation (with tag)
-
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read # For checkout
       id-token: write # The OIDC ID token is used for authentication with JSR.
-    environment: Release
-
+    environment: publish
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-
       - name: PNPM setup
         uses: pnpm/action-setup@v6
 
@@ -27,7 +24,8 @@ jobs:
           node-version: 24 # Or 'lts/*'
           registry-url: https://registry.npmjs.org/ # Optional if using trusted publishing
           package-manager-cache: false
-
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Deno Setup
         uses: denoland/setup-deno@v2
         with:
@@ -49,11 +47,9 @@ jobs:
       #   run: deno publish
 
       - name: Publish to npm
+        # run: pnpm publish --provenance --no-git-checks --access public
+        run: pnpm publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_LOGLEVEL: verbose
-        # run: pnpm publish --provenance --no-git-checks --access public
-        run: |
-          set -euo pipefail
-          pnpm publish --no-git-checks --access public
