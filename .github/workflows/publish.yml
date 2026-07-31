@@ -21,6 +21,18 @@ jobs:
           node-version: 24 # Or 'lts/*'
           registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
 
+      - name: Setup npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+            npm config set registry https://registry.npmjs.org/
+            npm --registry=https://registry.npmjs.org whoami || true
+          else
+            echo "NODE_AUTH_TOKEN not set; skipping auth"
+          fi
+
       - name: PNPM setup
         uses: pnpm/action-setup@v6
 
@@ -42,9 +54,16 @@ jobs:
       #   run: deno publish
 
       - name: Publish to npm
-        # run: pnpm publish --provenance --no-git-checks --access public
-        run: pnpm publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_LOGLEVEL: verbose
+        # run: pnpm publish --provenance --no-git-checks --access public
+        run: |
+          set -euo pipefail
+          pnpm config set git-checks false
+          pnpm publish --no-git-checks --access public
+
+      - name: Cleanup npm auth
+        if: always()
+        run: rm -f ~/.npmrc || true
