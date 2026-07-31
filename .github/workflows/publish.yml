@@ -53,9 +53,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_LOGLEVEL: verbose
-          REF_NAME: ${{ github.ref_name }}
         # run: pnpm publish --provenance --no-git-checks --access public
         run: |
           set -euo pipefail
-          pnpm config set git-checks false
-          pnpm ci-publish --no-git-checks --access public "$REF_NAME"
+          pnpm publish --no-git-checks --access public

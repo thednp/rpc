@@ -63,7 +63,6 @@
     "check:ts": "tsc -noEmit",
     "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
     "up:root": "pnpm up --latest",
-    "ci-publish": "deno -A scripts/publish.ts",
     "upd": "pnpm up:examples && pnpm up:root",
     "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm build",
     "build": "tsdown"
@@ -81,7 +80,6 @@
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
     "@types/node": "^26.1.2",
-    "@vitejs/release-scripts": "^1.8.0",
     "@vitest/coverage-istanbul": "^4.1.10",
     "@vitest/ui": "^4.1.10",
     "tsdown": "^0.22.14",
