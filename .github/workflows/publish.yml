@@ -58,4 +58,4 @@ jobs:
         run: |
           set -euo pipefail
           pnpm config set git-checks false
-          pnpm publish --no-git-checks --access public "$REF_NAME"
+          pnpm ci-publish --no-git-checks --access public "$REF_NAME"
