@@ -44,7 +44,6 @@ jobs:
 
       - name: Test
         run: pnpm test
-        secrets: in
 
       # - name: Publish to jsr
       #   run: deno publish
