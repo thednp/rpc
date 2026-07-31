@@ -8,62 +8,55 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # For checkout
+      contents: read # For checkout
       id-token: write # The OIDC ID token is used for authentication with JSR.
+    environment: Release
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
         with:
-          node-version: 24 # Or 'lts/*'
-          registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
-
-      - name: Setup npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-            npm config set registry https://registry.npmjs.org/
-            npm --registry=https://registry.npmjs.org whoami || true
-          else
-            echo "NODE_AUTH_TOKEN not set; skipping auth"
-          fi
+          persist-credentials: false
 
       - name: PNPM setup
         uses: pnpm/action-setup@v6
+
+      - name: Node.js Setup
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24 # Or 'lts/*'
+          registry-url: https://registry.npmjs.org/ # Optional if using trusted publishing
+          package-manager-cache: false
 
       - name: Deno Setup
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
 
+      - name: Disallow installation scripts
+        run: yq '.allowBuilds[]=false' -i pnpm-workspace.yaml
+
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm i --no-frozen-lockfile
 
       # - name: Build (if needed)
       #   run: pnpm build # Later
 
       - name: Test
         run: pnpm test
+        secrets: in
 
       # - name: Publish to jsr
       #   run: deno publish
 
       - name: Publish to npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_LOGLEVEL: verbose
+          REF_NAME: ${{ github.ref_name }}
         # run: pnpm publish --provenance --no-git-checks --access public
         run: |
           set -euo pipefail
           pnpm config set git-checks false
-          pnpm publish --no-git-checks --access public
-
-      - name: Cleanup npm auth
-        if: always()
-        run: rm -f ~/.npmrc || true
+          npm i -g npm@^11.5.2 && pnpm publish --no-git-checks --access public "$REF_NAME"

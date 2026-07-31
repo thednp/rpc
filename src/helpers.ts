@@ -24,8 +24,14 @@ export const handleResponse = async (
   return result.data;
 };
 
+/**
+ * Return shape of `innerModule`: a promise of the response data plus
+ * a `cancel` function to abort the underlying fetch request.
+ */
 type InnerModReturn = {
+  /** Promise resolving to the server response data */
   data: Promise<JsonValue | void>;
+  /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };
 

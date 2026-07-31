@@ -7,10 +7,21 @@ import "express";
 import "fastify";
 import "koa";
 //#region src/hono/types.d.ts
+/**
+ * Hono-specific middleware options, constrained to the `"hono"` adapter.
+ */
 type HonoMiddlewareOptions = MiddlewareOptions<"hono">;
+/**
+ * Hono middleware handler signature used by the RPC middleware.
+ */
 interface HonoMiddlewareHooks {
+  /** Hono middleware handler */
   handler: MiddlewareHandler;
 }
+/**
+ * Hono middleware factory: takes optional initial options and returns
+ * the Hono-compatible handler.
+ */
 type HonoMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "hono">(initialOptions?: Partial<MiddlewareOptions<A>>) => HonoMiddlewareHooks["handler"];
 //#endregion
 //#region src/hono/createMiddleware.d.ts
@@ -32,6 +43,9 @@ declare const createMiddleware: HonoMiddlewareFn;
 declare const createRPCMiddleware: HonoMiddlewareFn;
 //#endregion
 //#region src/types.d.ts
+/**
+ * Parsed request body result discriminated by content type.
+ */
 type BodyResult = {
   contentType: "application/json";
   data: JsonValue;
@@ -40,11 +54,23 @@ type BodyResult = {
   data: string;
 };
 // primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
 type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
 type JsonObject = {
   [key: string]: JsonValue | JsonArray;
 };
+/**
+ * A JSON array of JSON values.
+ */
 type JsonArray = JsonValue[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
 type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 //#endregion
 //#region src/hono/helpers.d.ts

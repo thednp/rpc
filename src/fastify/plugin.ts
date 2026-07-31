@@ -7,6 +7,9 @@ import { createRPCMiddleware } from "./createMiddleware.ts";
 
 export type { MiddlewareOptions };
 
+/**
+ * Fastify RPC plugin signature: registers the middleware as a preHandler hook.
+ */
 type FastifyRPCPlugin = (
   fastify: FastifyInstance,
   initialOptions: Partial<MiddlewareOptions<"fastify">>,
@@ -37,8 +40,14 @@ const RpcPlugin: FastifyRPCPlugin = (
   done();
 };
 
+/**
+ * `fastify-plugin` function type, used to type the wrapped export.
+ */
 type FastifyPlugin = typeof fp;
 
+/**
+ * Return type of `fastify-plugin` wrapping, matching the final plugin export.
+ */
 type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
 
 // Export the plugin wrapped with fastify-plugin

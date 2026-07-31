@@ -8,7 +8,11 @@ import process from "node:process";
 import { serverFunctionsMap } from "./functionsMap.ts";
 import { ERROR_LOADING_FILE, NO_SERVER_FUNCTION_FOUND } from "./constants.ts";
 
+/**
+ * Partial Vite config used when scanning server files outside a running dev server.
+ */
 type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
+  /** Vite server options override (e.g. `middlewareMode`) */
   server?: Partial<ResolvedConfig["server"]>;
 };
 

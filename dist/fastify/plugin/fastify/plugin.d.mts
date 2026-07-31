@@ -9,30 +9,68 @@ import "hono/factory";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import { Context, Next } from "koa";
 //#region src/express/types.d.ts
+/**
+ * Express/Connect middleware handler signature used by the RPC middleware.
+ */
 interface ExpressMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param req - Node or Express request object
+   * @param res - Node or Express response object
+   * @param next - Connect or Express next function
+   */
   handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
 //#endregion
 //#region src/hono/types.d.ts
+/**
+ * Hono middleware handler signature used by the RPC middleware.
+ */
 interface HonoMiddlewareHooks {
+  /** Hono middleware handler */
   handler: MiddlewareHandler;
 }
 //#endregion
 //#region src/fastify/types.d.ts
+/**
+ * Fastify middleware handler signature used by the RPC middleware.
+ */
 interface FastifyMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param req - Fastify request object
+   * @param res - Fastify reply object
+   * @param done - Fastify hook completion callback
+   */
   handler: (req: FastifyRequest, res: FastifyReply, done: HookHandlerDoneFunction) => Promise<void>;
 }
 //#endregion
 //#region src/koa/types.d.ts
+/**
+ * Koa middleware handler signature used by the RPC middleware.
+ */
 interface KoaMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param ctx - Koa context object
+   * @param next - Koa next function
+   */
   handler: (ctx: Context, next: Next) => Promise<void>;
 }
 //#endregion
 //#region src/types.d.ts
+/**
+ * Maps each supported framework adapter to its middleware hooks (handler signatures).
+ * Used to keep the middleware options type-safe per adapter.
+ */
 interface FrameworkHooks {
+  /** Express/Connect middleware handler signature */
   express: ExpressMiddlewareHooks;
+  /** Hono middleware handler signature */
   hono: HonoMiddlewareHooks;
+  /** Fastify middleware handler signature */
   fastify: FastifyMiddlewareHooks;
+  /** Koa middleware handler signature */
   koa: KoaMiddlewareHooks;
 }
 /**
@@ -109,7 +147,13 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
 }
 //#endregion
 //#region src/fastify/plugin.d.ts
+/**
+ * `fastify-plugin` function type, used to type the wrapped export.
+ */
 type FastifyPlugin = typeof fp;
+/**
+ * Return type of `fastify-plugin` wrapping, matching the final plugin export.
+ */
 type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
 declare const rpcPlugin: RegisteredFastifyRPCPlugin;
 //#endregion

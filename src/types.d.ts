@@ -13,45 +13,95 @@ import type {
 
 import type { KoaMiddlewareFn, KoaMiddlewareHooks } from "./koa/index.ts";
 
+/**
+ * Maps each supported framework adapter to its middleware hooks (handler signatures).
+ * Used to keep the middleware options type-safe per adapter.
+ */
 export interface FrameworkHooks {
+  /** Express/Connect middleware handler signature */
   express: ExpressMiddlewareHooks;
+  /** Hono middleware handler signature */
   hono: HonoMiddlewareHooks;
+  /** Fastify middleware handler signature */
   fastify: FastifyMiddlewareHooks;
+  /** Koa middleware handler signature */
   koa: KoaMiddlewareHooks;
 }
 
+/**
+ * Maps each supported framework adapter to its middleware factory function type.
+ */
 export interface FrameworkMiddlewareFn {
+  /** Express/Connect middleware factory */
   express: ExpressMiddlewareFn;
+  /** Hono middleware factory */
   hono: HonoMiddlewareFn;
+  /** Fastify middleware factory */
   fastify: FastifyMiddlewareFn;
+  /** Koa middleware factory */
   koa: KoaMiddlewareFn;
 }
 
+/**
+ * Content types the RPC middleware accepts when reading request bodies.
+ * Only `application/json` and `text/plain` are currently supported.
+ */
 export type SupportableContentType =
   | "multipart/form-data"
   | "application/json"
   | "text/plain"
   | "application/octet-stream";
 
+/**
+ * Content types the RPC client modules send with each request.
+ */
 export type ContentType = "application/json" | "text/plain";
 
+/**
+ * Fetch `credentials` policy used by the generated client modules.
+ */
 export type Credentials = "same-origin" | "include" | "omit";
 
+/**
+ * Parsed request body result discriminated by content type.
+ */
 export type BodyResult =
   | { contentType: "application/json"; data: JsonValue }
   | { contentType: "text/plain"; data: string };
 
+/**
+ * Options for a single server function, controlling how the generated
+ * client module serializes the request body and sends credentials.
+ */
 export interface ServerFunctionOptions {
-  /* @default "application/json" */
+  /**
+   * Content type used for the request body.
+   * @default "application/json"
+   */
   contentType: ContentType;
-  /* @default "same-origin" */
+  /**
+   * Fetch credentials policy.
+   * @default "same-origin"
+   */
   credentials?: Credentials;
 }
 
 // primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
 export type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
 export type JsonObject = { [key: string]: JsonValue | JsonArray };
+/**
+ * A JSON array of JSON values.
+ */
 export type JsonArray = JsonValue[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
 export type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 
 // Keep these as a refference
@@ -72,35 +122,67 @@ export type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 //   | URLSearchParams; // for query parameters
 
 // export type ServerFnArgs = [JsonObject | JsonPrimitive, ...JsonArray];
+/**
+ * Arguments passed to a server function, spread as a JSON array.
+ */
 export type ServerFnArgs = [...JsonArray];
 
+/**
+ * Server-side handler signature: receives the `AbortSignal` first,
+ * followed by any serializable arguments.
+ */
 export type ServerFunction<
   TArgs extends JsonArray = JsonArray,
   TResult extends JsonValue = JsonValue,
 > = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 
+/**
+ * Server function initialization signature, identical to `ServerFunction`.
+ * Used when registering a function with `createServerFunction`.
+ */
 export type ServerFunctionInit<
   TArgs extends JsonArray = JsonArray,
   TResult extends JsonValue = JsonValue,
 > = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 
+/**
+ * Client-side stub signature generated for each server function.
+ * Returns a promise-backed `data` handle plus a `cancel` function
+ * that aborts the underlying fetch request.
+ */
 export type ClientFunction<
   TArgs extends JsonArray = JsonArray,
   TResult extends JsonValue = JsonValue,
 > = (...args: TArgs) => {
+  /** Promise resolving to the server response data */
   data: Promise<TResult>;
+  /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };
 
+/**
+ * A client function augmented with its registered export name and
+ * per-function options (content type, credentials).
+ */
 export type ClientFunctionWithOptions = ClientFunction & {
+  /** Registered export name of the server function */
   name: string;
+  /** Per-function content type and credentials options */
   options?: ServerFunctionOptions;
 };
 
+/**
+ * Entry in the server functions map: registered name, client handler,
+ * optional per-function options, and the original export name.
+ */
 export interface ServerFnEntry {
+  /** Registered RPC function name (used in the URL path) */
   name: string;
+  /** Client-side handler stub for this function */
   handler: ClientFunctionWithOptions;
+  /** Per-function content type and credentials options */
   options?: ServerFunctionOptions;
+  /** Original export name from the server module */
   exportName?: string;
 }
 

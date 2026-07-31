@@ -7,13 +7,32 @@ import "@hono/node-server";
 import "hono/factory";
 import "koa";
 //#region src/fastify/types.d.ts
+/**
+ * Fastify-specific middleware options, constrained to the `"fastify"` adapter.
+ */
 type FastifyMiddlewareOptions = MiddlewareOptions<"fastify">;
+/**
+ * Fastify middleware factory: takes optional initial options and returns
+ * the Fastify-compatible handler.
+ */
 type FastifyMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "fastify">(initialOptions?: Partial<FastifyMiddlewareOptions>) => FastifyMiddlewareHooks["handler"];
+/**
+ * Fastify middleware handler signature used by the RPC middleware.
+ */
 interface FastifyMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param req - Fastify request object
+   * @param res - Fastify reply object
+   * @param done - Fastify hook completion callback
+   */
   handler: (req: FastifyRequest, res: FastifyReply, done: HookHandlerDoneFunction) => Promise<void>;
 }
-// Define the plugin function
+/**
+ * Options accepted by the Fastify RPC plugin (`fp()`-wrapped registration).
+ */
 type RpcFastifyPluginOptions = MiddlewareOptions<"fastify"> & {
+  /** Whether this is an RPC plugin registration */
   isRPC: boolean;
 };
 //#endregion
@@ -35,6 +54,9 @@ declare const createMiddleware: FastifyMiddlewareFn;
 declare const createRPCMiddleware: FastifyMiddlewareFn;
 //#endregion
 //#region src/types.d.ts
+/**
+ * Parsed request body result discriminated by content type.
+ */
 type BodyResult = {
   contentType: "application/json";
   data: JsonValue;
@@ -43,11 +65,23 @@ type BodyResult = {
   data: string;
 };
 // primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
 type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
 type JsonObject = {
   [key: string]: JsonValue | JsonArray;
 };
+/**
+ * A JSON array of JSON values.
+ */
 type JsonArray = JsonValue[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
 type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 //#endregion
 //#region src/fastify/helpers.d.ts

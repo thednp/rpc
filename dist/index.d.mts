@@ -8,48 +8,131 @@ import "hono/factory";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import { Context, Next } from "koa";
 //#region src/express/types.d.ts
+/**
+ * Express-specific middleware options, constrained to the `"express"` adapter.
+ */
 type ExpressMiddlewareOptions = MiddlewareOptions$1<"express">;
+/**
+ * Express middleware factory: takes optional initial options and returns
+ * the Express/Connect-compatible handler.
+ */
 type ExpressMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "express">(initialOptions?: Partial<ExpressMiddlewareOptions>) => ExpressMiddlewareHooks["handler"];
+/**
+ * Express/Connect middleware handler signature used by the RPC middleware.
+ */
 interface ExpressMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param req - Node or Express request object
+   * @param res - Node or Express response object
+   * @param next - Connect or Express next function
+   */
   handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
 //#endregion
 //#region src/hono/types.d.ts
+/**
+ * Hono middleware handler signature used by the RPC middleware.
+ */
 interface HonoMiddlewareHooks {
+  /** Hono middleware handler */
   handler: MiddlewareHandler;
 }
+/**
+ * Hono middleware factory: takes optional initial options and returns
+ * the Hono-compatible handler.
+ */
 type HonoMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "hono">(initialOptions?: Partial<MiddlewareOptions$1<A>>) => HonoMiddlewareHooks["handler"];
 //#endregion
 //#region src/fastify/types.d.ts
+/**
+ * Fastify-specific middleware options, constrained to the `"fastify"` adapter.
+ */
 type FastifyMiddlewareOptions = MiddlewareOptions$1<"fastify">;
+/**
+ * Fastify middleware factory: takes optional initial options and returns
+ * the Fastify-compatible handler.
+ */
 type FastifyMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "fastify">(initialOptions?: Partial<FastifyMiddlewareOptions>) => FastifyMiddlewareHooks["handler"];
+/**
+ * Fastify middleware handler signature used by the RPC middleware.
+ */
 interface FastifyMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param req - Fastify request object
+   * @param res - Fastify reply object
+   * @param done - Fastify hook completion callback
+   */
   handler: (req: FastifyRequest, res: FastifyReply, done: HookHandlerDoneFunction) => Promise<void>;
 }
 //#endregion
 //#region src/koa/types.d.ts
+/**
+ * Koa-specific middleware options, constrained to the `"koa"` adapter.
+ */
 type KoaMiddlewareOptions = MiddlewareOptions$1<"koa">;
+/**
+ * Koa middleware handler signature used by the RPC middleware.
+ */
 interface KoaMiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param ctx - Koa context object
+   * @param next - Koa next function
+   */
   handler: (ctx: Context, next: Next) => Promise<void>;
 }
+/**
+ * Koa middleware factory: takes optional initial options and returns
+ * the Koa-compatible handler.
+ */
 type KoaMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "koa">(initialOptions?: Partial<KoaMiddlewareOptions>) => KoaMiddlewareHooks["handler"];
 //#endregion
 //#region src/types.d.ts
+/**
+ * Maps each supported framework adapter to its middleware hooks (handler signatures).
+ * Used to keep the middleware options type-safe per adapter.
+ */
 interface FrameworkHooks {
+  /** Express/Connect middleware handler signature */
   express: ExpressMiddlewareHooks;
+  /** Hono middleware handler signature */
   hono: HonoMiddlewareHooks;
+  /** Fastify middleware handler signature */
   fastify: FastifyMiddlewareHooks;
+  /** Koa middleware handler signature */
   koa: KoaMiddlewareHooks;
 }
+/**
+ * Maps each supported framework adapter to its middleware factory function type.
+ */
 interface FrameworkMiddlewareFn {
+  /** Express/Connect middleware factory */
   express: ExpressMiddlewareFn;
+  /** Hono middleware factory */
   hono: HonoMiddlewareFn;
+  /** Fastify middleware factory */
   fastify: FastifyMiddlewareFn;
+  /** Koa middleware factory */
   koa: KoaMiddlewareFn;
 }
+/**
+ * Content types the RPC middleware accepts when reading request bodies.
+ * Only `application/json` and `text/plain` are currently supported.
+ */
 type SupportableContentType = "multipart/form-data" | "application/json" | "text/plain" | "application/octet-stream";
+/**
+ * Content types the RPC client modules send with each request.
+ */
 type ContentType = "application/json" | "text/plain";
+/**
+ * Fetch `credentials` policy used by the generated client modules.
+ */
 type Credentials = "same-origin" | "include" | "omit";
+/**
+ * Parsed request body result discriminated by content type.
+ */
 type BodyResult = {
   contentType: "application/json";
   data: JsonValue;
@@ -57,18 +140,40 @@ type BodyResult = {
   contentType: "text/plain";
   data: string;
 };
+/**
+ * Options for a single server function, controlling how the generated
+ * client module serializes the request body and sends credentials.
+ */
 interface ServerFunctionOptions {
-  /* @default "application/json" */
+  /**
+   * Content type used for the request body.
+   * @default "application/json"
+   */
   contentType: ContentType;
-  /* @default "same-origin" */
+  /**
+   * Fetch credentials policy.
+   * @default "same-origin"
+   */
   credentials?: Credentials;
 }
 // primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
 type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
 type JsonObject = {
   [key: string]: JsonValue | JsonArray;
 };
+/**
+ * A JSON array of JSON values.
+ */
 type JsonArray = JsonValue[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
 type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 // Keep these as a refference
 // Date strings are common in APIs
@@ -85,21 +190,53 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 //   | Blob // for binary data
 //   | URLSearchParams; // for query parameters
 // export type ServerFnArgs = [JsonObject | JsonPrimitive, ...JsonArray];
+/**
+ * Arguments passed to a server function, spread as a JSON array.
+ */
 type ServerFnArgs = [...JsonArray];
+/**
+ * Server-side handler signature: receives the `AbortSignal` first,
+ * followed by any serializable arguments.
+ */
 type ServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+/**
+ * Server function initialization signature, identical to `ServerFunction`.
+ * Used when registering a function with `createServerFunction`.
+ */
 type ServerFunctionInit<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+/**
+ * Client-side stub signature generated for each server function.
+ * Returns a promise-backed `data` handle plus a `cancel` function
+ * that aborts the underlying fetch request.
+ */
 type ClientFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (...args: TArgs) => {
+  /** Promise resolving to the server response data */
   data: Promise<TResult>;
+  /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };
+/**
+ * A client function augmented with its registered export name and
+ * per-function options (content type, credentials).
+ */
 type ClientFunctionWithOptions = ClientFunction & {
+  /** Registered export name of the server function */
   name: string;
+  /** Per-function content type and credentials options */
   options?: ServerFunctionOptions;
 };
+/**
+ * Entry in the server functions map: registered name, client handler,
+ * optional per-function options, and the original export name.
+ */
 interface ServerFnEntry {
+  /** Registered RPC function name (used in the URL path) */
   name: string;
+  /** Client-side handler stub for this function */
   handler: ClientFunctionWithOptions;
+  /** Per-function content type and credentials options */
   options?: ServerFunctionOptions;
+  /** Original export name from the server module */
   exportName?: string;
 }
 /**

@@ -7,13 +7,28 @@ import "hono/factory";
 import "fastify";
 import "koa";
 //#region src/types.d.ts
+/**
+ * Fetch `credentials` policy used by the generated client modules.
+ */
 type Credentials = "same-origin" | "include" | "omit";
 // primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
 type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
 type JsonObject = {
   [key: string]: JsonValue | JsonArray;
 };
+/**
+ * A JSON array of JSON values.
+ */
 type JsonArray = JsonValue[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
 type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 //#endregion
 //#region src/helpers.d.ts
@@ -26,8 +41,14 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * @returns The response data, or void on cancellation
  */
 declare const handleResponse: (response: Response) => Promise<JsonValue | void>;
+/**
+ * Return shape of `innerModule`: a promise of the response data plus
+ * a `cancel` function to abort the underlying fetch request.
+ */
 type InnerModReturn = {
+  /** Promise resolving to the server response data */
   data: Promise<JsonValue | void>;
+  /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };
 /**

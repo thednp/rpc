@@ -1,6 +1,10 @@
-// Internal type that accepts all adapters
+/**
+ * Internal plugin options accepted by `getClientModules`.
+ */
 interface RpcPluginOptionsInternal {
+  /** RPC endpoint prefix (e.g. "__rpc") */
   rpcPrefix: string;
+  /** Framework adapter name */
   adapter?: string | undefined;
 }
 

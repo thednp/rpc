@@ -93,6 +93,7 @@ export const readBody = async (
 ): Promise<BodyResult> => {
   const contentType = c.req.header("content-type")?.toLowerCase() || "";
   const isJSON = contentType.includes("json");
+  /** Node incoming message with an optional pre-parsed body */
   type IncomingWithBody = IncomingMessage & { body?: unknown };
   const incoming = (c.env as HttpBindings).incoming as
     | IncomingWithBody

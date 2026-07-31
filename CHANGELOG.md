@@ -6,6 +6,7 @@
 
 - Add comprehensive JSDoc to all exported functions across the codebase (~50 symbols) with `@param` and `@returns` tags
 - Add `@module` JSDoc to all 8 entrypoints for JSR documentation generation
+- Add JSDoc to all exported types, interfaces, and their properties (framework hooks, middleware options, JSON types, adapter types) for JSR documentation scoring
 
 ### Chores
 
