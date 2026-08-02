@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.5] - 2026-08-02
+
+### TypeScript
+
+- Export the `InnerModReturn` helper type from `src/types.d.ts` instead of declaring it locally in `src/helpers.ts`, so consumers can reference the `{ data, cancel }` return shape of `innerModule`
+
+### Docs
+
+- Update all 6 examples (`spa`, `express`, `fastify`, `hono`, `koa`, `ssr`) to `@thednp/rpc ^0.0.4`
+
+### Chores
+
+- Bump version to `0.0.5`
+- `scripts/dev-test.js`: the default `@thednp/rpc` version used when restoring example deps is now read from the root `package.json` (as `^<version>`) instead of removing the dependency when no original value was saved
+- Rebuild `dist/` to pick up the exported `InnerModReturn` type
+
 ## [0.0.4] - 2026-08-02
 
 ### Breaking
