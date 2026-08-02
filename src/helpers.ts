@@ -37,12 +37,15 @@ type InnerModReturn = {
 
 /**
  * Creates an AbortController-bound fetch call for a single RPC function.
- * Used by the auto-generated client modules to issue POST requests with cancellation support.
- * @param body - Serialized request body
+ * Used by the auto-generated client modules to issue HTTP requests with cancellation support.
+ * GET requests carry arguments as an `?args=` JSON query parameter, since a fetch
+ * request body is not allowed on GET.
+ * @param body - Serialized request body (JSON string or raw text)
  * @param headers - HTTP headers (Content-Type, etc.)
  * @param credentials - Fetch credentials policy ("same-origin", "include", or "omit")
  * @param prefix - RPC endpoint prefix (e.g. "__rpc")
  * @param name - Registered server function name
+ * @param method - HTTP method to use, "POST" by default
  * @returns An object with `data` (promise resolving to the server response) and `cancel` (abort function)
  */
 export const innerModule = (
@@ -51,17 +54,22 @@ export const innerModule = (
   credentials: Credentials,
   prefix: string,
   name: string,
+  method?: "GET" | "POST",
 ): InnerModReturn => {
   const controller = new AbortController();
   const cancel = (reason: string) => controller.abort(reason);
 
   const fetcher = async () => {
     try {
-      const response = await fetch(`/${prefix}/${name}`, {
-        method: "POST",
+      const isGet = method === "GET";
+      const url = isGet
+        ? `/${prefix}/${name}?args=${encodeURIComponent(String(body))}`
+        : `/${prefix}/${name}`;
+      const response = await fetch(url, {
+        method: isGet ? "GET" : "POST",
         headers,
         credentials,
-        body,
+        body: isGet ? undefined : body,
         signal: controller.signal,
       });
       return await handleResponse(response);

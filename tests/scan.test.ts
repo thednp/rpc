@@ -143,4 +143,32 @@ describe("scanForServerFiles", () => {
       process.chdir(originalCwd);
     }
   });
+
+  it("should only load exact server file names (not server.tsx or my-server.ts)", async () => {
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockResolvedValue({
+      testFn: { name: "test-fn" },
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    serverFunctionsMap.clear();
+    // scanForServerFiles resolves the api dir from process.cwd()
+    process.chdir("tests/fixtures/scan-api");
+    try {
+      await scanForServerFiles(
+        { root: "tests/fixtures/scan-api", base: "/" },
+        mockDevServer,
+      );
+      // Only server.ts should be loaded; server.tsx, my-server.ts,
+      // and not-server.mjs must be ignored (no partial name matching)
+      expect(ssrLoadModule).toHaveBeenCalledTimes(1);
+      expect(serverFunctionsMap.get("test-fn")?.exportName).toBe("testFn");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
 });

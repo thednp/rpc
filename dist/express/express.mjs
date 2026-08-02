@@ -6,7 +6,8 @@ const defaultRPCOptions = {
 };
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
-	path: void 0
+	path: void 0,
+	origin: void 0
 };
 //#endregion
 //#region src/express/helpers.ts
@@ -165,6 +166,8 @@ function escapeRegExp(s) {
 //#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
+const METHOD_NOT_ALLOWED = "Method Not Allowed";
+const REQUEST_FORBIDDEN = "Forbidden";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
@@ -221,18 +224,35 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	return createMiddleware({
 		...options,
 		handler: async (req, res, _next) => {
-			const { url } = getRequestDetails(req);
+			const { url: path, searchParams } = getRequestDetails(req);
 			const { sendResponse } = getResponseDetails(res);
-			if (prefixRegex && !prefixRegex.test(url)) return;
-			const functionName = url.replace(prefixReplace, "");
+			if (prefixRegex && !prefixRegex.test(path)) return;
+			const origin = options.origin;
+			const requestOrigin = req.headers.origin;
+			if (origin && requestOrigin && requestOrigin !== origin) {
+				sendResponse(403, { error: REQUEST_FORBIDDEN });
+				return;
+			}
+			const functionName = path.replace(prefixReplace, "");
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) {
 				sendResponse(404, { error: FUNCTION_NOT_FOUND });
 				return;
 			}
 			try {
-				const body = await readBody(req);
-				const args = Array.isArray(body.data) ? body.data : [body.data];
+				const method = serverFunction.options?.method || "POST";
+				if (req.method?.toUpperCase() !== method) {
+					sendResponse(405, { error: METHOD_NOT_ALLOWED });
+					return;
+				}
+				let args = [];
+				if (method === "GET") {
+					const raw = searchParams.get("args");
+					if (raw) args = JSON.parse(raw);
+				} else {
+					const body = await readBody(req);
+					args = Array.isArray(body.data) ? body.data : [body.data];
+				}
 				const { data, cancel } = serverFunction.handler(...args);
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.on("close", onClose);

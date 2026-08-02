@@ -127,6 +127,14 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    */
   rpcPrefix?: string | false;
   /**
+   * Allowed request origin (e.g. "https://example.com").
+   * When set, any request carrying an `Origin` header that does not match
+   * is rejected with a 403 Forbidden response. Requests without an `Origin`
+   * header (curl, native clients) pass through unchecked.
+   * When unset (default), no origin validation is performed.
+   */
+  origin?: string;
+  /**
    * Async handler for request processing.
    * Core middleware function that processes incoming requests.
    *

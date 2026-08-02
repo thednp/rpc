@@ -16,11 +16,11 @@ project/
 └── server.js                # Your Express/Hono/Fastify/Koa server
 ```
 
-> Various frameworks like `@tanstack-start`, `@sveltejs/kit` prefer a more specfic structure, so be sure to check their documentation; most frameworks have their own data transport layer.
+> Various frameworks like `@tanstack-start`, `@sveltejs/kit` prefer a more specific structure, so be sure to check their documentation; most frameworks have their own data transport layer.
 
 ## Server Files
 
-The plugin looks in `src/api/` for files matching these names:
+The plugin looks in `src/api/` for files with these **exact** names (matching is case-sensitive and non-partial, so `server.tsx`, `my-server.ts`, or `server.txt` are ignored):
 
 - `server.ts`
 - `server.js`

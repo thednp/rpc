@@ -393,7 +393,7 @@ describe("Koa createRPCMiddleware", () => {
       vi.fn().mockResolvedValue("hello koa"),
     );
     const mw = createRPCMiddleware();
-    const ctx = makeKoaCtx({ url: "/__rpc/koa-hello" });
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-hello", method: "POST" });
     simulateKoaBody(ctx, JSON.stringify(["arg1"]));
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -412,6 +412,7 @@ describe("Koa createRPCMiddleware", () => {
     const mw = createRPCMiddleware({ rpcPrefix: "__A_server" });
     const ctx = makeKoaCtx({
       url: "/__A_server/testFn",
+      method: "POST",
       headers: { "content-type": "application/json" },
     });
     const next = makeKoaNext();
@@ -428,7 +429,7 @@ describe("Koa createRPCMiddleware", () => {
     const fn = vi.fn().mockResolvedValue("ok");
     createServerFunction("echoFn", fn);
     const mw = createRPCMiddleware();
-    const ctx = makeKoaCtx({ url: "/__rpc/echoFn" });
+    const ctx = makeKoaCtx({ url: "/__rpc/echoFn", method: "POST" });
     simulateKoaBody(ctx, JSON.stringify(["a", "b"]));
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -457,7 +458,7 @@ describe("Koa createRPCMiddleware", () => {
     });
     createServerFunction("cancelFn", fn);
     const mw = createRPCMiddleware();
-    const ctx = makeKoaCtx({ url: "/__rpc/cancelFn" });
+    const ctx = makeKoaCtx({ url: "/__rpc/cancelFn", method: "POST" });
     simulateKoaBody(ctx, JSON.stringify(["x"]));
     const next = makeKoaNext();
     const mwPromise = mw(ctx, next);
@@ -473,7 +474,7 @@ describe("Koa createRPCMiddleware", () => {
       vi.fn().mockRejectedValue(new Error("koa oops")),
     );
     const mw = createRPCMiddleware();
-    const ctx = makeKoaCtx({ url: "/__rpc/errFn" });
+    const ctx = makeKoaCtx({ url: "/__rpc/errFn", method: "POST" });
     simulateKoaBody(ctx, JSON.stringify(["x"]));
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -488,5 +489,76 @@ describe("Koa createRPCMiddleware", () => {
     const next = makeKoaNext();
     await mw(ctx, next);
     expect(next).toHaveBeenCalledOnce();
+  });
+
+  it("should return 405 when method does not match POST default", async () => {
+    createServerFunction("koa-get-only", vi.fn());
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-get-only", method: "GET" });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(405);
+    expect(ctx.body).toEqual({ error: "Method Not Allowed" });
+  });
+
+  it("should dispatch GET functions with ?args= query params", async () => {
+    const fn = vi.fn().mockResolvedValue("koa-public");
+    createServerFunction("koa-public", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: `/__rpc/koa-public?args=${
+        encodeURIComponent(
+          JSON.stringify(["news"]),
+        )
+      }`,
+      method: "GET",
+    });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
+    expect(ctx.status).toBe(200);
+    expect(ctx.body).toEqual({ data: "koa-public" });
+  });
+
+  it("should dispatch GET functions without args query param", async () => {
+    const fn = vi.fn().mockResolvedValue("no-args");
+    createServerFunction("koa-bare-get", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-bare-get", method: "GET" });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(ctx.status).toBe(200);
+    expect(ctx.body).toEqual({ data: "no-args" });
+  });
+
+  it("should return 403 when Origin does not match the configured origin", async () => {
+    createServerFunction("koa-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com" },
+    });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(403);
+    expect(ctx.body).toEqual({ error: "Forbidden" });
+  });
+
+  it("should pass requests without an Origin header when origin is set", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
   });
 });

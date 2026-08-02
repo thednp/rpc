@@ -4,7 +4,7 @@
 
 ```bash
 // pnpm + jsr registry
-pnpx jsr add @thednp/rpc
+pnpm add jsr:@thednp/rpc
 ```
 
 ```bash
@@ -42,7 +42,7 @@ For a quick understanding of a project setup check the [dedicated wiki section](
 import { defineConfig } from "@thednp/rpc";
 
 export default defineConfig({
-  rpcPrefix: "__server",
+  rpcPrefix: "__rpc",
   adapter: "express",
 });
 ```

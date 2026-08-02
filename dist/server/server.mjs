@@ -49,7 +49,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 	const apiDir = join(config.root, "src", "api");
 	let files;
 	try {
-		files = (await readdir(apiDir, { withFileTypes: true })).filter((f) => svFiles.some((fn) => f.name.includes(fn))).map((f) => join(apiDir, f.name));
+		files = (await readdir(apiDir, { withFileTypes: true })).filter((f) => svFiles.includes(f.name)).map((f) => join(apiDir, f.name));
 	} catch (_e) {
 		files = [];
 	}
@@ -82,7 +82,8 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 //#region src/options.ts
 const defaultServerFnOptions = {
 	contentType: "application/json",
-	credentials: "same-origin"
+	credentials: "same-origin",
+	method: "POST"
 };
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -90,7 +91,8 @@ const defaultRPCOptions = {
 };
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
-	path: void 0
+	path: void 0,
+	origin: void 0
 };
 //#endregion
 //#region src/createFunction.ts
@@ -181,6 +183,18 @@ function validateCredentials(value) {
 	if (!CREDENTIALS_VALUES.includes(creds)) throw new Error(`Invalid credentials: "${value}" must be one of ${CREDENTIALS_VALUES.join(", ")}`);
 	return creds;
 }
+/**
+* Validates and normalizes the HTTP method option for a server function.
+* Accepts "GET" or "POST" (case-insensitive); defaults to "POST" when undefined.
+* @param value - Method value to validate
+* @returns The validated uppercase method string
+* @throws Error if the value is not "GET" or "POST"
+*/
+function validateMethod(value) {
+	const method = (value || "POST").toUpperCase();
+	if (method !== "GET" && method !== "POST") throw new Error(`Invalid method: "${value}" must be one of GET, POST`);
+	return method;
+}
 //#endregion
 //#region src/getClientModules.ts
 /**
@@ -196,6 +210,7 @@ const getModule = (fnName, fnEntry, options) => {
 	const safeFnEntry = validateIdentifier(fnEntry, "export name");
 	const safePrefix = validatePathSegment(options.rpcPrefix, "rpcPrefix");
 	const credentials = validateCredentials(options.credentials);
+	const method = validateMethod(options.method);
 	let body = "";
 	let headers = "{}";
 	switch (options.contentType) {
@@ -207,6 +222,10 @@ const getModule = (fnName, fnEntry, options) => {
 			body = `JSON.stringify(args)`;
 			headers = `{ 'Content-Type': 'application/json' }`;
 	}
+	if (method === "GET") {
+		body = `JSON.stringify(args)`;
+		headers = `{}`;
+	}
 	return `
 export const ${safeFnEntry} = (...args) => {
   const body = ${body};
@@ -214,7 +233,8 @@ export const ${safeFnEntry} = (...args) => {
   const prefix = "${safePrefix}";
   const name = "${safeFnName}";
   const credentials = "${credentials}";
-  return innerModule(body, headers, credentials, prefix, name);
+  const method = "${method}";
+  return innerModule(body, headers, credentials, prefix, name, method);
 }`.trim();
 };
 /**

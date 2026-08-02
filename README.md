@@ -16,11 +16,11 @@ The server functions run **isomorphically** within any Vite powered runtime.
 
 ## Why this exists
 
-Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, some are vendol locked, some even allow you to blend in with your client code (via `"use server"` directive), for sure they are powerful and work well, they provide excelent DX, but complexity always comes with its own drawbacks.
+Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, some are vendor locked, some even allow you to blend in with your client code (via `"use server"` directive), for sure they are powerful and work well, they provide excellent DX, but complexity always comes with its own drawbacks.
 
 ### Simplicity is best
 
-`@thednp/rpc` takes simplicity very serious:
+`@thednp/rpc` takes simplicity very seriously:
 <details>
 <summary><b>Server functions should just be functions</b></summary>
 
@@ -115,18 +115,30 @@ SSR examples demonstrate isomorphic usage: server functions are imported directl
 ### 1. Installation
 
 ```bash
-// node and jsr
-pnpx jsr add @thednp/rpc
+// npm/pnpm and jsr
+pnpm add jsr:@thednp/rpc
+// OR
+npx jsr add @thednp/rpc
 ```
 
 ```bash
-// deno
+// deno and jsr
 deno add jsr:@thednp/rpc
 ```
 
 ```bash
-// npm
+// pnpm/npm/bun from the npm registry
 pnpm add @thednp/rpc
+```
+
+```bash
+// npm
+npm i @thednp/rpc
+```
+
+```bash
+// bun
+bun add @thednp/rpc
 ```
 
 ### 2. Configuration
@@ -202,10 +214,10 @@ Import and use the middleware from your chosen adapter package.
 ```ts
 // Express
 import express from "express";
-import { createRpcMiddleware } from "@thednp/rpc/express";
+import { createRPCMiddleware } from "@thednp/rpc/express";
 
 const app = express();
-app.use(createRpcMiddleware());
+app.use(createRPCMiddleware());
 
 app.listen(3000);
 ```
@@ -256,7 +268,7 @@ pnpm test-ui      # Run tests with interactive UI
 pnpm build        # Bundle with tsdown
 ```
 
-All changes should pass `pnpm lint && && pnpm format && pnpm test` before submitting. See [AGENTS.md](./AGENTS.md) for the full command reference and project conventions.
+All changes should pass `pnpm lint && pnpm format && pnpm test` before submitting. See [AGENTS.md](./AGENTS.md) for the full command reference and project conventions.
 
 ## Security
 
@@ -284,6 +296,12 @@ When a server function throws, the client receives a clean, generic error messag
 <summary><b>Body size limits</b></summary>
 
 The `readBody` utility of each adapter doesn't cap raw request bodies by default. You need to use the middleware provided by your server framework of choice.
+</details>
+
+<details>
+<summary><b>Method restriction (GET/POST only)</b></summary>
+
+Server functions only support `GET` and `POST` (default `POST`). RPC dispatch is not REST — `PUT`/`PATCH`/`DELETE` carry resource semantics that don't apply to function calls, and `OPTIONS` must stay reserved for CORS preflight. Every accepted method is another dispatch path to validate; keeping the surface minimal (and defaulting to `POST`) reduces CSRF and parsing attack surface. See [Server Functions Guide](./wiki/server-functions.md) for details.
 </details>
 
 ---

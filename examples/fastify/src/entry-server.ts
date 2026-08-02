@@ -13,7 +13,7 @@ export async function render(_url: string) {
       <p class="read-the-docs">
         SSR Example using <code>@thednp/rpc</code> with <code>fastify</code>
       </p>
-      <form>
+      <form id="addForm">
         <h2>Form</h2>
         <div style="display: flex; align-items: center; gap: 0.5rem">
           <label for="a">A</label>
@@ -36,6 +36,22 @@ export async function render(_url: string) {
 
           <button type="submit">Add</button>
           <button id="cancelBtn" type="button">Cancel</button>
+        </div>
+      </form>
+
+      <form id="timeForm">
+        <h2>GET</h2>
+        <div style="display: flex; align-items: center; gap: 0.5rem">
+          <label for="locale">Locale</label>
+          <div class="form-input">
+            <input id="locale" name="locale" type="text" placeholder="en-US" value="en-US" />
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px">
+          <label for="time-output">></label>
+          <output id="time-output">Time: —</output>
+          <button type="submit">Get time</button>
+          <a id="time-link" href="#">Open in new tab</a>
         </div>
       </form>
     </div>

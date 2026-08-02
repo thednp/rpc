@@ -8,6 +8,7 @@ on:
       - src/*
       - tests/*
       - package.json
+      - pnpm-workspace.yaml
       - .github/workflows/ci.yml
 
 jobs:
@@ -17,12 +18,12 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
       - name: PNPM setup
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v6
 
       - name: Deno Setup
         uses: denoland/setup-deno@v2
@@ -30,7 +31,7 @@ jobs:
           deno-version: v2.x
 
       - name: Node Setup
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -52,6 +53,9 @@ jobs:
 
       - name: Run Unit Tests
         run: pnpm test
+
+      - name: Audit dependencies
+        run: pnpm audit
 
       - name: Upload coverage report to coveralls.io...
         uses: coverallsapp/github-action@master

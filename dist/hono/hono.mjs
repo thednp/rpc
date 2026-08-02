@@ -7,7 +7,8 @@ const defaultRPCOptions = {
 };
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
-	path: void 0
+	path: void 0,
+	origin: void 0
 };
 //#endregion
 //#region src/tools.ts
@@ -24,6 +25,8 @@ function escapeRegExp(s) {
 //#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
+const METHOD_NOT_ALLOWED = "Method Not Allowed";
+const REQUEST_FORBIDDEN = "Forbidden";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
@@ -174,17 +177,28 @@ const createRPCMiddleware = (initialOptions = {}) => {
 		handler: async (c, _next) => {
 			const { path: reqPath } = c.req;
 			if (prefixRegex && !prefixRegex.test(reqPath)) return;
+			const origin = options.origin;
+			const requestOrigin = c.req.header("origin");
+			if (origin && requestOrigin && requestOrigin !== origin) return c.json({ error: REQUEST_FORBIDDEN }, 403);
 			const functionName = reqPath.replace(prefixReplace, "");
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) return c.json({ error: FUNCTION_NOT_FOUND }, 404);
 			try {
-				const body = await readBody(c);
-				const args = Array.isArray(body.data) ? body.data : [body.data];
+				const method = serverFunction.options?.method || "POST";
+				if (c.req.method.toUpperCase() !== method) return c.json({ error: METHOD_NOT_ALLOWED }, 405);
+				let args = [];
+				if (method === "GET") {
+					const raw = c.req.query("args");
+					if (raw) args = JSON.parse(raw);
+				} else {
+					const body = await readBody(c);
+					args = Array.isArray(body.data) ? body.data : [body.data];
+				}
 				const fnResult = serverFunction.handler(...args);
 				const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);
-				c.env.incoming.on("close", onAbort);
+				c.env.incoming?.on("close", onAbort);
 				const result = await fnResult.data;
-				c.env.incoming.off("close", onAbort);
+				c.env.incoming?.off("close", onAbort);
 				return c.json({ data: result }, 200);
 			} catch (err) {
 				console.error(String(err));

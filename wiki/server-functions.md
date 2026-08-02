@@ -23,6 +23,7 @@ function createServerFunction<T>(
   options?: {
     contentType?: 'application/json' | 'text/plain',
     credentials?: "same-origin" | "include" | "omit",
+    method?: "GET" | "POST",
   }
 ): ServerFunction<T>;
 ```
@@ -31,9 +32,37 @@ function createServerFunction<T>(
 
 - **`name`** (`string`) — The registered name used in RPC routing.
 - **`handler`** (`(signal: AbortSignal, ...args: JsonArray) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; remaining arguments come from the client. The return value must be JSON-serializable.
-- **`options`** — Optional credentials and serialization strategy
+- **`options`** — Optional credentials, serialization strategy, and HTTP method
   * `contentType?: 'application/json' | 'text/plain'` - Defaults to `'application/json'`.
   * `credentials?: "include" | "same-origin" | "omit"` - Defaults to `'same-origin'`.
+  * `method?: "GET" | "POST"` - Defaults to `'POST'`.
+
+### HTTP Method
+
+By default every server function is invoked via `POST`. Functions that are safe to call from a browser URL bar, a `<script>` tag, or a CDN can opt into `GET` — arguments then travel as an `?args=` JSON query parameter:
+
+```ts
+export const publicData = createServerFunction(
+  'public-data',
+  async (signal, topic: string) => {
+    return await fetchPublicData(topic);
+  },
+  { method: 'GET' },
+);
+```
+
+The generated client module issues a `GET /__rpc/public-data?args=%5B%22news%22%5D` request. The middleware rejects requests whose HTTP method does not match the function's configured method with `405 Method Not Allowed` — so `POST`-only functions are safe from cross-site `GET` requests, and `GET` functions can be linked/bookmarked directly.
+
+> **Security note:** defaulting to `POST` prevents CSRF via `<img>`/`<script>`/form `GET` requests. Only set `method: "GET"` for functions with no side effects.
+
+> **Why only `GET` and `POST`?** This is deliberate, not an oversight:
+>
+> - RPC dispatch is not REST — functions have no resource semantics, so the meanings of `PUT` (idempotent replace), `PATCH` (partial update), or `DELETE` (removal) don't apply to a function call. The only transport distinctions that matter are `POST` (args in the body, any payload) and `GET` (args in the query string, cacheable by browsers and CDNs).
+> - `OPTIONS` is reserved by the HTTP protocol for CORS preflight; browsers send it automatically, and frameworks handle it. Exposing it as a function method would collide with framework CORS handling.
+> - `HEAD` is derived from `GET` at the HTTP layer, so it needs no function-level support.
+> - Every accepted method is another dispatch path to validate. Keeping the surface minimal (and defaulting to `POST`) reduces CSRF and parsing attack surface.
+>
+> If a concrete need arises (e.g. a REST-style wrapper wanting true `PUT` semantics), the `method` union is a one-line extension — adapters already centralize dispatch on it.
 
 ### AbortSignal
 

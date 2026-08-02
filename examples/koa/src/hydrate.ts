@@ -1,4 +1,4 @@
-import { add, sayHi } from "./api";
+import { add, getServerTime, sayHi } from "./api";
 import { getError, isValiError } from "./util/helpers";
 
 export const setupGreeting = async (target: HTMLHeadingElement) => {
@@ -45,5 +45,25 @@ export const setupForm = async (target: HTMLFormElement) => {
       errorDivA.innerHTML = "";
       errorDivB.innerHTML = "";
     }
+  });
+};
+
+export const setupGetTime = (target: HTMLFormElement) => {
+  const output = target.querySelector("output") as HTMLOutputElement;
+  const link = target.querySelector("#time-link") as HTMLAnchorElement;
+  const locale = target.querySelector("#locale") as HTMLInputElement;
+
+  target.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const { data } = getServerTime(locale.value);
+    output.textContent = "Fetching…";
+    const result = await data;
+    output.textContent = `Time: ${result.time}`;
+    link.href = `/__A_server/get-server-time?args=${
+      encodeURIComponent(
+        JSON.stringify([locale.value]),
+      )
+    }`;
+    link.target = "_blank";
   });
 };

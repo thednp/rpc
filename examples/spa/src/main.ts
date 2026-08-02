@@ -1,5 +1,5 @@
 import "./style.css";
-import { setupForm, setupGreeting } from "./hydrate";
+import { setupForm, setupGetTime, setupGreeting } from "./hydrate";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 <div>
@@ -7,7 +7,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <p class="read-the-docs">
     SPA Example using <code>@thednp/rpc</code> with <code>node:http</code>
   </p>
-  <form>
+  <form id="addForm">
     <h2>Form</h2>
     <div style="display: flex; align-items: center; gap: 0.5rem">
       <label for="a">A</label>
@@ -32,8 +32,25 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <button id="cancelBtn" type="button">Cancel</button>
     </div>
   </form>
+
+  <form id="timeForm">
+    <h2>GET</h2>
+    <div style="display: flex; align-items: center; gap: 0.5rem">
+      <label for="locale">Locale</label>
+      <div class="form-input">
+        <input id="locale" name="locale" type="text" placeholder="en-US" value="en-US" />
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <label for="time-output">></label>
+      <output id="time-output">Time: —</output>
+      <button type="submit">Get time</button>
+      <a id="time-link" href="#">Open in new tab</a>
+    </div>
+  </form>
 </div>
 `;
 
 setupGreeting(document.querySelector("h1") as HTMLHeadingElement);
-setupForm(document.querySelector("form") as HTMLFormElement);
+setupForm(document.getElementById("addForm") as HTMLFormElement);
+setupGetTime(document.getElementById("timeForm") as HTMLFormElement);

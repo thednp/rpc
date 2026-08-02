@@ -57,3 +57,18 @@ export function validateCredentials(value?: string): Credentials {
   }
   return creds as Credentials;
 }
+
+/**
+ * Validates and normalizes the HTTP method option for a server function.
+ * Accepts "GET" or "POST" (case-insensitive); defaults to "POST" when undefined.
+ * @param value - Method value to validate
+ * @returns The validated uppercase method string
+ * @throws Error if the value is not "GET" or "POST"
+ */
+export function validateMethod(value?: string): "GET" | "POST" {
+  const method = (value || "POST").toUpperCase();
+  if (method !== "GET" && method !== "POST") {
+    throw new Error(`Invalid method: "${value}" must be one of GET, POST`);
+  }
+  return method;
+}

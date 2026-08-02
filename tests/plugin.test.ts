@@ -8,6 +8,7 @@ import { getClientModules } from "../src/getClientModules.ts";
 import {
   validateCredentials,
   validateIdentifier,
+  validateMethod,
   validatePathSegment,
 } from "../src/validate.ts";
 import {
@@ -315,6 +316,48 @@ describe("getClientModules", () => {
     expect(code).toContain('credentials = "same-origin"');
   });
 
+  it("should default to POST method", () => {
+    serverFunctionsMap.set("postFn", {
+      name: "post-fn",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/json" },
+      exportName: "postFn",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(code).toContain('method = "POST"');
+    expect(code).toContain(
+      "innerModule(body, headers, credentials, prefix, name, method)",
+    );
+  });
+
+  it("should generate GET method when set", () => {
+    serverFunctionsMap.set("getFn", {
+      name: "get-fn",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/json", method: "GET" },
+      exportName: "getFn",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(code).toContain('method = "GET"');
+  });
+
+  it("should serialize args as JSON query body for GET functions", () => {
+    serverFunctionsMap.set("getFn", {
+      name: "get-fn",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "text/plain", method: "GET" },
+      exportName: "getFn",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    // GET forces a JSON args body and drops the Content-Type header
+    expect(code).toContain("body = JSON.stringify(args)");
+    expect(code).toContain("headers = {}");
+    expect(code).not.toContain("args[0]");
+  });
+
   it("should handle abort error in generated code", () => {
     serverFunctionsMap.set("fn", {
       name: "fn",
@@ -465,6 +508,29 @@ describe("validateCredentials", () => {
       .toThrow('Invalid credentials: "same-site"');
     expect(() => validateCredentials("invalid"))
       .toThrow('Invalid credentials: "invalid"');
+  });
+});
+
+// ─── validateMethod ────────────────────────────────────────────────────
+
+describe("validateMethod", () => {
+  it("should default to POST when undefined", () => {
+    expect(validateMethod()).toBe("POST");
+    expect(validateMethod(undefined)).toBe("POST");
+  });
+
+  it("should pass valid methods (case-insensitive)", () => {
+    expect(validateMethod("GET")).toBe("GET");
+    expect(validateMethod("get")).toBe("GET");
+    expect(validateMethod("POST")).toBe("POST");
+    expect(validateMethod("post")).toBe("POST");
+  });
+
+  it("should throw for invalid methods", () => {
+    expect(() => validateMethod("PATCH"))
+      .toThrow('Invalid method: "PATCH" must be one of GET, POST');
+    expect(() => validateMethod("delete"))
+      .toThrow('Invalid method: "delete" must be one of GET, POST');
   });
 });
 

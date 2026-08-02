@@ -1,12 +1,15 @@
 // src/koa/createMiddleware.ts
 import type { Context, Next } from "koa";
 import type { KoaMiddlewareFn, KoaMiddlewareOptions } from "./types.d.ts";
+import type { JsonValue } from "../types.d.ts";
 import { escapeRegExp } from "../tools.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   INTERNAL_SERVER_ERROR,
+  METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
+  REQUEST_FORBIDDEN,
 } from "../constants.ts";
 
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
@@ -110,13 +113,25 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   return createMiddleware({
     ...options,
     handler: async (ctx: Context, _next: Next) => {
-      const url = new URL(ctx.url, "http://localhost").pathname;
+      const reqUrl = new URL(ctx.url, "http://localhost");
+      const url = reqUrl.pathname;
       // const { rpcPrefix } = options;
 
       // Defense-in-depth: validate prefix match via escaped regex even though
       // the outer createMiddleware gates on the same prefix already.
       // istanbul ignore next
       if (prefixRegex && !prefixRegex.test(url)) {
+        return;
+      }
+
+      // Optional origin check: reject requests whose Origin header does not
+      // match the configured origin. Requests without an Origin header
+      // (curl, native clients) pass through unchecked.
+      const origin = options.origin;
+      const requestOrigin = ctx.headers.origin;
+      if (origin && requestOrigin && requestOrigin !== origin) {
+        ctx.status = 403;
+        ctx.body = { error: REQUEST_FORBIDDEN };
         return;
       }
 
@@ -130,8 +145,21 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
       }
 
       try {
-        const body = await readBody(ctx);
-        const args = Array.isArray(body.data) ? body.data : [body.data];
+        const method = serverFunction.options?.method || "POST";
+        if (ctx.method.toUpperCase() !== method) {
+          ctx.status = 405;
+          ctx.body = { error: METHOD_NOT_ALLOWED };
+          return;
+        }
+
+        let args: JsonValue[] = [];
+        if (method === "GET") {
+          const raw = reqUrl.searchParams.get("args");
+          if (raw) args = JSON.parse(raw);
+        } else {
+          const body = await readBody(ctx);
+          args = Array.isArray(body.data) ? body.data : [body.data];
+        }
         const { data: resultData, cancel } = serverFunction.handler(...args);
         const onClose = () => cancel(CLIENT_DISCONNECTED);
         ctx.req.on("close", onClose);

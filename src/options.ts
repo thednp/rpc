@@ -7,6 +7,7 @@ import type {
 export const defaultServerFnOptions = {
   contentType: "application/json",
   credentials: "same-origin",
+  method: "POST",
 } satisfies ServerFunctionOptions;
 
 export const defaultRPCOptions: RpcPluginOptions = {
@@ -17,4 +18,5 @@ export const defaultRPCOptions: RpcPluginOptions = {
 export const defaultMiddlewareOptions = {
   rpcPrefix: undefined,
   path: undefined,
+  origin: undefined,
 } satisfies MiddlewareOptions;

@@ -142,6 +142,34 @@ describe("innerModule", () => {
     expect(console.warn).toHaveBeenCalledWith("Request was cancelled");
   });
 
+  it("should make GET fetch call with args in query string", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: "ok" }), { status: 200 }),
+    );
+
+    const result = innerModule(
+      '["a",1]',
+      {},
+      "same-origin",
+      "__rpc",
+      "public-fn",
+      "GET",
+    );
+    await result.data;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/__rpc/public-fn?args=${encodeURIComponent('["a",1]')}`,
+      {
+        method: "GET",
+        headers: {},
+        credentials: "same-origin",
+        body: undefined,
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
   it("should reject data when cancel is called", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       (_url: RequestInfo | URL, init?: RequestInit) =>

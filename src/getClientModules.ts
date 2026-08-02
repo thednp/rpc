@@ -13,6 +13,7 @@ import { serverFunctionsMap } from "./functionsMap.ts";
 import {
   validateCredentials,
   validateIdentifier,
+  validateMethod,
   validatePathSegment,
 } from "./validate.ts";
 
@@ -37,6 +38,7 @@ const getModule = (
   const safeFnEntry = validateIdentifier(fnEntry, "export name");
   const safePrefix = validatePathSegment(options.rpcPrefix, "rpcPrefix");
   const credentials = validateCredentials(options.credentials);
+  const method = validateMethod(options.method);
   let body = "";
   let headers = "{}";
   switch (options.contentType) {
@@ -51,6 +53,11 @@ const getModule = (
       headers = `{ 'Content-Type': 'application/json' }`;
     }
   }
+  // GET requests cannot carry a body: args travel as a JSON query parameter
+  if (method === "GET") {
+    body = `JSON.stringify(args)`;
+    headers = `{}`;
+  }
 
   const output = `
 export const ${safeFnEntry} = (...args) => {
@@ -59,7 +66,8 @@ export const ${safeFnEntry} = (...args) => {
   const prefix = "${safePrefix}";
   const name = "${safeFnName}";
   const credentials = "${credentials}";
-  return innerModule(body, headers, credentials, prefix, name);
+  const method = "${method}";
+  return innerModule(body, headers, credentials, prefix, name, method);
 }`;
 
   return output.trim();

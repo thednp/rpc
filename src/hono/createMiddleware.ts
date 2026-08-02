@@ -1,6 +1,7 @@
 // src/hono/createMiddleware.ts
 import type { Context, Next } from "hono";
 import type { HonoMiddlewareFn, HonoMiddlewareOptions } from "./types.d.ts";
+import type { JsonValue } from "../types.d.ts";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
@@ -9,7 +10,9 @@ import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   INTERNAL_SERVER_ERROR,
+  METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
+  REQUEST_FORBIDDEN,
 } from "../constants.ts";
 import { readBody } from "./helpers.ts";
 
@@ -127,6 +130,15 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         return;
       }
 
+      // Optional origin check: reject requests whose Origin header does not
+      // match the configured origin. Requests without an Origin header
+      // (curl, native clients) pass through unchecked.
+      const origin = options.origin;
+      const requestOrigin = c.req.header("origin");
+      if (origin && requestOrigin && requestOrigin !== origin) {
+        return c.json({ error: REQUEST_FORBIDDEN }, 403);
+      }
+
       const functionName = reqPath.replace(prefixReplace, "");
       const serverFunction = serverFunctionsMap.get(functionName);
 
@@ -135,13 +147,27 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
       }
 
       try {
-        const body = await readBody(c);
-        const args = Array.isArray(body.data) ? body.data : [body.data];
+        const method = serverFunction.options?.method || "POST";
+        if (c.req.method.toUpperCase() !== method) {
+          return c.json({ error: METHOD_NOT_ALLOWED }, 405);
+        }
+
+        let args: JsonValue[] = [];
+        if (method === "GET") {
+          const raw = c.req.query("args");
+          // istanbul ignore else
+          if (raw) args = JSON.parse(raw);
+        } else {
+          const body = await readBody(c);
+          args = Array.isArray(body.data) ? body.data : [body.data];
+        }
         const fnResult = serverFunction.handler(...args);
         const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);
-        c.env.incoming.on("close", onAbort);
+        // The runtime adapter may be absent in some Hono environments
+        // (e.g. standalone serverless adapters), so guard the close hook.
+        c.env.incoming?.on("close", onAbort);
         const result = await fnResult.data;
-        c.env.incoming.off("close", onAbort);
+        c.env.incoming?.off("close", onAbort);
 
         return c.json({ data: result }, 200);
       } catch (err) {

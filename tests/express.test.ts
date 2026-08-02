@@ -436,6 +436,88 @@ describe("Express createRPCMiddleware handler", () => {
     const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
     expect(sentData).toEqual({ error: "Internal Server Error" });
   });
+
+  it("should return 405 when method does not match POST default", async () => {
+    createServerFunction("get-only", vi.fn());
+    const mw = createRPCMiddleware();
+    const req = makeReq({ originalUrl: "/__rpc/get-only", method: "GET" });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(res.status).toHaveBeenCalledWith(405);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Method Not Allowed" });
+  });
+
+  it("should dispatch GET functions with ?args= query params", async () => {
+    const fn = vi.fn().mockResolvedValue("public-data");
+    createServerFunction("public-data", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: `/__rpc/public-data?args=${
+        encodeURIComponent(
+          JSON.stringify(["news"]),
+        )
+      }`,
+      method: "GET",
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should return 403 when Origin does not match the configured origin", async () => {
+    createServerFunction("fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        origin: "https://evil.com",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(res.status).toHaveBeenCalledWith(403);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Forbidden" });
+  });
+
+  it("should pass requests without an Origin header when origin is set", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should pass requests whose Origin matches the configured origin", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        origin: "https://app.example.com",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
 });
 
 // ─── Plugin lifecycle tests ───────────────────────────────────────────

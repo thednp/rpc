@@ -8,6 +8,7 @@ import type {
   FastifyMiddlewareFn,
   FastifyMiddlewareOptions,
 } from "./types.d.ts";
+import type { JsonValue } from "../types.d.ts";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { escapeRegExp } from "../tools.ts";
@@ -15,7 +16,9 @@ import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   INTERNAL_SERVER_ERROR,
+  METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
+  REQUEST_FORBIDDEN,
 } from "../constants.ts";
 import { readBody } from "./helpers.ts";
 
@@ -143,6 +146,16 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         return;
       }
 
+      // Optional origin check: reject requests whose Origin header does not
+      // match the configured origin. Requests without an Origin header
+      // (curl, native clients) pass through unchecked.
+      const origin = options.origin;
+      const requestOrigin = req.headers.origin;
+      if (origin && requestOrigin && requestOrigin !== origin) {
+        reply.status(403).send({ error: REQUEST_FORBIDDEN });
+        return;
+      }
+
       const functionName = url.replace(prefixReplace, "");
       const serverFunction = serverFunctionsMap.get(functionName);
 
@@ -154,8 +167,21 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
       }
 
       try {
-        const body = await readBody(req);
-        const args = Array.isArray(body.data) ? body.data : [body.data];
+        const method = serverFunction.options?.method || "POST";
+        if (req.method.toUpperCase() !== method) {
+          reply.status(405).send({ error: METHOD_NOT_ALLOWED });
+          return;
+        }
+
+        let args: JsonValue[] = [];
+        if (method === "GET") {
+          const raw = reqUrl.searchParams.get("args");
+          // istanbul ignore else
+          if (raw) args = JSON.parse(raw);
+        } else {
+          const body = await readBody(req);
+          args = Array.isArray(body.data) ? body.data : [body.data];
+        }
         const { data: dataResult, cancel } = serverFunction.handler(...args);
         const onClose = () => cancel(CLIENT_DISCONNECTED);
 

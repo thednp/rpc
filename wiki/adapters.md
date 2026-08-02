@@ -73,6 +73,7 @@ pnpm add @thednp/rpc fastify
 ```ts
 // server.ts
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
 import { attachRPC, attachVite } from '@thednp/rpc/fastify';
 import { createServer } from 'vite';
 
@@ -84,7 +85,7 @@ if (isDev) {
   attachVite(fastify, vite);
 } else {
   await attachRPC(fastify);
-  fastify.register(require('@fastify/static'), { root: 'dist' });
+  fastify.register(fastifyStatic, { root: 'dist' });
 }
 
 fastify.listen({ port: 3000 });
@@ -109,6 +110,7 @@ pnpm add @thednp/rpc hono
 ```ts
 // server.ts
 import { Hono } from 'hono';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { attachRPC, attachVite } from '@thednp/rpc/hono';
 import { createServer } from 'vite';
 
@@ -148,6 +150,7 @@ Body parser must be registered before the RPC middleware:
 // server.ts
 import Koa from 'koa';
 import { koaBody } from 'koa-body';
+import serve from 'koa-static';
 import { attachRPC, attachVite } from '@thednp/rpc/koa';
 import { createServer } from 'vite';
 
@@ -162,7 +165,7 @@ if (isDev) {
   attachVite(app, vite);
 } else {
   await attachRPC(app);
-  app.use(require('koa-static')('dist'));
+  app.use(serve('dist'));
 }
 
 app.listen(3000);

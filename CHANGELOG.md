@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.0.4] - 2026-08-02
+
+### Breaking
+
+- Restrict RPC dispatch to configured HTTP methods: server functions default to `POST` and are now rejected with `405 Method Not Allowed` on any other method (previously any method was accepted)
+
+### Features
+
+- Add `method` option to `ServerFunctionOptions` (`"GET" | "POST"`, default `"POST"`) for per-function HTTP method control
+- Add `origin` option to `MiddlewareOptions` — when set, requests with a mismatching `Origin` header are rejected with `403 Forbidden` (requests without an `Origin` header, e.g. curl, pass)
+- GET function dispatch: generated client modules send args as a URL-encoded `?args=` JSON query parameter (no request body)
+
+### Security
+
+- Enforce method + origin checks in all 4 adapters (Express, Fastify, Hono, Koa) with anchored prefix matching already in place
+- Hono adapter: guard `env.incoming` with optional chaining so bare serverless environments without an incoming stream no longer crash
+
+### Fixes
+
+- Scan server files by exact filename (`.ts`/`.mjs`/`.cjs` in the configured directory) instead of substring matching, so files like `server.tsx` are no longer picked up
+- Bump `@hono/node-server` to `^2.0.5` via `pnpm-workspace.yaml` override (fixes GHSA-frvp-7c67-39w9 audit advisory pulled in transitively by `@hono/vite-dev-server`)
+
+### Docs
+
+- Add `wiki/best-practices.md` sections on rate limiting and Origin/CSRF protection with framework-specific middleware snippets
+- Document the `method` option in `wiki/server-functions.md`
+- Add Method Enforcement and Origin Validation sections to `wiki/security.md`
+- Document exact scan filename matching in `wiki/setup.md`
+- Add an "HTTP Method" section to `wiki/server-functions.md` explaining why only GET and POST are supported (RPC has no resource semantics, OPTIONS is reserved for CORS preflight, minimal attack surface)
+- Add a method-restriction security note (GET/POST only) to the README security section
+
+### Chores
+
+- Bump version to `0.0.4`
+- Add test coverage for method dispatch (POST default, GET with `?args=`, 405 enforcement), origin validation (mismatch 403, absent origin passes), and exact scan matching
+- Reach 100% test coverage (232 tests): add `validateMethod` suite, GET client-module fetch test, and GET dispatch coverage for Hono and Koa
+- Add a GET server function demo (`getServerTime`) with a "Get time" UI and shareable link to all 6 examples; add `tsconfig.json` to the `ssr` example and `types: ["vite/client"]` to example tsconfigs
+- Move `dev-test.js` to `scripts/dev-test.js` and enhance it: switch examples to `link:../..` before testing and restore the published version afterwards, verify GET dispatch, install with `--no-frozen-lockfile`
+- Add `scripts/audit-src.js` — audits only the root package's dependencies in a temp project (344 deps vs 413 for the full workspace) — wired into `prepublishOnly` as `audit:src`
+- Add `scripts/update-deno.js` to sync JSR metadata (`version`, `description`, `keywords`, `license`) from `package.json` into `deno.json`; add `up:deno` task
+- Refactor `deno.json` tasks to `deno task` self-references; `prepublishOnly` is now `upd` + `lint` + `format` + `audit:src` + `build`
+- Run `pnpm audit` in CI and trigger workflows on `pnpm-workspace.yaml` changes
+- Sync `deno.json` keywords with `package.json` (`vite`, `vite-plugin` added)
+
 ## [0.0.3] - 2026-07-30
 
 ### Docs

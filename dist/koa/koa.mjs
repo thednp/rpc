@@ -13,6 +13,8 @@ function escapeRegExp(s) {
 //#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
+const METHOD_NOT_ALLOWED = "Method Not Allowed";
+const REQUEST_FORBIDDEN = "Forbidden";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
@@ -25,7 +27,8 @@ const defaultRPCOptions = {
 };
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
-	path: void 0
+	path: void 0,
+	origin: void 0
 };
 //#endregion
 //#region src/koa/helpers.ts
@@ -169,8 +172,16 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	return createMiddleware({
 		...options,
 		handler: async (ctx, _next) => {
-			const url = new URL(ctx.url, "http://localhost").pathname;
+			const reqUrl = new URL(ctx.url, "http://localhost");
+			const url = reqUrl.pathname;
 			if (prefixRegex && !prefixRegex.test(url)) return;
+			const origin = options.origin;
+			const requestOrigin = ctx.headers.origin;
+			if (origin && requestOrigin && requestOrigin !== origin) {
+				ctx.status = 403;
+				ctx.body = { error: REQUEST_FORBIDDEN };
+				return;
+			}
 			const functionName = url.replace(prefixReplace, "");
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) {
@@ -179,8 +190,20 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				return;
 			}
 			try {
-				const body = await readBody(ctx);
-				const args = Array.isArray(body.data) ? body.data : [body.data];
+				const method = serverFunction.options?.method || "POST";
+				if (ctx.method.toUpperCase() !== method) {
+					ctx.status = 405;
+					ctx.body = { error: METHOD_NOT_ALLOWED };
+					return;
+				}
+				let args = [];
+				if (method === "GET") {
+					const raw = reqUrl.searchParams.get("args");
+					if (raw) args = JSON.parse(raw);
+				} else {
+					const body = await readBody(ctx);
+					args = Array.isArray(body.data) ? body.data : [body.data];
+				}
 				const { data: resultData, cancel } = serverFunction.handler(...args);
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				ctx.req.on("close", onClose);

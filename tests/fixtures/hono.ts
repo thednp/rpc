@@ -18,6 +18,7 @@ function makeHonoContext(opts: {
   envIncoming?: EventEmitter;
 } = {}) {
   const ee = opts.envIncoming ?? new EventEmitter();
+  const rawPath = opts.path ?? "/";
   const jsonBody = opts.body
     ? (() => {
       try {
@@ -29,9 +30,13 @@ function makeHonoContext(opts: {
     : undefined;
   const ctx = {
     req: {
-      path: opts.path ?? "/",
+      path: rawPath.split("?")[0],
       method: opts.method ?? "GET",
       header: (name: string) => opts.headers?.[name.toLowerCase()] ?? "",
+      query: (name: string) => {
+        const qs = rawPath.split("?")[1];
+        return qs ? new URLSearchParams(qs).get(name) ?? "" : "";
+      },
       json: async () => jsonBody as any,
       text: async () => opts.body ?? "",
     },

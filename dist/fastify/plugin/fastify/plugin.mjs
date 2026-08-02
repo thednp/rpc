@@ -7,7 +7,8 @@ const defaultRPCOptions = {
 };
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
-	path: void 0
+	path: void 0,
+	origin: void 0
 };
 //#endregion
 //#region src/tools.ts
@@ -24,6 +25,8 @@ function escapeRegExp(s) {
 //#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
+const METHOD_NOT_ALLOWED = "Method Not Allowed";
+const REQUEST_FORBIDDEN = "Forbidden";
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
@@ -141,8 +144,15 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	return createMiddleware({
 		...options,
 		handler: async (req, reply, _done) => {
-			const url = new URL(req.url, "http://localhost").pathname;
+			const reqUrl = new URL(req.url, "http://localhost");
+			const url = reqUrl.pathname;
 			if (prefixRegex && !prefixRegex.test(url)) return;
+			const origin = options.origin;
+			const requestOrigin = req.headers.origin;
+			if (origin && requestOrigin && requestOrigin !== origin) {
+				reply.status(403).send({ error: REQUEST_FORBIDDEN });
+				return;
+			}
 			const functionName = url.replace(prefixReplace, "");
 			const serverFunction = serverFunctionsMap.get(functionName);
 			if (!serverFunction) {
@@ -150,8 +160,19 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				return;
 			}
 			try {
-				const body = await readBody(req);
-				const args = Array.isArray(body.data) ? body.data : [body.data];
+				const method = serverFunction.options?.method || "POST";
+				if (req.method.toUpperCase() !== method) {
+					reply.status(405).send({ error: METHOD_NOT_ALLOWED });
+					return;
+				}
+				let args = [];
+				if (method === "GET") {
+					const raw = reqUrl.searchParams.get("args");
+					if (raw) args = JSON.parse(raw);
+				} else {
+					const body = await readBody(req);
+					args = Array.isArray(body.data) ? body.data : [body.data];
+				}
 				const { data: dataResult, cancel } = serverFunction.handler(...args);
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.raw.on("close", onClose);

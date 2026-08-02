@@ -2,7 +2,7 @@
 
 ## Prefix Boundary Check
 
-All adapters use `new RegExp(\`^/${rpcPrefix}/\`)` instead of `startsWith` to match the RPC endpoint path. This prevents path-segment bypass attacks:
+All adapters use `new RegExp(\`^/${escapeRegExp(rpcPrefix)}/\`)` instead of `startsWith` to match the RPC endpoint path. The prefix is escaped with `escapeRegExp()` before being embedded in the boundary regex, preventing ReDoS or unintended matching from metacharacters in the prefix. This prevents path-segment bypass attacks:
 
 ```
 rpcPrefix = '__rpc'
@@ -28,6 +28,27 @@ const pathname = url.pathname; // clean, no query string
 
 Error responses do not echo the requested function name. This prevents function enumeration — an attacker cannot discover available RPC functions by probing for non-existent endpoints.
 
+## HTTP Method Enforcement
+
+Server functions default to `POST`, and the middleware rejects any request whose HTTP method does not match the function's configured method with `405 Method Not Allowed`:
+
+```
+GET  /__rpc/do-stuff  →  405  (function defaults to POST)
+POST /__rpc/do-stuff  →  200
+```
+
+This blocks the simplest CSRF vector: an attacker page embedding `<img src="/__rpc/do-stuff">` or a form `GET` that would otherwise trigger side effects. Functions that opt into `method: "GET"` (via `createServerFunction(name, handler, { method: 'GET' })`) receive their arguments as an `?args=` JSON query parameter. Reserve `GET` for side-effect-free functions only. See [Server Functions Guide](./server-functions.md) for details.
+
+## Origin Validation
+
+`@thednp/rpc` performs no origin validation by default, but `createRPCMiddleware()` accepts an `origin` option:
+
+```ts
+app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
+```
+
+When set, any request carrying an `Origin` header that does not match the configured origin is rejected with `403 Forbidden`. Requests **without** an `Origin` header (curl, native clients) pass through — the check only rejects when the browser-provided header disagrees. This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices Guide](./best-practices.md) for custom middleware alternatives.
+
 ## Authentication via Middleware
 
 Authentication is handled by middleware registered **before** `createRPCMiddleware()`. The middleware chain composes naturally:
@@ -49,9 +70,7 @@ JSON body size limits are handled by your framework's body-parser middleware:
 - **Koa**: `koa-body({ formLimit: '1mb' })`
 - **Hono**: Built-in body size limiting
 
-Since the RPC framework's `readBody` also accepts `text/plain` requests (not parsed by the JSON body parser), the raw stream path in the Express and Koa adapters has a built-in safety net — a `maxBodySize` parameter that defaults to **1 MiB**. Pass a custom value to `readBody(req, signal, myLimit)` to override.
-
-Register body parsing middleware before `createRPCMiddleware()`.
+The `readBody` utility of each adapter reads the raw request stream and does **not** impose a built-in size limit — always register your framework's body-parser middleware (or a custom limit handler) before `createRPCMiddleware()`. Check [Best Practices Guide](./best-practices.md) for body-limit examples.
 
 ## Input Validation
 Server functions receive raw, untrusted client data. Always validate before use. Check [Server Functions Guide](./server-functions.md) for more detailed examples.

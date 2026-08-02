@@ -37,3 +37,16 @@ export const add = createServerFunction(
     return valid.output.a + valid.output.b;
   },
 );
+export const getServerTime = createServerFunction(
+  "get-server-time",
+  async (signal, locale: string) => {
+    signal?.throwIfAborted();
+    await new Promise((res) => setTimeout(res, 500));
+    return {
+      locale,
+      time: new Date().toLocaleTimeString(locale),
+      iso: new Date().toISOString(),
+    };
+  },
+  { method: "GET" },
+);

@@ -30,6 +30,13 @@ interface ServerFunctionOptions {
    * @default "same-origin"
    */
   credentials?: Credentials;
+  /**
+   * HTTP method used for the RPC request.
+   * GET requests send arguments as an `?args=` JSON query parameter
+   * (a fetch request body is not allowed on GET).
+   * @default "POST"
+   */
+  method?: "GET" | "POST";
 }
 // primitives and their compositions
 /**
@@ -172,11 +179,13 @@ declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => st
 declare const defaultServerFnOptions: {
   contentType: "application/json";
   credentials: "same-origin";
+  method: "POST";
 };
 declare const defaultRPCOptions: RpcPluginOptions;
 declare const defaultMiddlewareOptions: {
   rpcPrefix: undefined;
   path: undefined;
+  origin: undefined;
 };
 //#endregion
 export { createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, getClientModules, scanForServerFiles, serverFunctionsMap };

@@ -10,6 +10,10 @@ export const ERROR_LOADING_FILE = "Error loading file:";
 
 export const FUNCTION_NOT_FOUND = "Function not found";
 
+export const METHOD_NOT_ALLOWED = "Method Not Allowed";
+
+export const REQUEST_FORBIDDEN = "Forbidden";
+
 export const INTERNAL_SERVER_ERROR = "Internal Server Error";
 
 export const CLIENT_DISCONNECTED = "client disconnected";

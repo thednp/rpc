@@ -57,7 +57,7 @@ export const scanForServerFiles = async (
   let files: string[];
   try {
     files = (await readdir(apiDir, { withFileTypes: true }))
-      .filter((f) => svFiles.some((fn) => f.name.includes(fn)))
+      .filter((f) => svFiles.includes(f.name))
       .map((f) => join(apiDir, f.name));
   } catch (_e) {
     files = [];

@@ -265,6 +265,81 @@ const bodyLimit = async (req, res, next) => {
 };
 ```
 
+## Rate Limiting
+
+Throttle RPC endpoints like any other route — rate limiting is the host's responsibility:
+
+```ts
+// Express
+import { rateLimit } from 'express-rate-limit';
+
+app.use('/__rpc', rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 60, // 60 requests per window
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}));
+app.use(createRPCMiddleware());
+```
+
+```ts
+// Fastify
+import rateLimit from '@fastify/rate-limit';
+
+await app.register(rateLimit, { max: 60, timeWindow: '1 minute' });
+```
+
+```ts
+// Hono
+import { rateLimiter } from 'hono-rate-limiter';
+
+app.use('/__rpc/*', rateLimiter({ windowMs: 60_000, limit: 60 }));
+```
+
+```ts
+// Koa
+import { rateLimit } from 'koa2-ratelimit';
+
+app.use(rateLimit.middleware({ interval: { min: 1 }, max: 60 }));
+```
+
+## Origin / CSRF Protection
+
+`@thednp/rpc` performs **no origin validation by default** — like authentication, it is opt-in so the host decides.
+
+### Option A: `origin` middleware option
+
+When your RPC endpoints sit behind a reverse proxy with multiple public origins (e.g. a sibling subdomain), pass the allowed origin to `createRPCMiddleware()`:
+
+```ts
+app.use(createRPCMiddleware({
+  origin: 'https://app.example.com',
+}));
+```
+
+Requests carrying an `Origin` header that does not match are rejected with `403 Forbidden`. Requests without an `Origin` header (curl, native apps) pass through unchecked.
+
+> `SameSite=Lax` cookies already block cross-site `POST` from HTML forms; the `origin` option closes the remaining "sibling subdomain" case.
+
+### Option B: custom middleware
+
+Check `Sec-Fetch-Site` (Fetch Metadata) or `Origin` yourself before the RPC middleware:
+
+```ts
+// Express
+app.use((req, res, next) => {
+  const site = req.headers['sec-fetch-site'];
+  if (site && site !== 'same-origin' && site !== 'none') {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  next();
+});
+app.use(createRPCMiddleware());
+```
+
+Note that strict checks rejecting requests *without* these headers (TanStack Start style) will break curl and native clients — only enforce when the header is present, or provide an opt-out.
+
 ## SSR Guidance
 
 - On the **server**, `createServerFunction` runs directly (not Vite-transformed).

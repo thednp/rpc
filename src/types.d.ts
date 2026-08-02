@@ -84,6 +84,13 @@ export interface ServerFunctionOptions {
    * @default "same-origin"
    */
   credentials?: Credentials;
+  /**
+   * HTTP method used for the RPC request.
+   * GET requests send arguments as an `?args=` JSON query parameter
+   * (a fetch request body is not allowed on GET).
+   * @default "POST"
+   */
+  method?: "GET" | "POST";
 }
 
 // primitives and their compositions
@@ -245,6 +252,15 @@ export interface MiddlewareOptions<
    * rpcPrefix: "api/rpc"
    */
   rpcPrefix?: string | false;
+
+  /**
+   * Allowed request origin (e.g. "https://example.com").
+   * When set, any request carrying an `Origin` header that does not match
+   * is rejected with a 403 Forbidden response. Requests without an `Origin`
+   * header (curl, native clients) pass through unchecked.
+   * When unset (default), no origin validation is performed.
+   */
+  origin?: string;
 
   /**
    * Async handler for request processing.

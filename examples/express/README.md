@@ -21,11 +21,11 @@ Server-Side Rendering (SSR) application using Express with `@thednp/rpc` for aut
 
 ## Resources
 
-- [Getting Started](https://github.com/thednp/rpc/wiki/getting-started.md)
-- [Setup Guide](https://github.com/thednp/rpc/wiki/setup.md)
-- [Server Functions](https://github.com/thednp/rpc/wiki/server-functions.md)
-- [Client Usage](https://github.com/thednp/rpc/wiki/client-usage.md)
-- [Express Adapter](https://github.com/thednp/rpc/wiki/adapters.md#express)
-- [Configuration](https://github.com/thednp/rpc/wiki/configuration.md)
-- [Best Practices](https://github.com/thednp/rpc/wiki/best-practices.md)
-- [Security](https://github.com/thednp/rpc/wiki/security.md)
+- [Getting Started](https://github.com/thednp/rpc/blob/master/wiki/getting-started.md)
+- [Setup Guide](https://github.com/thednp/rpc/blob/master/wiki/setup.md)
+- [Server Functions](https://github.com/thednp/rpc/blob/master/wiki/server-functions.md)
+- [Client Usage](https://github.com/thednp/rpc/blob/master/wiki/client-usage.md)
+- [Express Adapter](https://github.com/thednp/rpc/blob/master/wiki/adapters.md#express)
+- [Configuration](https://github.com/thednp/rpc/blob/master/wiki/configuration.md)
+- [Best Practices](https://github.com/thednp/rpc/blob/master/wiki/best-practices.md)
+- [Security](https://github.com/thednp/rpc/blob/master/wiki/security.md)

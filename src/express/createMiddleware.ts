@@ -11,6 +11,7 @@ import type {
 } from "./types.d.ts";
 import type { Connect } from "vite";
 // import type { JsonArray, JsonValue } from "@thednp/rpc";
+import type { JsonValue } from "../types.d.ts";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { getRequestDetails, getResponseDetails, readBody } from "./helpers.ts";
@@ -19,7 +20,9 @@ import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   INTERNAL_SERVER_ERROR,
+  METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
+  REQUEST_FORBIDDEN,
 } from "../constants.ts";
 
 let middlewareCount = 0;
@@ -130,18 +133,28 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
       res: ServerResponse | ExpressResponse,
       _next: NextFunction | Connect.NextFunction,
     ) => {
-      const { url } = getRequestDetails(req);
+      const { url: path, searchParams } = getRequestDetails(req);
       const { sendResponse } = getResponseDetails(res);
 
       // Validate the url starts with the prefix via the escaped regex
       // istanbul ignore next
-      if (prefixRegex && !prefixRegex.test(url)) {
+      if (prefixRegex && !prefixRegex.test(path)) {
         // falls through to next handler (never reached in practice; the outer
         // createMiddleware already gates on this, but kept for defense-in-depth)
         return;
       }
 
-      const functionName = url.replace(prefixReplace, "");
+      // Optional origin check: reject requests whose Origin header does not
+      // match the configured origin. Requests without an Origin header
+      // (curl, native clients) pass through unchecked.
+      const origin = options.origin;
+      const requestOrigin = req.headers.origin;
+      if (origin && requestOrigin && requestOrigin !== origin) {
+        sendResponse(403, { error: REQUEST_FORBIDDEN });
+        return;
+      }
+
+      const functionName = path.replace(prefixReplace, "");
       const serverFunction = serverFunctionsMap.get(functionName);
 
       if (!serverFunction) {
@@ -150,8 +163,21 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
       }
 
       try {
-        const body = await readBody(req);
-        const args = Array.isArray(body.data) ? body.data : [body.data];
+        const method = serverFunction.options?.method || "POST";
+        if (req.method?.toUpperCase() !== method) {
+          sendResponse(405, { error: METHOD_NOT_ALLOWED });
+          return;
+        }
+
+        let args: JsonValue[] = [];
+        if (method === "GET") {
+          const raw = searchParams.get("args");
+          // istanbul ignore else
+          if (raw) args = JSON.parse(raw);
+        } else {
+          const body = await readBody(req);
+          args = Array.isArray(body.data) ? body.data : [body.data];
+        }
         const { data, cancel } = serverFunction.handler(...args);
         const onClose = () => cancel(CLIENT_DISCONNECTED);
 

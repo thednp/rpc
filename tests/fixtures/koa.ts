@@ -20,6 +20,7 @@ function makeKoaCtx(opts: {
   const ctx: any = {
     url: opts.url ?? "/",
     method: opts.method ?? "GET",
+    headers: opts.headers ?? {},
     req: Object.assign(ee, {
       url: opts.url ?? "/",
       method: opts.method ?? "GET",

@@ -497,4 +497,68 @@ describe("Fastify createRPCMiddleware", () => {
     await mw(req as never, reply as never, done);
     expect(done).toHaveBeenCalledOnce();
   });
+
+  it("should return 405 when method does not match POST default", async () => {
+    createServerFunction("fastify-get-only", vi.fn());
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-get-only",
+      method: "GET",
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(405);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Method Not Allowed" });
+  });
+
+  it("should dispatch GET functions with ?args= query params", async () => {
+    const fn = vi.fn().mockResolvedValue("fastify-public");
+    createServerFunction("fastify-public", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: `/__rpc/fastify-public?args=${
+        encodeURIComponent(
+          JSON.stringify(["news"]),
+        )
+      }`,
+      method: "GET",
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should return 403 when Origin does not match the configured origin", async () => {
+    createServerFunction("fastify-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com" },
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Forbidden" });
+  });
+
+  it("should pass requests without an Origin header when origin is set", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fastify-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-fn",
+      method: "POST",
+      body: JSON.stringify(["x"]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
 });

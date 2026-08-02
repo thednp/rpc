@@ -273,6 +273,7 @@ describe("Hono createRPCMiddleware", () => {
     const mw = createRPCMiddleware();
     const c = makeHonoContext({
       path: "/__rpc/hono-hello",
+      method: "POST",
       body: JSON.stringify(["arg1"]),
     });
     const next = makeHonoNext();
@@ -286,6 +287,7 @@ describe("Hono createRPCMiddleware", () => {
     const mw = createRPCMiddleware();
     const c = makeHonoContext({
       path: "/__rpc/echoFn",
+      method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(["a", "b"]),
     });
@@ -319,6 +321,7 @@ describe("Hono createRPCMiddleware", () => {
     const ee = new EventEmitter();
     const c = makeHonoContext({
       path: "/__rpc/cancelFn",
+      method: "POST",
       body: JSON.stringify(["x"]),
       envIncoming: ee,
     });
@@ -336,7 +339,7 @@ describe("Hono createRPCMiddleware", () => {
       vi.fn().mockRejectedValue(new Error("hono oops")),
     );
     const mw = createRPCMiddleware();
-    const c = makeHonoContext({ path: "/__rpc/errFn" });
+    const c = makeHonoContext({ path: "/__rpc/errFn", method: "POST" });
     const next = makeHonoNext();
     await mw(c, next);
     expect(c.json).toHaveBeenCalledWith(
@@ -352,5 +355,96 @@ describe("Hono createRPCMiddleware", () => {
     const next = makeHonoNext();
     await mw(c, next);
     expect(next).toHaveBeenCalledOnce();
+  });
+
+  it("should return 405 when method does not match POST default", async () => {
+    createServerFunction("hono-get-only", vi.fn());
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({ path: "/__rpc/hono-get-only", method: "GET" });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith(
+      { error: "Method Not Allowed" },
+      405,
+    );
+  });
+
+  it("should dispatch GET functions with ?args= query params", async () => {
+    const fn = vi.fn().mockResolvedValue("hono-public");
+    createServerFunction("hono-public", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: `/__rpc/hono-public?args=${
+        encodeURIComponent(
+          JSON.stringify(["news"]),
+        )
+      }`,
+      method: "GET",
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
+    expect(c.json).toHaveBeenCalledWith({ data: "hono-public" }, 200);
+  });
+
+  it("should dispatch functions registered without options (default POST)", async () => {
+    serverFunctionsMap.set("hono-plain", {
+      name: "hono-plain",
+      handler: vi.fn().mockReturnValue({
+        data: Promise.resolve("plain"),
+        cancel: vi.fn(),
+      }),
+    });
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({ path: "/__rpc/hono-plain", method: "POST" });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith({ data: "plain" }, 200);
+  });
+
+  it("should return 403 when Origin does not match the configured origin", async () => {
+    createServerFunction("hono-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com" },
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith({ error: "Forbidden" }, 403);
+  });
+
+  it("should pass requests without an Origin header when origin is set", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["x"]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should not crash when env.incoming is missing", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-bare", fn);
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-bare",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["x"]),
+    });
+    c.env = {}; // no incoming stream (e.g. bare serverless adapter)
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
   });
 });
