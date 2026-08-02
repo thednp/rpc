@@ -46,12 +46,6 @@ jobs:
       # - name: Update npm to latest
       #   run: npm i -g npm@latest
 
-      # Stage the release for human approval instead of publishing directly.
-      # `npm stage publish` needs no 2FA and uses the OIDC Trusted Publisher
-      # (no long-lived token); the CLI framing that trigged the masked 403 on
-      # `npm publish` is avoided entirely. A maintainer approves the staged
-      # version with 2FA on npmjs.com (Staged Packages tab) or via
-      # `npm stage approve <version>`.
       - name: Publish to npm
         id: stage
         run: |
@@ -61,8 +55,11 @@ jobs:
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping"
           else
-            env -u NODE_AUTH_TOKEN npm login --auth-type=oidc
-            env -u NODE_AUTH_TOKEN npm publish
+            # auth-type=legacy keeps the OIDC-exchanged token on the classic
+            # PUT path (like a raw `Authorization: Bearer` upload); the default
+            # `web` auth routes the same token through the "publish authorize"
+            # endpoint, which the registry rejects with a masked 403.
+            env -u NODE_AUTH_TOKEN npm publish --auth-type=legacy
           fi
 
         env:
