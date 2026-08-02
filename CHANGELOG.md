@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.11] - 2026-08-02
+
+### Chores
+
+- Bump version to `0.0.11`
+- Publish workflow: replace `npm publish` + raw well-formed PUT fallback with a single `npm stage publish` step. Staging requires no 2FA, uses the OIDC Trusted Publisher (no long-lived token), and avoids the masked-403 `npm publish` framing entirely; a maintainer approves the staged version with 2FA on npmjs.com or via `npm stage approve`
+
+## [0.0.10] - 2026-08-02
+
+### Chores
+
+- Bump version to `0.0.10`
+- Publish workflow: pin `npm i -g npm@latest` (verified against npm 12.0.2 — OIDC token exchange `201` + sigstore provenance still published, but the `npm publish` PUT remains masked-403), strip the diagnostic capture/bisect steps and the `debug_403` dispatch input, and move `scripts/npm-request-recorder.js` to `experiments/`
+
 ## [0.0.9] - 2026-08-02
 
 ### Chores

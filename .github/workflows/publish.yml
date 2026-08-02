@@ -46,100 +46,26 @@ jobs:
       - name: Update npm to latest
         run: npm i -g npm@latest
 
-      # Attempt the canonical `npm publish` with provenance (the OIDC trusted
-      # publishing path). Its masked 403 (if any) surfaces in the verbose log;
-      # if it fails, the raw PUT below publishes.
-      - name: Publish to npm
-        id: publish
-        continue-on-error: true # fall back to raw publish below on failure
+      # Stage the release for human approval instead of publishing directly.
+      # `npm stage publish` needs no 2FA and uses the OIDC Trusted Publisher
+      # (no long-lived token); the CLI framing that trigged the masked 403 on
+      # `npm publish` is avoided entirely. A maintainer approves the staged
+      # version with 2FA on npmjs.com (Staged Packages tab) or via
+      # `npm stage approve <version>`.
+      - name: Stage publish to npm
+        id: stage
         run: |
           set -eu
           V=$(node -p "require('./package.json').version")
           NAME=$(node -p "require('./package.json').name")
-          # skip if the exact version is already on the registry
+          # skip if the exact version is already published on the registry
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
-            echo "::notice::$NAME@$V already published on npm; skipping CLI publish"
+            echo "::notice::$NAME@$V already published on npm; skipping"
           else
-            npm publish --access public --provenance
+            npm stage publish
           fi
         env:
-          NPM_CONFIG_LOGLEVEL: verbose
-          NPM_CONFIG_PROVENANCE: 'true'
-
-      # Raw well-formed publish PUT with the OIDC-minted npm token.
-      # Proven to publish (200 {"success":true}) when the CLI PUT 403'd.
-      - name: Publish to npm (raw PUT)
-        id: raw
-        if: steps.publish.outcome == 'failure'
-        run: |
-          set -eu
-          REG=https://registry.npmjs.org
-          echo "::group::Mint GitHub ID token"
-          IDURL="$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org"
-          IDTOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$IDURL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).value))")
-          echo "::endgroup::"
-
-          echo "::group::Exchange for npm token"
-          RESP=$(curl -fsS -X POST -H "Authorization: Bearer $IDTOKEN" "$REG/-/npm/v1/oidc/token/exchange/package/@thednp%2frpc" -d "")
-          NPMTOK=$(echo "$RESP" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).token))")
-          echo "::endgroup::"
-
-          echo "::group::npm pack + build publish doc"
-          TARBALL=$(npm pack --silent --pack-destination /tmp)
-          echo "tarball=$TARBALL"
-          REG="$REG" TARBALL="$TARBALL" node <<'NODE'
-            const fs = require('fs');
-            const crypto = require('crypto');
-            const REG = process.env.REG;
-            const tb = process.env.TARBALL;
-            const buf = fs.readFileSync('/tmp/' + tb);
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            const V = pkg.version;
-            const name = pkg.name;
-            const tarballUrl = `${REG}/${name}/-/${tb}`;
-            const manifest = {
-              ...pkg,
-              _id: `${name}@${V}`,
-              _nodeVersion: process.version,
-              _npmVersion: '11.16.0',
-              dist: {
-                integrity: 'sha512-' + crypto.createHash('sha512').update(buf).digest('base64'),
-                shasum: crypto.createHash('sha1').update(buf).digest('hex'),
-                tarball: tarballUrl,
-              },
-            };
-            const body = {
-              _id: name,
-              name,
-              description: pkg.description || '',
-              'dist-tags': { latest: V },
-              versions: { [V]: manifest },
-              access: 'public',
-              _attachments: {
-                [tb]: { content_type: 'application/octet-stream', data: buf.toString('base64') },
-              },
-            };
-            fs.writeFileSync('/tmp/pubdoc.json', JSON.stringify(body));
-          NODE
-          echo "::endgroup::"
-
-          echo "::group::Raw PUT (well-formed publish doc)"
-          CODE=$(curl -sS -D /tmp/hdr -o /tmp/body -w '%{http_code}' -X PUT \
-            -H "Authorization: Bearer $NPMTOK" \
-            -H "Content-Type: application/json" \
-            --data-binary "@/tmp/pubdoc.json" \
-            "$REG/@thednp%2frpc")
-          cat /tmp/hdr
-          echo "--- response body ---"
-          cat /tmp/body
-          echo
-          echo "status_code=$CODE"
-          if [ "$CODE" != "200" ] && [ "$CODE" != "201" ]; then
-            echo "::error::Raw publish rejected with HTTP $CODE"
-            exit 1
-          fi
-          echo "raw publish OK"
-          echo "::endgroup::"
+          NPM_CONFIG_LOGLEVEL: notice
 
       - name: Publish to jsr
         run: |
