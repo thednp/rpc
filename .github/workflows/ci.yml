@@ -56,7 +56,7 @@ jobs:
         run: pnpm test
 
       - name: Audit dependencies
-        run: pnpm audit
+        run: pnpm audit:src
 
       - name: Upload coverage report to coveralls.io...
         uses: coverallsapp/github-action@master
