@@ -281,3 +281,14 @@ export interface MiddlewareOptions<
    */
   handler?: FrameworkHooks[A]["handler"];
 }
+
+/**
+ * Return shape of `innerModule`: a promise of the response data plus
+ * a `cancel` function to abort the underlying fetch request.
+ */
+export type InnerModReturn = {
+  /** Promise resolving to the server response data */
+  data: Promise<JsonValue | void>;
+  /** Aborts the in-flight request with the given reason */
+  cancel: (reason: string) => void;
+};

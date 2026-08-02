@@ -1,5 +1,5 @@
 /** @module Client-side helper utilities. Exports `handleResponse` for processing fetch responses and `innerModule` for creating AbortController-bound RPC fetch calls. */
-import type { Credentials, JsonValue } from "./types.d.ts";
+import type { Credentials, JsonValue, InnerModReturn } from "./types.d.ts";
 import { FETCH_ERROR_PREFIX, REQUEST_CANCELLED } from "./constants.ts";
 
 /**
@@ -24,16 +24,7 @@ export const handleResponse = async (
   return result.data;
 };
 
-/**
- * Return shape of `innerModule`: a promise of the response data plus
- * a `cancel` function to abort the underlying fetch request.
- */
-type InnerModReturn = {
-  /** Promise resolving to the server response data */
-  data: Promise<JsonValue | void>;
-  /** Aborts the in-flight request with the given reason */
-  cancel: (reason: string) => void;
-};
+
 
 /**
  * Creates an AbortController-bound fetch call for a single RPC function.
