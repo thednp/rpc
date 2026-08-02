@@ -1,14 +1,10 @@
 /**
- * Internal plugin options accepted by `getClientModules`.
+ * @module Client module generation.
  */
-interface RpcPluginOptionsInternal {
-  /** RPC endpoint prefix (e.g. "__rpc") */
-  rpcPrefix: string;
-  /** Framework adapter name */
-  adapter?: string | undefined;
-}
-
-import type { ServerFunctionOptions } from "./types.d.ts";
+import type {
+  RpcPluginOptionsInternal,
+  ServerFunctionOptions,
+} from "./types.d.ts";
 import { serverFunctionsMap } from "./functionsMap.ts";
 import {
   validateCredentials,

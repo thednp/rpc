@@ -33,12 +33,7 @@ const CLIENT_DISCONNECTED = "client disconnected";
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/fastify/plugin.ts
-/**
-* Fastify plugin factory that registers the RPC middleware as a preHandler hook.
-* @param fastify - Fastify instance
-* @param initialOptions - Middleware options including rpcPrefix
-* @param done - Callback to signal plugin registration completion
-*/
+/** @module Fastify plugin. Exports the RPC plugin wrapped with `fastify-plugin` for lifecycle-compatible registration. */
 const RpcPlugin = (fastify, initialOptions, done) => {
 	const rpcMiddleware = createRPCMiddleware(initialOptions);
 	fastify.addHook("preHandler", async (request, reply) => {

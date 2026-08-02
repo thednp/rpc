@@ -1,4 +1,6 @@
 // @thednp/rpc/src/types.d.ts
+import type { ResolvedConfig } from "vite";
+
 import type {
   ExpressMiddlewareFn,
   ExpressMiddlewareHooks,
@@ -176,6 +178,24 @@ export type ClientFunctionWithOptions = ClientFunction & {
   name: string;
   /** Per-function content type and credentials options */
   options?: ServerFunctionOptions;
+};
+
+/**
+ * Internal plugin options accepted by `getClientModules`.
+ */
+export interface RpcPluginOptionsInternal {
+  /** RPC endpoint prefix (e.g. "__rpc") */
+  rpcPrefix: string;
+  /** Framework adapter name */
+  adapter?: string | undefined;
+}
+
+/**
+ * Partial Vite config used when scanning server files outside a running dev server.
+ */
+export type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
+  /** Vite server options override (e.g. `middlewareMode`) */
+  server?: Partial<ResolvedConfig["server"]>;
 };
 
 /**

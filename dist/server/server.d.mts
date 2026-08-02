@@ -5,6 +5,7 @@ import "hono";
 import "@hono/node-server";
 import "hono/factory";
 import "fastify";
+import "fastify-plugin";
 import "koa";
 //#region src/types.d.ts
 /**
@@ -84,6 +85,22 @@ type ClientFunctionWithOptions = ClientFunction & {
   options?: ServerFunctionOptions;
 };
 /**
+ * Internal plugin options accepted by `getClientModules`.
+ */
+interface RpcPluginOptionsInternal {
+  /** RPC endpoint prefix (e.g. "__rpc") */
+  rpcPrefix: string;
+  /** Framework adapter name */
+  adapter?: string | undefined;
+}
+/**
+ * Partial Vite config used when scanning server files outside a running dev server.
+ */
+type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
+  /** Vite server options override (e.g. `middlewareMode`) */
+  server?: Partial<ResolvedConfig["server"]>;
+};
+/**
  * Entry in the server functions map: registered name, client handler,
  * optional per-function options, and the original export name.
  */
@@ -129,13 +146,6 @@ declare const serverFunctionsMap: Map<string, ServerFnEntry>;
 //#endregion
 //#region src/scanForServerFiles.d.ts
 /**
- * Partial Vite config used when scanning server files outside a running dev server.
- */
-type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
-  /** Vite server options override (e.g. `middlewareMode`) */
-  server?: Partial<ResolvedConfig["server"]>;
-};
-/**
  * Scans `src/api/` for server function files (`server.ts`, `server.js`, `server.mjs`, `server.mts`)
  * and populates the global `serverFunctionsMap` with their exported functions.
  * Uses Vite's SSR module loading to resolve and execute each file.
@@ -157,15 +167,6 @@ declare const scanForServerFiles: (initialCfg?: ScanConfig, devServer?: ViteDevS
 declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: Partial<ServerFunctionOptions>): ClientFunction<TArgs, TResult>;
 //#endregion
 //#region src/getClientModules.d.ts
-/**
- * Internal plugin options accepted by `getClientModules`.
- */
-interface RpcPluginOptionsInternal {
-  /** RPC endpoint prefix (e.g. "__rpc") */
-  rpcPrefix: string;
-  /** Framework adapter name */
-  adapter?: string | undefined;
-}
 /**
  * Generates the complete client-side module bundle by iterating all registered server functions
  * and producing fetch-based stubs for each. The result is transformed by Vite (or Oxc) during

@@ -5,6 +5,7 @@ import "hono";
 import "@hono/node-server";
 import "hono/factory";
 import "fastify";
+import "fastify-plugin";
 import "koa";
 //#region src/types.d.ts
 /**

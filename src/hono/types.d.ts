@@ -1,5 +1,11 @@
 import type { MiddlewareHandler } from "hono";
+import type { IncomingMessage } from "node:http";
 import type { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+
+/**
+ * Node incoming message with an optional pre-parsed body.
+ */
+export type IncomingWithBody = IncomingMessage & { body?: unknown };
 
 /**
  * Hono-specific middleware options, constrained to the `"hono"` adapter.

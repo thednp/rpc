@@ -33,6 +33,14 @@ interface HonoMiddlewareHooks {
 //#endregion
 //#region src/fastify/types.d.ts
 /**
+ * `fastify-plugin` function type, used to type the wrapped export.
+ */
+type FastifyPlugin = typeof fp;
+/**
+ * Return type of `fastify-plugin` wrapping, matching the final plugin export.
+ */
+type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
+/**
  * Fastify middleware handler signature used by the RPC middleware.
  */
 interface FastifyMiddlewareHooks {
@@ -155,14 +163,6 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
 }
 //#endregion
 //#region src/fastify/plugin.d.ts
-/**
- * `fastify-plugin` function type, used to type the wrapped export.
- */
-type FastifyPlugin = typeof fp;
-/**
- * Return type of `fastify-plugin` wrapping, matching the final plugin export.
- */
-type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
 declare const rpcPlugin: RegisteredFastifyRPCPlugin;
 //#endregion
 export { type MiddlewareOptions, rpcPlugin as default };

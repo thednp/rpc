@@ -1,3 +1,4 @@
+import fp from "fastify-plugin";
 import { FastifyInstance, FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { ViteDevServer } from "vite";
@@ -7,6 +8,25 @@ import "@hono/node-server";
 import "hono/factory";
 import "koa";
 //#region src/fastify/types.d.ts
+/**
+ * Fastify RPC plugin signature: registers the middleware as a preHandler hook.
+ */
+type FastifyRPCPlugin = (fastify: FastifyInstance, initialOptions: Partial<MiddlewareOptions<"fastify">>, done: () => void) => void;
+/**
+ * `fastify-plugin` function type, used to type the wrapped export.
+ */
+type FastifyPlugin = typeof fp;
+/**
+ * Return type of `fastify-plugin` wrapping, matching the final plugin export.
+ */
+type RegisteredFastifyRPCPlugin = ReturnType<FastifyPlugin>;
+/**
+ * Options accepted by the Fastify RPC plugin (`fp()`-wrapped registration).
+ */
+type RpcFastifyPluginOptions = MiddlewareOptions<"fastify"> & {
+  /** Whether this is an RPC plugin registration */
+  isRPC: boolean;
+};
 /**
  * Fastify-specific middleware options, constrained to the `"fastify"` adapter.
  */
@@ -28,13 +48,6 @@ interface FastifyMiddlewareHooks {
    */
   handler: (req: FastifyRequest, res: FastifyReply, done: HookHandlerDoneFunction) => Promise<void>;
 }
-/**
- * Options accepted by the Fastify RPC plugin (`fp()`-wrapped registration).
- */
-type RpcFastifyPluginOptions = MiddlewareOptions<"fastify"> & {
-  /** Whether this is an RPC plugin registration */
-  isRPC: boolean;
-};
 //#endregion
 //#region src/fastify/createMiddleware.d.ts
 /**
@@ -106,5 +119,5 @@ declare function attachVite(app: FastifyInstance, vite: ViteDevServer): void;
  */
 declare const readBody: (req: FastifyRequest) => Promise<BodyResult>;
 //#endregion
-export { type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody };
+export { type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type FastifyPlugin, type FastifyRPCPlugin, type RegisteredFastifyRPCPlugin, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody };
 //# sourceMappingURL=fastify.d.mts.map

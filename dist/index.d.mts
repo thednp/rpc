@@ -1,4 +1,4 @@
-import { Connect, Plugin } from "vite";
+import { Connect, Plugin, ResolvedConfig } from "vite";
 import { MiddlewareOptions as MiddlewareOptions$1, RpcPluginOptions as RpcPluginOptions$1 } from "@thednp/rpc";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { NextFunction, Request, Response } from "express";
@@ -6,6 +6,7 @@ import { MiddlewareHandler } from "hono";
 import "@hono/node-server";
 import "hono/factory";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
+import "fastify-plugin";
 import { Context, Next } from "koa";
 //#region src/express/types.d.ts
 /**
@@ -233,6 +234,22 @@ type ClientFunctionWithOptions = ClientFunction & {
   options?: ServerFunctionOptions;
 };
 /**
+ * Internal plugin options accepted by `getClientModules`.
+ */
+interface RpcPluginOptionsInternal {
+  /** RPC endpoint prefix (e.g. "__rpc") */
+  rpcPrefix: string;
+  /** Framework adapter name */
+  adapter?: string | undefined;
+}
+/**
+ * Partial Vite config used when scanning server files outside a running dev server.
+ */
+type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
+  /** Vite server options override (e.g. `middlewareMode`) */
+  server?: Partial<ResolvedConfig["server"]>;
+};
+/**
  * Entry in the server functions map: registered name, client handler,
  * optional per-function options, and the original export name.
  */
@@ -362,5 +379,5 @@ declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
  */
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin<unknown>;
 //#endregion
-export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
+export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map

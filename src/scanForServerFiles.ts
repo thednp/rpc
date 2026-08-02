@@ -1,5 +1,5 @@
-import type { ResolvedConfig, ViteDevServer } from "vite";
-import type { ClientFunctionWithOptions } from "./types.d.ts";
+import type { ViteDevServer } from "vite";
+import type { ClientFunctionWithOptions, ScanConfig } from "./types.d.ts";
 import { createServer } from "vite";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,14 +7,6 @@ import process from "node:process";
 
 import { serverFunctionsMap } from "./functionsMap.ts";
 import { ERROR_LOADING_FILE, NO_SERVER_FUNCTION_FOUND } from "./constants.ts";
-
-/**
- * Partial Vite config used when scanning server files outside a running dev server.
- */
-type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
-  /** Vite server options override (e.g. `middlewareMode`) */
-  server?: Partial<ResolvedConfig["server"]>;
-};
 
 let isScanned = false;
 /**

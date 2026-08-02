@@ -2,11 +2,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
-import { createMiddleware } from "hono/factory";
 import type { ViteDevServer } from "vite";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { BodyResult } from "../types.d.ts";
+import type { IncomingWithBody } from "./types.d.ts";
+import { createMiddleware } from "hono/factory";
+import { createRPCMiddleware } from "./createMiddleware.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to a Hono app.
@@ -93,8 +94,6 @@ export const readBody = async (
 ): Promise<BodyResult> => {
   const contentType = c.req.header("content-type")?.toLowerCase() || "";
   const isJSON = contentType.includes("json");
-  /** Node incoming message with an optional pre-parsed body */
-  type IncomingWithBody = IncomingMessage & { body?: unknown };
   const incoming = (c.env as HttpBindings).incoming as
     | IncomingWithBody
     | undefined;

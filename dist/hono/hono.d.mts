@@ -1,12 +1,20 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
 import { Context, Hono, MiddlewareHandler } from "hono";
+import { IncomingMessage } from "node:http";
 import { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { HttpBindings } from "@hono/node-server";
 import { ViteDevServer } from "vite";
 import "express";
 import "fastify";
+import "fastify-plugin";
 import "koa";
 //#region src/hono/types.d.ts
+/**
+ * Node incoming message with an optional pre-parsed body.
+ */
+type IncomingWithBody = IncomingMessage & {
+  body?: unknown;
+};
 /**
  * Hono-specific middleware options, constrained to the `"hono"` adapter.
  */
@@ -106,5 +114,5 @@ declare const viteMiddleware: (vite: ViteDevServer) => ReturnType<typeof createM
  */
 declare const readBody: (c: Context) => Promise<BodyResult>;
 //#endregion
-export { type HonoMiddlewareFn, type HonoMiddlewareHooks, type HonoMiddlewareOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, viteMiddleware };
+export { type HonoMiddlewareFn, type HonoMiddlewareHooks, type HonoMiddlewareOptions, type IncomingWithBody, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, viteMiddleware };
 //# sourceMappingURL=hono.d.mts.map
