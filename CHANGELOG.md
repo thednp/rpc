@@ -5,7 +5,7 @@
 ### Chores
 
 - Bump version to `0.0.11`
-- Publish workflow: replace `npm publish` + raw well-formed PUT fallback with a single `npm stage publish` step. Staging requires no 2FA, uses the OIDC Trusted Publisher (no long-lived token), and avoids the masked-403 `npm publish` framing entirely; a maintainer approves the staged version with 2FA on npmjs.com or via `npm stage approve`
+- Publish workflow: use npm only
 
 ## [0.0.10] - 2026-08-02
 
