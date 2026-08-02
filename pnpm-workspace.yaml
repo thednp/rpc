@@ -1,3 +1,5 @@
 packages:
   - "."
   - "examples/*"
+minimumReleaseAgeExclude:
+  - '@thednp/rpc@0.0.4'

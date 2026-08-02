@@ -30,6 +30,16 @@ type JsonArray = JsonValue[];
  * Any JSON-serializable value: primitive, array, or object.
  */
 type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+/**
+ * Return shape of `innerModule`: a promise of the response data plus
+ * a `cancel` function to abort the underlying fetch request.
+ */
+type InnerModReturn = {
+  /** Promise resolving to the server response data */
+  data: Promise<JsonValue | void>;
+  /** Aborts the in-flight request with the given reason */
+  cancel: (reason: string) => void;
+};
 //#endregion
 //#region src/helpers.d.ts
 /**
@@ -41,16 +51,6 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * @returns The response data, or void on cancellation
  */
 declare const handleResponse: (response: Response) => Promise<JsonValue | void>;
-/**
- * Return shape of `innerModule`: a promise of the response data plus
- * a `cancel` function to abort the underlying fetch request.
- */
-type InnerModReturn = {
-  /** Promise resolving to the server response data */
-  data: Promise<JsonValue | void>;
-  /** Aborts the in-flight request with the given reason */
-  cancel: (reason: string) => void;
-};
 /**
  * Creates an AbortController-bound fetch call for a single RPC function.
  * Used by the auto-generated client modules to issue HTTP requests with cancellation support.

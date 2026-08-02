@@ -1,5 +1,5 @@
 /** @module Client-side helper utilities. Exports `handleResponse` for processing fetch responses and `innerModule` for creating AbortController-bound RPC fetch calls. */
-import type { Credentials, JsonValue, InnerModReturn } from "./types.d.ts";
+import type { Credentials, InnerModReturn, JsonValue } from "./types.d.ts";
 import { FETCH_ERROR_PREFIX, REQUEST_CANCELLED } from "./constants.ts";
 
 /**
@@ -23,8 +23,6 @@ export const handleResponse = async (
   if (result.error) throw new Error(result.error);
   return result.data;
 };
-
-
 
 /**
  * Creates an AbortController-bound fetch call for a single RPC function.

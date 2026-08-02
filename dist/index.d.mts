@@ -326,6 +326,16 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    */
   handler?: FrameworkHooks[A]["handler"];
 }
+/**
+ * Return shape of `innerModule`: a promise of the response data plus
+ * a `cancel` function to abort the underlying fetch request.
+ */
+type InnerModReturn = {
+  /** Promise resolving to the server response data */
+  data: Promise<JsonValue | void>;
+  /** Aborts the in-flight request with the given reason */
+  cancel: (reason: string) => void;
+};
 //#endregion
 //#region src/index.d.ts
 /**
@@ -352,5 +362,5 @@ declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
  */
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin<unknown>;
 //#endregion
-export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
+export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map
