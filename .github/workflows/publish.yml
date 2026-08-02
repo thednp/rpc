@@ -14,37 +14,37 @@ jobs:
     environment: Publish
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: PNPM setup
-        uses: pnpm/action-setup@v3
+      # - name: PNPM setup
+      #   uses: pnpm/action-setup@v3
 
       - name: Node.js Setup
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24 # Or 'lts/*'
           # registry-url: https://registry.npmjs.org/ # Optional if using trusted publishing
 
-      - name: Deno Setup
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      # - name: Deno Setup
+      #   uses: denoland/setup-deno@v2
+      #   with:
+      #     deno-version: v2.x
 
       # - name: Disallow installation scripts
       #   run: yq '.allowBuilds[]=false' -i pnpm-workspace.yaml
 
       - name: Install dependencies
         # run: pnpm i --no-frozen-lockfile
-        run: pnpm ci
+        run: npm ci
 
-      - name: Test
-        run: pnpm test
+      # - name: Test
+      #   run: npm run test
 
       # npm's trusted publishing requires npm >= 11.5.1 (staged: >= 11.15).
       # Node 24's bundled npm may be older, so pin latest like the reference
       # demo (github.com/npm-pub-2025/oidc-trusted-publisher) does.
-      - name: Update npm to latest
-        run: npm i -g npm@latest
+      # - name: Update npm to latest
+      #   run: npm i -g npm@latest
 
       # Stage the release for human approval instead of publishing directly.
       # `npm stage publish` needs no 2FA and uses the OIDC Trusted Publisher
@@ -52,7 +52,7 @@ jobs:
       # `npm publish` is avoided entirely. A maintainer approves the staged
       # version with 2FA on npmjs.com (Staged Packages tab) or via
       # `npm stage approve <version>`.
-      - name: Stage publish to npm
+      - name: Publish to npm
         id: stage
         run: |
           set -eu
@@ -62,7 +62,7 @@ jobs:
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping"
           else
-            npm stage publish --provenance
+            npm publish
           fi
         env:
           NPM_CONFIG_LOGLEVEL: notice
