@@ -11,7 +11,7 @@ jobs:
       contents: read # For checkout
       id-token: write # The OIDC ID token is used for authentication with JSR / npm trusted publishing.
 
-    # environment: Publish
+    environment: Publish
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -58,12 +58,12 @@ jobs:
           set -eu
           V=$(node -p "require('./package.json').version")
           NAME=$(node -p "require('./package.json').name")
-          # skip if the exact version is already published on the registry
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping"
           else
-            npm publish
+            env -u NODE_AUTH_TOKEN npm publish
           fi
+
         env:
           NPM_CONFIG_LOGLEVEL: notice
 
