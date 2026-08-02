@@ -23,7 +23,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "provenance": false
+    "provenance": true
   },
   "type": "module",
   "types": "./dist/index.d.mts",
@@ -68,6 +68,7 @@
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "pnpm up:examples && pnpm up:root",
     "audit:src": "node scripts/audit-src.js",
+    "release": "node scripts/release.js",
     "prepareOnly": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "prepublishOnly_": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "build": "tsdown"
