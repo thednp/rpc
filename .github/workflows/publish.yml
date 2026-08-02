@@ -2,6 +2,11 @@ name: Publish to npm & jsr
 
 on:
   workflow_dispatch:
+    inputs:
+      debug_403:
+        description: Run the CLI-403 request capture + header bisect diagnostic steps
+        type: boolean
+        default: false
   release:
     types: [published] # Triggers on GitHub Release creation (with tag)
 jobs:
@@ -40,8 +45,9 @@ jobs:
       - name: Test
         run: pnpm test
 
-      # Attempt the canonical `npm publish` first. Its masked 403 (if any)
-      # surfaces in the verbose log; if it fails, the raw PUT below publishes.
+      # Attempt the canonical `npm publish` with provenance (the OIDC trusted
+      # publishing path). Its masked 403 (if any) surfaces in the verbose log;
+      # if it fails, the raw PUT below publishes.
       - name: Publish to npm
         id: publish
         continue-on-error: true # fall back to raw publish below on failure
@@ -53,10 +59,11 @@ jobs:
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping CLI publish"
           else
-            npm publish --access public --provenance=false
+            npm publish --access public --provenance
           fi
         env:
           NPM_CONFIG_LOGLEVEL: verbose
+          NPM_CONFIG_PROVENANCE: 'true'
 
       # Capture the exact request bytes the npm CLI sends during a masked 403.
       # Injects an in-process recorder via NODE_OPTIONS; no MITM/proxy needed.
@@ -64,7 +71,7 @@ jobs:
       # "Analyze CLI 403 dump" step for later investigation.
       - name: Capture CLI 403 (diagnostic)
         id: capture
-        if: steps.publish.outcome == 'failure'
+        if: steps.publish.outcome == 'failure' && github.event.inputs.debug_403 == 'true'
         continue-on-error: true
         run: |
           set -eu
@@ -117,7 +124,7 @@ jobs:
       # rejects, isolating the CLI 403 trigger.
       - name: Bisect CLI 403 header (diagnostic)
         id: bisect
-        if: steps.publish.outcome == 'failure'
+        if: steps.publish.outcome == 'failure' && github.event.inputs.debug_403 == 'true'
         continue-on-error: true
         run: |
           set -eu

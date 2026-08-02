@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.7] - 2026-08-02
+
+### Chores
+
+- Bump version to `0.0.7`
+- Publish workflow: attempt plain `npm publish --provenance` (OIDC trusted publishing with provenance enabled) before falling back to the raw well-formed PUT; gate the CLI-403 diagnostic steps (request capture + header bisect) behind a `debug_403` workflow_dispatch input so release runs stay clean
+
 ## [0.0.6] - 2026-08-02
 
 ### Docs
