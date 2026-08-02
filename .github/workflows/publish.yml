@@ -44,7 +44,50 @@ jobs:
         run: pnpm test
 
 
+      - name: Diagnose PUT (temporary)
+        id: diagnose
+        run: |
+          set -eu
+          REG=https://registry.npmjs.org
+          echo "::group::Mint GitHub ID token"
+          IDURL="$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org"
+          IDTOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$IDURL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).value))")
+          echo "id_token_len=${#IDTOKEN}"
+          echo "::endgroup::"
+
+          echo "::group::Exchange for npm token"
+          RESP=$(curl -fsS -X POST -H "Authorization: Bearer $IDTOKEN" "$REG/-/npm/v1/oidc/token/exchange/package/@thednp%2frpc" -d "")
+          NPMTOK=$(echo "$RESP" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).token))")
+          echo "npm_token_len=${#NPMTOK}"
+          echo "::endgroup::"
+
+          echo "::group::npm pack"
+          TARBALL=$(npm pack --silent)
+          echo "tarball=$TARBALL"
+          echo "::endgroup::"
+
+          echo "::group::Raw PUT"
+          CODE=$(curl -sS -o /tmp/resp.body -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $NPMTOK" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@$TARBALL" \
+            "$REG/@thednp%2frpc")
+          echo "HTTP_STATUS=$CODE"
+          echo "--- body ---"
+          cat /tmp/resp.body
+          echo
+          echo "::endgroup::"
+
+          if [ "$CODE" = "200" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "RAW PUT SUCCEEDED - the real create/update endpoint accepted the package."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "RAW PUT REJECTED - the real registry reason is in the body above."
+          fi
+
       - name: Publish to npm
+        if: steps.diagnose.outputs.published != 'true'
         # run: pnpm publish --provenance --no-git-checks --access public
         # run: pnpm publish --provenance --no-git-checks --access public
         run: npm publish --provenance --access public
