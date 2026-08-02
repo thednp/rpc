@@ -263,4 +263,4 @@ jobs:
             echo "::notice::$NAME@$V already published on jsr; skipping"
             exit 0
           fi
-          deno publish --allow-slow-types
+          deno publish

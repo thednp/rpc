@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.9] - 2026-08-02
+
+### Docs
+
+- Add `experiments/publish-research/` — a research corpus on the npm-pub-2025 demo organization (npm's own local / CI-2FA / OIDC Trusted Publisher / reusable-workflow reference implementations) plus `our-journey.md` documenting `@thednp/rpc`'s masked-403 vs raw-PUT investigation, the header bisect results, and the publish.yml evolution
+
+### Chores
+
+- Bump version to `0.0.9`
+- Publish workflow: drop `--allow-slow-types` from the jsr publish step (verified clean via `deno publish --dry-run`, no slow-types diagnostics)
+
 ## [0.0.8] - 2026-08-02
 
 ### Chores
