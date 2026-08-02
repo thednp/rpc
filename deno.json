@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "keywords": [
@@ -63,7 +63,7 @@
     "up:examples": "pnpm up -r --latest --filter \"./examples/*\" && pnpm ci -r --filter \"./examples/*\"",
     "up:root": "pnpm up --latest",
     "up:deno": "deno update && deno -A scripts/update-deno.js",
-    "upd": "deno task up:examples && deno task up:root",
+    "upd": "deno task up:examples && deno task up:root && deno task up:deno",
     "audit:src": "node scripts/audit-src.js",
     "prepublishOnly": "deno task upd && deno task lint && pnpm ci && deno task format && deno task audit:src && deno task build",
     "build": "tsdown"

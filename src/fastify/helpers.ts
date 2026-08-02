@@ -3,8 +3,8 @@ import type { FastifyRequest } from "fastify";
 import type { ViteDevServer } from "vite";
 import type { FastifyInstance } from "fastify";
 import type { Buffer } from "node:buffer";
-import fastifyRpcPlugin from "./plugin.ts";
 import type { BodyResult, JsonValue } from "../types.d.ts";
+import fastifyRpcPlugin from "./plugin.ts";
 
 /**
  * Convenience function to load RPC config and register the RPC plugin to a Fastify instance.

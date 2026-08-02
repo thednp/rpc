@@ -18,6 +18,8 @@ The server functions run **isomorphically** within any Vite powered runtime.
 
 Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, some are vendor locked, some even allow you to blend in with your client code (via `"use server"` directive), for sure they are powerful and work well, they provide excellent DX, but complexity always comes with its own drawbacks.
 
+`@thednp/rpc` carves out the niche that wants to do RPC **without the weight of an entire framework**. If your app is a Vite site, a static SPA, or a small server powered by a single middleware — but you still want typed, cancellable, server-only functions callable from the client — you shouldn't have to adopt a full meta-framework, a full-stack router, or a build-time convention just to bridge the two. This plugin gives you that bridge alone: no framework to learn, no runtime to adopt, no vendor to sign up with.
+
 ### Simplicity is best
 
 `@thednp/rpc` takes simplicity very seriously:
