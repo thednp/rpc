@@ -69,8 +69,8 @@ jobs:
         continue-on-error: true
         run: |
           LOG=$(ls -1t /home/runner/.npm/_logs/*-debug-0.log 2>/dev/null | head -1)
-          echo "===== npm debug: $LOG ====="
-          [ -n "$LOG" ] && sed -n '28,58p' "$LOG"
+          echo "===== npm debug: $LOG (npm $(npm -v)) ====="
+          [ -n "$LOG" ] && grep -aiE 'oidc|token|PUT |fetch (GET|POST|PUT)|visibility|proven|403|authori|deni|E403|error' "$LOG" | tail -n 120
 
       - name: Publish to jsr
         run: |
