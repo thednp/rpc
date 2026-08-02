@@ -62,7 +62,7 @@ jobs:
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping"
           else
-            npm stage publish
+            npm stage publish --provenance
           fi
         env:
           NPM_CONFIG_LOGLEVEL: notice
