@@ -22,7 +22,8 @@
     "url": "git+https://github.com/thednp/rpc.git"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "type": "module",
   "types": "./dist/index.d.mts",
@@ -68,7 +69,7 @@
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "pnpm up:examples && pnpm up:root",
     "audit:src": "node scripts/audit-src.js",
-    "prepublishOnly": "pnpm upd && pnpm lint && pnpm ci && pnpm format && pnpm audit:src && pnpm build",
+    "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "build": "tsdown"
   },
   "dependencies": {
