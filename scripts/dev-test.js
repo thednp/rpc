@@ -44,6 +44,10 @@ const WARMUP_DELAY = 500;
 const RPC_DEP_NAME = "@thednp/rpc";
 const RPC_LINK = "link:../..";
 
+// Default @thednp/rpc version, read from the root package.json at runtime
+// so restoreDeps() always falls back to the latest published version.
+const RPC_VERSION = `^${JSON.parse(await fs.readFile(path.join(cwd, "package.json"), "utf-8")).version}`;
+
 const PREFIX_MAP = {
   express: "__A_server",
   fastify: "_server",
@@ -96,12 +100,13 @@ async function restoreDeps(saved) {
   for (const { example, file, original } of saved) {
     const { pkg } = await readExamplePkg(example);
     if (original === null) {
-      delete pkg.dependencies?.[RPC_DEP_NAME];
+      // Default to the latest version from the root package.json
+      pkg.dependencies[RPC_DEP_NAME] = RPC_VERSION;
     } else {
       pkg.dependencies[RPC_DEP_NAME] = original;
     }
     await writeExamplePkg(file, pkg);
-    console.log(`[${example}] Restored ${RPC_DEP_NAME} to ${original}`);
+    console.log(`[${example}] Restored ${RPC_DEP_NAME} to ${pkg.dependencies[RPC_DEP_NAME]}`);
   }
 }
 

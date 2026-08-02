@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # For checkout
-      id-token: write # The OIDC ID token is used for authentication with JSR.
+      id-token: write # The OIDC ID token is used for authentication with JSR / npm trusted publishing.
 
     environment: Publish
     steps:
@@ -37,28 +37,35 @@ jobs:
         # run: pnpm i --no-frozen-lockfile
         run: pnpm ci
 
-      # - name: Build (if needed)
-      #   run: pnpm build # Later
-
       - name: Test
         run: pnpm test
 
+      # Attempt the canonical `npm publish` first. Its masked 403 (if any)
+      # surfaces in the verbose log; if it fails, the raw PUT below publishes.
+      - name: Publish to npm
+        id: publish
+        continue-on-error: true # fall back to raw publish below on failure
+        run: npm publish --access public --provenance=false
+        env:
+          NPM_CONFIG_LOGLEVEL: verbose
 
-      - name: Diagnose PUT (temporary)
-        id: diagnose
+      # Raw well-formed publish PUT with the OIDC-minted npm token.
+      # Proven to publish (200 {"success":true}) when the CLI PUT 403'd.
+      # Only used as a safety net so the release still goes out.
+      - name: Publish to npm (raw PUT fallback)
+        id: raw
+        if: steps.publish.outcome == 'failure'
         run: |
           set -eu
           REG=https://registry.npmjs.org
           echo "::group::Mint GitHub ID token"
           IDURL="$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org"
           IDTOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$IDURL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).value))")
-          echo "id_token_len=${#IDTOKEN}"
           echo "::endgroup::"
 
           echo "::group::Exchange for npm token"
           RESP=$(curl -fsS -X POST -H "Authorization: Bearer $IDTOKEN" "$REG/-/npm/v1/oidc/token/exchange/package/@thednp%2frpc" -d "")
           NPMTOK=$(echo "$RESP" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).token))")
-          echo "npm_token_len=${#NPMTOK}"
           echo "::endgroup::"
 
           echo "::group::npm pack + build publish doc"
@@ -98,41 +105,25 @@ jobs:
             };
             fs.writeFileSync('/tmp/pubdoc.json', JSON.stringify(body));
           NODE
-          echo "doc_bytes=$(wc -c < /tmp/pubdoc.json)"
           echo "::endgroup::"
 
           echo "::group::Raw PUT (well-formed publish doc)"
-          curl -sS -D /tmp/hdr -o /tmp/body -w 'HTTP_STATUS=%{http_code}\n' -X PUT \
+          CODE=$(curl -sS -D /tmp/hdr -o /tmp/body -w '%{http_code}' -X PUT \
             -H "Authorization: Bearer $NPMTOK" \
             -H "Content-Type: application/json" \
             --data-binary "@/tmp/pubdoc.json" \
-            "$REG/@thednp%2frpc"
-          echo "--- response headers ---"
+            "$REG/@thednp%2frpc")
           cat /tmp/hdr
           echo "--- response body ---"
           cat /tmp/body
           echo
-          echo "::endgroup::"
-
-          CODE=$(head -1 /tmp/hdr | awk '{print $2}')
           echo "status_code=$CODE"
-          if [ "$CODE" = "200" ]; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "RAW PUT SUCCEEDED - the publish document was accepted."
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-            echo "RAW PUT REJECTED - the registry reason is in the body above."
+          if [ "$CODE" != "200" ]; then
+            echo "::error::Raw publish rejected with HTTP $CODE"
+            exit 1
           fi
-
-      - name: Publish to npm
-        if: always()
-        # run: pnpm publish --provenance --no-git-checks --access public
-        # run: pnpm publish --provenance --no-git-checks --access public
-        run: npm publish --access public --provenance=false
-        env:
-          # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_LOGLEVEL: verbose
+          echo "raw publish OK"
+          echo "::endgroup::"
 
       - name: Publish to jsr
         run: deno publish --allow-slow-types

@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -23,14 +23,13 @@
   },
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "provenance": false
   },
   "type": "module",
   "types": "./dist/index.d.mts",
   "sideEffects": false,
   "files": [
     "dist",
-    "wiki",
     "README.md",
     "AGENTS.md",
     "CLAUDE.md",
@@ -69,7 +68,7 @@
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "pnpm up:examples && pnpm up:root",
     "audit:src": "node scripts/audit-src.js",
-    "prepublishOnly": "pnpm lint && pnpm format && pnpm audit:src && pnpm build",
+    "prepublishOnly": "pnpm upd && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "build": "tsdown"
   },
   "dependencies": {
