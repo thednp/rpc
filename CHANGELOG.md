@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.8] - 2026-08-02
+
+### Chores
+
+- Bump version to `0.0.8`
+- Publish workflow: move the header bisect diagnostic after the raw PUT fallback so probes always replay against the already-published version (never publish a fresh one); add a jsr version guard so release-triggered re-runs are no-ops
+
 ## [0.0.7] - 2026-08-02
 
 ### Chores
