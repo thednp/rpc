@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@hono/node-server': ^2.0.5
-
 importers:
 
   .:
@@ -126,7 +123,7 @@ importers:
   examples/hono:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.0.5
+        specifier: ^2.0.12
         version: 2.0.12(hono@4.12.33)
       '@thednp/rpc':
         specifier: ^0.0.1
@@ -342,6 +339,12 @@ packages:
 
   '@hapi/bourne@3.0.0':
     resolution: {integrity: sha512-Waj1cwPXJDucOib4a3bAISsKJVb15MKi9IvmTI/7ssVEm6sywXGjVJDhl6/umt1pK1ZS7PacXU3A1PmFKHEZ2w==}
+
+  '@hono/node-server@1.19.17':
+    resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
 
   '@hono/node-server@2.0.12':
     resolution: {integrity: sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg==}
@@ -2243,13 +2246,17 @@ snapshots:
 
   '@hapi/bourne@3.0.0': {}
 
+  '@hono/node-server@1.19.17(hono@4.12.33)':
+    dependencies:
+      hono: 4.12.33
+
   '@hono/node-server@2.0.12(hono@4.12.33)':
     dependencies:
       hono: 4.12.33
 
   '@hono/vite-dev-server@0.26.1(hono@4.12.33)':
     dependencies:
-      '@hono/node-server': 2.0.12(hono@4.12.33)
+      '@hono/node-server': 1.19.17(hono@4.12.33)
       hono: 4.12.33
       minimatch: 9.0.9
 

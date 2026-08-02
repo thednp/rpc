@@ -37,7 +37,8 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        # run: pnpm install --no-frozen-lockfile
+        run: pnpm install
 
       # - name: Install doc dependencies
       #   run: cd demo && pnpm install --no-frozen-lockfile
