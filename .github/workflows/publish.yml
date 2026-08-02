@@ -2,11 +2,6 @@ name: Publish to npm & jsr
 
 on:
   workflow_dispatch:
-    inputs:
-      debug_403:
-        description: Run the CLI-403 request capture + header bisect diagnostic steps
-        type: boolean
-        default: false
   release:
     types: [published] # Triggers on GitHub Release creation (with tag)
 jobs:
@@ -45,6 +40,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # npm's trusted publishing requires npm >= 11.5.1 (staged: >= 11.15).
+      # Node 24's bundled npm may be older, so pin latest like the reference
+      # demo (github.com/npm-pub-2025/oidc-trusted-publisher) does.
+      - name: Update npm to latest
+        run: npm i -g npm@latest
+
       # Attempt the canonical `npm publish` with provenance (the OIDC trusted
       # publishing path). Its masked 403 (if any) surfaces in the verbose log;
       # if it fails, the raw PUT below publishes.
@@ -65,63 +66,9 @@ jobs:
           NPM_CONFIG_LOGLEVEL: verbose
           NPM_CONFIG_PROVENANCE: 'true'
 
-      # Capture the exact request bytes the npm CLI sends during a masked 403.
-      # Injects an in-process recorder via NODE_OPTIONS; no MITM/proxy needed.
-      # The PUT will 403 again, so nothing is published; results land in the
-      # "Analyze CLI 403 dump" step for later investigation.
-      - name: Capture CLI 403 (diagnostic)
-        id: capture
-        if: steps.publish.outcome == 'failure' && github.event.inputs.debug_403 == 'true'
-        continue-on-error: true
-        run: |
-          set -eu
-          cp scripts/npm-request-recorder.js /tmp/npm-request-recorder.js
-          rm -f /tmp/npm-req-dump.log /tmp/npm-req-recorder-ok
-          set +e
-          NODE_OPTIONS="--import /tmp/npm-request-recorder.js" \
-            npm publish --access public --provenance=false \
-            --loglevel http 2>/tmp/npm-capture-err.log
-          CODE=$?
-          set -e
-          echo "capture_exit=$CODE"
-          echo "--- recorded requests ---"
-          node - <<'NODE'
-            const fs = require('fs');
-            const p = '/tmp/npm-req-dump.log';
-            if (fs.existsSync(p)) {
-              for (const line of fs.readFileSync(p, 'utf8').trim().split('\n')) {
-                const e = JSON.parse(line);
-                if (e.kind === 'request') {
-                  console.log('REQUEST', e.method, e.url);
-                  console.log('headers:', JSON.stringify(e.headers, null, 2));
-                  console.log('bodyLen:', e.body.length);
-                } else {
-                  console.log('RESPONSE', e.statusCode, 'headers:', JSON.stringify(e.headers));
-                  console.log('body:', String(e.body).slice(0, 1000));
-                }
-              }
-            } else {
-              console.log('no dump file');
-            }
-          NODE
-          echo "--- full decoded 403 dump (if any) ---"
-          node - <<'NODE'
-            const fs = require('fs');
-            const p = '/tmp/npm-req-dump.log';
-            if (fs.existsSync(p)) {
-              const lines = fs.readFileSync(p, 'utf8').trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-              for (const e of lines) {
-                if (e.kind === 'response' && e.statusCode === 403) {
-                  console.log(e.body);
-                }
-              }
-            }
-          NODE
-
       # Raw well-formed publish PUT with the OIDC-minted npm token.
       # Proven to publish (200 {"success":true}) when the CLI PUT 403'd.
-      # Only used as a safety net so the release still goes out.
-      - name: Publish to npm (raw PUT fallback)
+      - name: Publish to npm (raw PUT)
         id: raw
         if: steps.publish.outcome == 'failure'
         run: |
@@ -193,62 +140,6 @@ jobs:
           fi
           echo "raw publish OK"
           echo "::endgroup::"
-
-      # Header bisect: replay the raw PUT (against the already-published
-      # version, so nothing new is published) adding one suspect CLI header at
-      # a time. The response body names which header the registry rejects,
-      # isolating the CLI 403 trigger.
-      - name: Bisect CLI 403 header (diagnostic)
-        id: bisect
-        if: steps.publish.outcome == 'failure' && github.event.inputs.debug_403 == 'true'
-        continue-on-error: true
-        run: |
-          set -eu
-          REG=https://registry.npmjs.org
-          IDURL="$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org"
-          IDTOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$IDURL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).value))")
-          RESP=$(curl -fsS -X POST -H "Authorization: Bearer $IDTOKEN" "$REG/-/npm/v1/oidc/token/exchange/package/@thednp%2frpc" -d "")
-          NPMTOK=$(echo "$RESP" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).token))")
-          TARBALL=$(npm pack --silent --pack-destination /tmp)
-          REG="$REG" TARBALL="$TARBALL" node <<'NODE'
-            const fs = require('fs');
-            const REG = process.env.REG;
-            const tb = process.env.TARBALL;
-            const buf = fs.readFileSync('/tmp/' + tb);
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            const V = pkg.version;
-            const name = pkg.name;
-            const body = {
-              _id: name, name,
-              description: pkg.description || '',
-              'dist-tags': { latest: V },
-              versions: { [V]: { ...pkg, _id: `${name}@${V}`, dist: { tarball: `${REG}/${name}/-/${tb}` } } },
-              access: 'public',
-              _attachments: { [tb]: { content_type: 'application/octet-stream', data: buf.toString('base64') } },
-            };
-            fs.writeFileSync('/tmp/pubdoc.json', JSON.stringify(body));
-          NODE
-          probe() {
-            local label="$1"; shift
-            echo "== probe: $label =="
-            curl -sS --compressed -D - -o /tmp/probe-body -w '%{http_code}' -X PUT \
-              -H "Authorization: Bearer $NPMTOK" \
-              -H "Content-Type: application/json" \
-              "$@" \
-              --data-binary "@/tmp/pubdoc.json" \
-              "$REG/@thednp%2frpc" > /tmp/probe-code 2>/dev/null
-            echo "--- headers ---"
-            cat /tmp/probe-code
-            echo
-            echo "--- body ---"
-            head -c 2000 /tmp/probe-body
-            echo; echo
-          }
-          probe "baseline (no extra headers)"
-          probe "npm-auth-type: web" -H "npm-auth-type: web"
-          probe "npm-command: publish" -H "npm-command: publish"
-          probe "both web + publish" -H "npm-auth-type: web" -H "npm-command: publish"
-          probe "npm user-agent" -H "user-agent: npm/11.16.0 node/v24.18.0 linux x64 workspaces/false ci/github-actions"
 
       - name: Publish to jsr
         run: |
