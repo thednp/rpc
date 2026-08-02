@@ -61,6 +61,7 @@ jobs:
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping"
           else
+            env -u NODE_AUTH_TOKEN npm login --auth-type=oidc
             env -u NODE_AUTH_TOKEN npm publish
           fi
 
