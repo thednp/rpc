@@ -55,11 +55,10 @@ jobs:
           if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
             echo "::notice::$NAME@$V already published on npm; skipping"
           else
-            # auth-type=legacy keeps the OIDC-exchanged token on the classic
-            # PUT path (like a raw `Authorization: Bearer` upload); the default
-            # `web` auth routes the same token through the "publish authorize"
-            # endpoint, which the registry rejects with a masked 403.
-            env -u NODE_AUTH_TOKEN npm publish --auth-type=legacy
+            # OIDC token exchange confirmed: POST /-/npm/v1/oidc/token/exchange
+            # returns 201 with writes set. Plain `npm publish` relies on npm's
+            # auto-detected trusted publisher; no token or auth-type flags.
+            env -u NODE_AUTH_TOKEN npm publish
           fi
 
         env:
@@ -71,7 +70,7 @@ jobs:
         run: |
           LOG=$(ls -1t /home/runner/.npm/_logs/*-debug-0.log 2>/dev/null | head -1)
           echo "===== npm debug: $LOG ====="
-          [ -n "$LOG" ] && grep -aiE 'PUT |fetch .* 4|oidc|authori|token|403|error' "$LOG" | tail -n 80
+          [ -n "$LOG" ] && sed -n '28,58p' "$LOG"
 
       - name: Publish to jsr
         run: |
