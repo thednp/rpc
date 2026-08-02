@@ -10,7 +10,7 @@
     "start": "vite preview"
   },
   "dependencies": {
-    "@thednp/rpc": "^0.0.4",
+    "@thednp/rpc": "^0.0.5",
     "vite": "^8.2.0"
   },
   "devDependencies": {

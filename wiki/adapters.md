@@ -54,6 +54,14 @@ if (isDev) {
 app.listen(3000);
 ```
 
+### Body Size Limits
+
+Register the body parser with a size limit before mounting RPC (see [examples/express/server.js](../examples/express/server.js)):
+
+```ts
+app.use(express.json({ limit: 1024 * 1024 })); // 1 MB
+```
+
 ## Fastify
 
 ### Installation
@@ -89,6 +97,14 @@ if (isDev) {
 }
 
 fastify.listen({ port: 3000 });
+```
+
+### Body Size Limits
+
+Set `bodyLimit` when creating the Fastify instance (see [examples/fastify/server.js](../examples/fastify/server.js)):
+
+```ts
+const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 }); // 1 MB
 ```
 
 ## Hono
@@ -128,6 +144,16 @@ if (isDev) {
 export default app;
 ```
 
+### Body Size Limits
+
+Add the built-in `bodyLimit` middleware from `hono/body-limit` (see [examples/hono/server.js](../examples/hono/server.js)):
+
+```ts
+import { bodyLimit } from 'hono/body-limit';
+
+app.use('*', bodyLimit({ maxSize: 1024 * 1024 })); // 1 MB
+```
+
 ## Koa
 
 ### Installation
@@ -158,7 +184,7 @@ const app = new Koa();
 const isDev = process.env.NODE_ENV !== 'production';
 
 // Body parser must come before RPC middleware
-app.use(koaBody({ jsonLimit: 1024 * 1024 }));
+app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1 MB
 
 if (isDev) {
   const vite = await createServer({ server: { middlewareMode: true } });
@@ -169,4 +195,12 @@ if (isDev) {
 }
 
 app.listen(3000);
+```
+
+### Body Size Limits
+
+Set `jsonLimit` on `koa-body` (see [examples/koa/server.js](../examples/koa/server.js)):
+
+```ts
+app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1 MB
 ```

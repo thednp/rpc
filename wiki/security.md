@@ -67,8 +67,8 @@ JSON body size limits are handled by your framework's body-parser middleware:
 
 - **Express**: `express.json({ limit: '1mb' })` (default **100kb**)
 - **Fastify**: `bodyLimit` option in Fastify config (default **1 MiB**)
-- **Koa**: `koa-body({ formLimit: '1mb' })`
-- **Hono**: Built-in body size limiting
+- **Koa**: The official `koa-body` library comes with the body size limiting middleware
+- **Hono**: Built-in `bodyLimit` from `hono/body-limit` provides body size limiting middleware
 
 The `readBody` utility of each adapter reads the raw request stream and does **not** impose a built-in size limit — always register your framework's body-parser middleware (or a custom limit handler) before `createRPCMiddleware()`. Check [Best Practices Guide](./best-practices.md) for body-limit examples.
 

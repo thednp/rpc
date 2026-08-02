@@ -45,9 +45,57 @@ jobs:
       - name: Publish to npm
         id: publish
         continue-on-error: true # fall back to raw publish below on failure
-        run: npm publish --access public --provenance=false
+        run: |
+          set -eu
+          V=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          # skip if the exact version is already on the registry
+          if npm view "$NAME@$V" version --json 2>/dev/null | grep -q "\"$V\""; then
+            echo "::notice::$NAME@$V already published on npm; skipping CLI publish"
+          else
+            npm publish --access public --provenance=false
+          fi
         env:
           NPM_CONFIG_LOGLEVEL: verbose
+
+      # Capture the exact request bytes the npm CLI sends during a masked 403.
+      # Injects an in-process recorder via NODE_OPTIONS; no MITM/proxy needed.
+      # The PUT will 403 again, so nothing is published; results land in the
+      # "Analyze CLI 403 dump" step for later investigation.
+      - name: Capture CLI 403 (diagnostic)
+        id: capture
+        if: steps.publish.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          set -eu
+          cp scripts/npm-request-recorder.js /tmp/npm-request-recorder.js
+          rm -f /tmp/npm-req-dump.log /tmp/npm-req-recorder-ok
+          set +e
+          NODE_OPTIONS="--import /tmp/npm-request-recorder.js" \
+            npm publish --access public --provenance=false \
+            --loglevel http 2>/tmp/npm-capture-err.log
+          CODE=$?
+          set -e
+          echo "capture_exit=$CODE"
+          echo "--- recorded requests ---"
+          node - <<'NODE'
+            const fs = require('fs');
+            const p = '/tmp/npm-req-dump.log';
+            if (fs.existsSync(p)) {
+              for (const line of fs.readFileSync(p, 'utf8').trim().split('\n')) {
+                const e = JSON.parse(line);
+                if (e.kind === 'request') {
+                  console.log('REQUEST', e.method, e.url);
+                  console.log('headers:', JSON.stringify(e.headers, null, 2));
+                  console.log('bodyLen:', e.body.length);
+                } else {
+                  console.log('RESPONSE', e.statusCode, 'body:', String(e.body).slice(0, 500));
+                }
+              }
+            } else {
+              console.log('no dump file');
+            }
+          NODE
 
       # Raw well-formed publish PUT with the OIDC-minted npm token.
       # Proven to publish (200 {"success":true}) when the CLI PUT 403'd.
@@ -69,14 +117,14 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::npm pack + build publish doc"
-          TARBALL=$(npm pack --silent)
+          TARBALL=$(npm pack --silent --pack-destination /tmp)
           echo "tarball=$TARBALL"
           REG="$REG" TARBALL="$TARBALL" node <<'NODE'
             const fs = require('fs');
             const crypto = require('crypto');
             const REG = process.env.REG;
             const tb = process.env.TARBALL;
-            const buf = fs.readFileSync(tb);
+            const buf = fs.readFileSync('/tmp/' + tb);
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             const V = pkg.version;
             const name = pkg.name;
@@ -118,7 +166,7 @@ jobs:
           cat /tmp/body
           echo
           echo "status_code=$CODE"
-          if [ "$CODE" != "200" ]; then
+          if [ "$CODE" != "200" ] && [ "$CODE" != "201" ]; then
             echo "::error::Raw publish rejected with HTTP $CODE"
             exit 1
           fi
