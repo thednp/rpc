@@ -61,29 +61,67 @@ jobs:
           echo "npm_token_len=${#NPMTOK}"
           echo "::endgroup::"
 
-          echo "::group::npm pack"
+          echo "::group::npm pack + build publish doc"
           TARBALL=$(npm pack --silent)
           echo "tarball=$TARBALL"
+          REG="$REG" TARBALL="$TARBALL" node <<'NODE'
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const REG = process.env.REG;
+            const tb = process.env.TARBALL;
+            const buf = fs.readFileSync(tb);
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const V = pkg.version;
+            const name = pkg.name;
+            const tarballUrl = `${REG}/${name}/-/${tb}`;
+            const manifest = {
+              ...pkg,
+              _id: `${name}@${V}`,
+              _nodeVersion: process.version,
+              _npmVersion: '11.16.0',
+              dist: {
+                integrity: 'sha512-' + crypto.createHash('sha512').update(buf).digest('base64'),
+                shasum: crypto.createHash('sha1').update(buf).digest('hex'),
+                tarball: tarballUrl,
+              },
+            };
+            const body = {
+              _id: name,
+              name,
+              description: pkg.description || '',
+              'dist-tags': { latest: V },
+              versions: { [V]: manifest },
+              access: 'public',
+              _attachments: {
+                [tb]: { content_type: 'application/octet-stream', data: buf.toString('base64') },
+              },
+            };
+            fs.writeFileSync('/tmp/pubdoc.json', JSON.stringify(body));
+          NODE
+          echo "doc_bytes=$(wc -c < /tmp/pubdoc.json)"
           echo "::endgroup::"
 
-          echo "::group::Raw PUT"
-          CODE=$(curl -sS -o /tmp/resp.body -w '%{http_code}' -X PUT \
+          echo "::group::Raw PUT (well-formed publish doc)"
+          curl -sS -D /tmp/hdr -o /tmp/body -w 'HTTP_STATUS=%{http_code}\n' -X PUT \
             -H "Authorization: Bearer $NPMTOK" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary "@$TARBALL" \
-            "$REG/@thednp%2frpc")
-          echo "HTTP_STATUS=$CODE"
-          echo "--- body ---"
-          cat /tmp/resp.body
+            -H "Content-Type: application/json" \
+            --data-binary "@/tmp/pubdoc.json" \
+            "$REG/@thednp%2frpc"
+          echo "--- response headers ---"
+          cat /tmp/hdr
+          echo "--- response body ---"
+          cat /tmp/body
           echo
           echo "::endgroup::"
 
+          CODE=$(head -1 /tmp/hdr | awk '{print $2}')
+          echo "status_code=$CODE"
           if [ "$CODE" = "200" ]; then
             echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "RAW PUT SUCCEEDED - the real create/update endpoint accepted the package."
+            echo "RAW PUT SUCCEEDED - the publish document was accepted."
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
-            echo "RAW PUT REJECTED - the real registry reason is in the body above."
+            echo "RAW PUT REJECTED - the registry reason is in the body above."
           fi
 
       - name: Publish to npm
