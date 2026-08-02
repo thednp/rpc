@@ -61,12 +61,12 @@
     "lint:ts": "deno lint src",
     "fix:ts": "deno lint src --fix",
     "check:ts": "tsc -noEmit",
-    "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
+    "up:examples": "pnpm up -r --latest --filter \"./examples/*\" && pnpm ci -r --filter \"./examples/*\"",
     "up:root": "pnpm up --latest",
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "deno task up:examples && deno task up:root",
     "audit:src": "node scripts/audit-src.js",
-    "prepublishOnly": "deno task upd && deno task lint && deno task format && deno task audit:src && deno task build",
+    "prepublishOnly": "deno task upd && deno task lint && pnpm ci && deno task format && deno task audit:src && deno task build",
     "build": "tsdown"
   }
 }
