@@ -1,6 +1,6 @@
 # Client Usage
 
-Server functions, despite their name, work in both server and client side (transformed into `fetch` based stubs by our plugin), a perfect fit for isomorphic rendering.
+Server functions, despite their name, work in both server and client side (transformed into `fetch` based modules by our plugin), a perfect fit for isomorphic rendering.
 
 In most apps you will be working with client focused apps.
 
@@ -19,7 +19,7 @@ Each imported function returns:
 ```
 
 - **`data`** — A promise that resolves to the server function's return value.
-- **`cancel(reason)`** — Aborts the underlying fetch request, causing `signal.aborted` to be set in the server function.
+- **`cancel(reason: string)`** — Aborts the underlying fetch request, causing `signal.aborted` to be set in the server function.
 
 ### Example
 
@@ -39,7 +39,7 @@ cancel('user cancelled'); // triggers AbortController on the client side
 
 ## @tanstack/react-query Integration
 
-`@thednp/rpc` is a transport pipe — it handles serialization and transport only. For client-side caching, invalidation, and stale-while-revalidate patterns, use `@tanstack/react-query`:
+`@thednp/rpc` is a transport pipe — it handles serialization and transport only. For client-side caching, data invalidation, and stale-while-revalidate patterns, use `@tanstack/react-query`:
 
 ```ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

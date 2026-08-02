@@ -6,7 +6,9 @@ Server functions run exclusively on the server. They have access to server-only 
 
 The `@thednp/rpc` Vite plugin transforms imports of server functions into client-side stubs that call the real implementation over HTTP. This isomorphic bridge means you write your functions once and call them from either server-rendered pages or client-side code — the RPC middleware handles routing on the server while the generated client modules handle serialization, transport, and cancellation.
 
-All examples except the SPA use SSR to demonstrate this: the same server functions are imported directly during server-side rendering (in `entry-server.ts`) and also called from client-side JavaScript (via the auto-generated fetch stubs). The SPA example relies entirely on the client stubs.
+All examples except the SPA use SSR to demonstrate this: the same server functions are imported directly during server-side rendering (in `entry-server.ts`) and also called from client-side JavaScript (via the auto-generated fetch module).
+
+The [SPA example](../examples/spa) uses a thin `node:http` based proxy that executes the server functions.
 
 ## `createServerFunction(name, handler, options?)`
 
@@ -27,7 +29,7 @@ function createServerFunction<T>(
 
 ### Parameters
 
-- **`name`** (`string`) — The registered name used in RPC routing. Must match the name used when calling the function on the client.
+- **`name`** (`string`) — The registered name used in RPC routing.
 - **`handler`** (`(signal: AbortSignal, ...args: JsonArray) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; remaining arguments come from the client. The return value must be JSON-serializable.
 - **`options`** — Optional credentials and serialization strategy
   * `contentType?: 'application/json' | 'text/plain'` - Defaults to `'application/json'`.
@@ -57,11 +59,11 @@ When `createServerFunction` is called, it registers the function in a server-sid
 
 ### Return Type
 
-The return value of `handler` is serialized to JSON and sent as the HTTP response body. Ensure your return type is JSON-serializable.
+The return value of `handler` is serialized to JSON and sent as the HTTP response body. **Ensure your return type is JSON-serializable.**
 
 ## Input Validation
 
-Server functions receive raw, untrusted client data. Always validate data within your server functions before use.
+Server functions receive raw, untrusted client data. **Always validate data within your server functions before use.**
 
 **zod:**
 

@@ -1,6 +1,5 @@
 // src/koa/createMiddleware.ts
 import type { Context, Next } from "koa";
-// import type { JsonArray, JsonValue } from "@thednp/rpc";
 import type { KoaMiddlewareFn, KoaMiddlewareOptions } from "./types.d.ts";
 import { escapeRegExp } from "../tools.ts";
 import {

@@ -6,7 +6,7 @@
 [![JSR Version](https://img.shields.io/jsr/v/@thednp/rpc.svg)](https://jsr.io/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
 
-An Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
+A Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
 
 ## Isomorphic Design
 
@@ -16,24 +16,24 @@ The server functions run **isomorphically** within any Vite powered runtime.
 
 ## Why this exists
 
-Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, force you to organize your code into a specific structure, for sure they are powerful, work well and provide excelent DX, but complexity comes with its own drawbacks.
+Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, some are vendol locked, some even allow you to blend in with your client code (via `"use server"` directive), for sure they are powerful and work well, they provide excelent DX, but complexity always comes with its own drawbacks.
 
-### Simplicity is bliss
+### Simplicity is best
 
-`@thednp/rpc` takes simplicity to the next level:
+`@thednp/rpc` takes simplicity very serious:
 <details>
 <summary><b>Server functions should just be functions</b></summary>
 
-You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client stub generation, middleware registration, request cancellation — without asking you to restructure your codebase or learn a new DSL.
+You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client stub generation, middleware registration, request cancellation — without asking you to restructure your codebase.
 </details>
 
 <details>
 <summary><b>The architecture is clean and minimal</b></summary>
 
-* `createFunction.ts` — server-side definition (wraps handler + AbortController)
+* `createFunction.ts` — server-side definition (wrapped handler with `AbortController`)
 * `getClientModules.ts` — build-time code generation (string template with validation)
-* `helpers.ts` — client-side runtime (innerModule + handleResponse)
-* `scanForServerFiles.ts` — discovery
+* `helpers.ts` — client-side runtime (thin `fetch` based modules)
+* `scanForServerFiles.ts` — file discovery
 * **Adapters** — thin middleware wrappers
 </details>
 
@@ -69,7 +69,7 @@ When you import a server function on the client, the plugin generates a stub tha
 <details>
 <summary><b>Cancellation should be easy</b></summary>
 
-Every server function call returns a handle with a `cancel()` method. Under the hood, it's an `AbortController` wired into the fetch request. You don't have to create the controller, pass the signal, or clean up listeners. You just call `cancel()` and the request dies. The server function receives the `AbortSignal` as its first argument, so you can bail out of expensive work early if the client has already moved on.
+Every server function call returns a handle with a `cancel()` helper. Under the hood, it's an `AbortController` wired into the fetch request. You don't have to create the controller, pass the signal, or clean up listeners. You just call `cancel()` and the request dies. The server function receives the `AbortSignal` as its first argument, so you can bail out of expensive work early if the client has already moved on.
 </details>
 
 <details>
@@ -99,14 +99,14 @@ Generic type inference flows from your server function's arguments and return ty
 
 ## Examples
 
-| Example | Adapter                                       | Type | Run Command        | RPC Approach                              |
-| ---------| -----------------------------------------------| ------| --------------------| -------------------------------------------|
-| spa     | Vite dev server (Connect, Express-compatible) | SPA  | `pnpm dev`         | Client stubs only                         |
-| express | Express                                       | SSR  | `pnpm dev:express` | Direct import (SSR) + client stubs        |
-| fastify | Fastify                                       | SSR  | `pnpm dev:fastify` | Direct import (SSR) + client stubs        |
-| hono    | Hono                                          | SSR  | `pnpm dev:hono`    | Direct import (SSR) + client stubs        |
-| koa     | Koa                                           | SSR  | `pnpm dev:koa`     | Direct import (SSR) + client stubs        |
-| ssr     | Custom `node:http` (Express-compatible)       | SSR  | `pnpm dev:ssr`     | Direct import (SSR) + client stubs        |
+| Example | Adapter                                       | Type | Run Command        | RPC Approach                       |
+| ---------| -----------------------------------------------| ------| --------------------| ------------------------------------|
+| spa     | Vite dev server (Connect, Express-compatible) | SPA  | `pnpm dev`         | Client stubs only                  |
+| express | Express                                       | SSR  | `pnpm dev:express` | Direct import (SSR) + client stubs |
+| fastify | Fastify                                       | SSR  | `pnpm dev:fastify` | Direct import (SSR) + client stubs |
+| hono    | Hono                                          | SSR  | `pnpm dev:hono`    | Direct import (SSR) + client stubs |
+| koa     | Koa                                           | SSR  | `pnpm dev:koa`     | Direct import (SSR) + client stubs |
+| ssr     | Custom `node:http` (Express-compatible)       | SSR  | `pnpm dev:ssr`     | Direct import (SSR) + client stubs |
 
 SSR examples demonstrate isomorphic usage: server functions are imported directly during server-side rendering (`entry-server.ts`) and also called from the client via auto-generated fetch stubs. The SPA example uses only the client-side stubs.
 
@@ -115,8 +115,13 @@ SSR examples demonstrate isomorphic usage: server functions are imported directl
 ### 1. Installation
 
 ```bash
-// jsr
-pnpm add jsr:@thednp/rpc
+// node and jsr
+pnpx jsr add @thednp/rpc
+```
+
+```bash
+// deno
+deno add jsr:@thednp/rpc
 ```
 
 ```bash
@@ -187,7 +192,7 @@ import { greet } from "./api";
 
 const { data, cancel } = greet("World");
 const result = await data; // "Hello, World!"
-cancel(); // AbortController-based cancellation
+cancel("Client aborted"); // AbortController-based cancellation
 ```
 
 ### 5. Register the RPC middleware on the server
@@ -247,10 +252,11 @@ Contributions are welcome. This project uses:
 pnpm lint         # deno lint + tsc -noEmit
 pnpm format       # deno fmt src
 pnpm test         # Run tests with coverage
+pnpm test-ui      # Run tests with interactive UI 
 pnpm build        # Bundle with tsdown
 ```
 
-All changes should pass `pnpm lint && pnpm check:ts && pnpm format && pnpm test` before submitting. See [AGENTS.md](AGENTS.md) for the full command reference and project conventions.
+All changes should pass `pnpm lint && && pnpm format && pnpm test` before submitting. See [AGENTS.md](./AGENTS.md) for the full command reference and project conventions.
 
 ## Security
 
@@ -277,7 +283,7 @@ When a server function throws, the client receives a clean, generic error messag
 <details>
 <summary><b>Body size limits</b></summary>
 
-The `readBody` utility doesn't cap raw request bodies by default. You need to use the middleware provided by your server framework of choice.
+The `readBody` utility of each adapter doesn't cap raw request bodies by default. You need to use the middleware provided by your server framework of choice.
 </details>
 
 ---
@@ -297,4 +303,4 @@ The full threat model, including edge cases and configuration options for tighte
 
 ## License
 
-Released under [MIT](LICENSE).
+Released under [MIT](./LICENSE).

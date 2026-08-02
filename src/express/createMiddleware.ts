@@ -64,7 +64,7 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
 
   const middlewareHandler = async (
     req: IncomingMessage | ExpressRequest,
-    _res: ServerResponse | ExpressResponse,
+    res: ServerResponse | ExpressResponse,
     next: Connect.NextFunction | NextFunction,
   ) => {
     const { url } = getRequestDetails(req);
@@ -88,7 +88,7 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
     }
 
     // Execute handler
-    await handler(req, _res, next);
+    await handler(req, res, next);
   };
 
   Object.defineProperty(middlewareHandler, "name", {

@@ -1,6 +1,5 @@
 // src/hono/createMiddleware.ts
 import type { Context, Next } from "hono";
-// import type { JsonArray, JsonValue } from "@thednp/rpc";
 import type { HonoMiddlewareFn, HonoMiddlewareOptions } from "./types.d.ts";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";

@@ -8,7 +8,6 @@ import type {
   FastifyMiddlewareFn,
   FastifyMiddlewareOptions,
 } from "./types.d.ts";
-// import type { JsonArray, JsonValue } from "@thednp/rpc";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { escapeRegExp } from "../tools.ts";
@@ -62,7 +61,7 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
 
   const middlewareHandler = async (
     req: FastifyRequest,
-    _reply: FastifyReply,
+    reply: FastifyReply,
     done: HookHandlerDoneFunction,
   ) => {
     const reqUrl = new URL(req.url, "http://localhost");
@@ -92,7 +91,7 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
     }
 
     // Execute handler
-    await handler(req, _reply, done);
+    await handler(req, reply, done);
   };
 
   Object.defineProperty(middlewareHandler, "name", {

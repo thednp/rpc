@@ -48,8 +48,8 @@ export function createServerFunction<
   };
 
   Object.defineProperties(wrappedFunction, {
-    name: { value: name, enumerable: true, configurable: true },
-    options: { value: options, enumerable: true, configurable: true },
+    name: { value: name, enumerable: true, configurable: false },
+    options: { value: options, enumerable: true, configurable: false },
   });
 
   serverFunctionsMap.set(

@@ -17,7 +17,6 @@ export default defineConfig({
 
 Update your `vite.config.ts` in your project root and set additional development options:
 
-
 ```ts
 import { defineConfig } from 'vite';
 import rpc from '@thednp/rpc';
@@ -39,7 +38,7 @@ export default defineConfig({
 
 ## Config File Discovery
 
-When `configFile` is not specified, the plugin searches for config files in this order:
+The plugin searches for config files in this order:
 
 1. `rpc.config.ts`
 2. `rpc.config.js`

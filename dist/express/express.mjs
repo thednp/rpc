@@ -195,13 +195,13 @@ const createMiddleware = (initialOptions = {}) => {
 	middlewareStack.add(name);
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
-	const middlewareHandler = async (req, _res, next) => {
+	const middlewareHandler = async (req, res, next) => {
 		const { url } = getRequestDetails(req);
 		if (serverFunctionsMap.size === 0) await scanForServerFiles();
 		if (!handler) return next?.();
 		if (pathMatcher && !pathMatcher.test(url)) return next?.();
 		if (prefixRegex && !prefixRegex.test(url)) return next?.();
-		await handler(req, _res, next);
+		await handler(req, res, next);
 	};
 	Object.defineProperty(middlewareHandler, "name", { value: name });
 	return middlewareHandler;

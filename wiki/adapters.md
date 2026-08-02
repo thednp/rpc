@@ -23,12 +23,12 @@ attachVite(app, vite);
 ### Installation
 
 ```bash
-// jsr
+// jsr registry
 pnpm add jsr:@thednp/rpc express
 ```
 
 ```bash
-// npm
+// npmjs registry
 pnpm add @thednp/rpc express
 ```
 
@@ -59,12 +59,12 @@ app.listen(3000);
 ### Installation
 
 ```bash
-// jsr
+// jsr registry
 pnpm add jsr:@thednp/rpc fastify
 ```
 
 ```bash
-// npm
+// npmjs registry
 pnpm add @thednp/rpc fastify
 ```
 
@@ -95,12 +95,12 @@ fastify.listen({ port: 3000 });
 ### Installation
 
 ```bash
-// jsr
+// jsr registry
 pnpm add jsr:@thednp/rpc hono
 ```
 
 ```bash
-// npm
+// npmjs registry
 pnpm add @thednp/rpc hono
 ```
 
@@ -131,12 +131,12 @@ export default app;
 ### Installation
 
 ```bash
-// jsr
+// jsr registry
 pnpm add jsr:@thednp/rpc koa koa-body
 ```
 
 ```bash
-// npm
+// npmjs registry
 pnpm add @thednp/rpc koa koa-body
 ```
 

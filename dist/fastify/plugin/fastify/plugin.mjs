@@ -106,7 +106,7 @@ const createMiddleware = (initialOptions = {}) => {
 	middlewareStack.add(name);
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
-	const middlewareHandler = async (req, _reply, done) => {
+	const middlewareHandler = async (req, reply, done) => {
 		const url = new URL(req.url, "http://localhost").pathname;
 		if (serverFunctionsMap.size === 0) await scanForServerFiles();
 		if (!handler) {
@@ -121,7 +121,7 @@ const createMiddleware = (initialOptions = {}) => {
 			done();
 			return;
 		}
-		await handler(req, _reply, done);
+		await handler(req, reply, done);
 	};
 	Object.defineProperty(middlewareHandler, "name", { value: name });
 	return middlewareHandler;

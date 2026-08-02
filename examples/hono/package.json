@@ -14,7 +14,7 @@
   "dependencies": {
     "@hono/node-server": "^2.0.12",
     "@thednp/rpc": "^0.0.1",
-    "hono": "^4.12.32",
+    "hono": "^4.12.33",
     "vite": "^8.2.0"
   },
   "devDependencies": {

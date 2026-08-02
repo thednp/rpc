@@ -121,12 +121,12 @@ function createServerFunction(name, handler, fnOptions = {}) {
 		name: {
 			value: name,
 			enumerable: true,
-			configurable: true
+			configurable: false
 		},
 		options: {
 			value: options,
 			enumerable: true,
-			configurable: true
+			configurable: false
 		}
 	});
 	serverFunctionsMap.set(name, {

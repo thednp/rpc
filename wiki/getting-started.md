@@ -3,36 +3,38 @@
 ## Installation
 
 ```bash
-// jsr
-pnpm add jsr:@thednp/rpc
+// pnpm + jsr registry
+pnpx jsr add @thednp/rpc
 ```
 
 ```bash
-// npm
+// pnpm + npmjs registry
 pnpm add @thednp/rpc
 ```
 
 ```bash
-// npm
+// npm + npmjs registry
 npm install @thednp/rpc
 ```
 
 ```bash
-// npm
+// bun + npmjs registry
 bun add @thednp/rpc
 ```
 
 ```bash
-// npm
+// deno + npmjs registry
 deno add npm:@thednp/rpc
 ```
 
 ```bash
-// jsr
-deno add @thednp/rpc
+// deno + jsr registry
+deno add jsr:@thednp/rpc
 ```
 
 ## Quick Start
+
+For a quick understanding of a project setup check the [dedicated wiki section](./setup.md).
 
 ### 1. Configure system wide configuration `rpc.config.ts`
 
@@ -84,6 +86,8 @@ Expose it in `src/api/index.ts`
 export * from "./server"
 ```
 
+Check the [server functions guide](./server-functions.md) for details.
+
 ### 4. Use it in your code
 
 ```ts
@@ -95,3 +99,7 @@ cancel('user cancelled');
 ```
 
 That's it — the plugin auto-scans `src/api/server.ts`, maps exports to client functions, and replaces `./api` imports with fetch-based client modules during the Vite transform.
+
+For a more detailed guide on client-side usage, check the [dedicated wiki section](./client-usage.md).
+
+Next you need to [connect the adapter](./adapters.md) with your server of choice.

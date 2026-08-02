@@ -12,8 +12,11 @@ project/
 │   └── entry-server.ts      # Server entry (SSR projects)
 ├── vite.config.ts           # Add rpc() plugin here
 ├── rpc.config.ts            # Optional config
-└── package.json
+├── package.json             # The project npm configuration
+└── server.js                # Your Express/Hono/Fastify/Koa server
 ```
+
+> Various frameworks like `@tanstack-start`, `@sveltejs/kit` prefer a more specfic structure, so be sure to check their documentation; most frameworks have their own data transport layer.
 
 ## Server Files
 
