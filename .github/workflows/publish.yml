@@ -65,7 +65,7 @@ jobs:
         env:
           NPM_CONFIG_LOGLEVEL: notice
 
-      - name: Diagnostic: npm debug log (403 body)
+      - name: "Diagnostic: npm debug log (403 body)"
         if: failure()
         continue-on-error: true
         run: |
