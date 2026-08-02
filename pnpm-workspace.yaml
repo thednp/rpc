@@ -2,4 +2,4 @@ packages:
   - "."
   - "examples/*"
 minimumReleaseAgeExclude:
-  - '@thednp/rpc@0.0.4 || 0.0.5'
+  - '@thednp/rpc@0.0.4 || 0.0.5 || 0.0.11'

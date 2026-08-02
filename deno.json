@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "keywords": [
