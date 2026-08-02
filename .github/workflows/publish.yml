@@ -45,7 +45,8 @@ jobs:
 
       - name: Publish to npm
         # run: pnpm publish --provenance --no-git-checks --access public
-        run: pnpm publish --provenance --no-git-checks --access public
+        # run: pnpm publish --provenance --no-git-checks --access public
+        run: npm publish --provenance --access public
         env:
           # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
