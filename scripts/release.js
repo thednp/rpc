@@ -7,10 +7,10 @@
  *   2. already-published guard (npm + jsr) → skip
  *   3. build (pnpm build → tsdown)
  *   4. publish:
- *      a. standard npm publish --provenance over OIDC (no NODE_AUTH_TOKEN)
- *      b. retry with auth-type=legacy (skip npm's web "publish authorize" routing)
- *      c. break-glass: raw well-formed registry PUT with the OIDC-minted token
- *         (proven to work; does not attach sigstore provenance)
+ *      a. standard npm publish (vite-style, NO --provenance) over OIDC
+ *      b. retry with auth-type=legacy
+ *      c. break-glass: raw well-formed registry PUT with the OIDC-minted
+ *         token (proven to work; does not attach sigstore provenance)
  *   5. publish to jsr (deno publish)
  */
 
@@ -93,19 +93,37 @@ async function mintNpmToken() {
   return token;
 }
 
-function cliPublish(legacyAuth) {
+function cliPublish() {
   const env = {
     ...process.env,
     NPM_CONFIG_LOGLEVEL: "notice",
     // OIDC trusted publishing: no standing npm credential.
-    ...(legacyAuth ? { npm_config_auth_type: "legacy" } : {}),
   };
   delete env.NODE_AUTH_TOKEN;
   try {
-    run("npm", ["publish", "--access", "public", "--provenance"], {
+    // Plain publish, exactly like @vitejs/release-scripts. We deliberately
+    // omit --provenance: it forces npm onto the registry's attestation web
+    // route (E403 "OIDC publish authorize"), while vite-style plain publish
+    // succeeds via trusted publishing.
+    run("npm", ["publish", "--access", "public"], {
       env,
       stdio: "inherit",
     });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cliPublishLegacy() {
+  const env = {
+    ...process.env,
+    NPM_CONFIG_LOGLEVEL: "notice",
+    npm_config_auth_type: "legacy",
+  };
+  delete env.NODE_AUTH_TOKEN;
+  try {
+    run("npm", ["publish", "--access", "public"], { env, stdio: "inherit" });
     return true;
   } catch {
     return false;
@@ -177,13 +195,13 @@ async function main() {
   step("build package");
   run("pnpm", ["build"]);
 
-  // 4a) plain OIDC npm publish
+  // 4a) plain OIDC npm publish (vite-style, no provenance)
   console.log("\n--[1/2] npm publish (OIDC) --");
-  let ok = cliPublish(false);
+  let ok = cliPublish();
   if (!ok) {
-    // 4b) retry with legacy auth-type to dodge the web "publish authorize" flow
+    // 4b) retry with legacy auth-type as a fallback
     console.warn("npm publish rejected — retrying with auth-type=legacy");
-    ok = cliPublish(true);
+    ok = cliPublishLegacy();
   }
 
   // 4c) break-glass raw PUT (CI only)

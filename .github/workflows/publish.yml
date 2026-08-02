@@ -41,8 +41,9 @@ jobs:
       - name: Update npm to latest
         run: npm i -g npm@latest
 
-      # Release script: version guard → build → npm publish (OIDC, provenance;
-      # retried with auth-type=legacy, then raw-PUT break-glass) → jsr.
+      # Release script: version guard → build → npm publish (vite-style plain
+      # OIDC, no --provenance; retried with auth-type=legacy, then raw-PUT
+      # break-glass) → jsr.
       - name: Release
         run: node scripts/release.js
         env:
