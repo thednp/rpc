@@ -129,18 +129,13 @@ deno add jsr:@thednp/rpc
 ```
 
 ```bash
-// pnpm/npm/bun from the npm registry
+// pnpm/bun from the npm registry
 pnpm add @thednp/rpc
 ```
 
 ```bash
 // npm
 npm i @thednp/rpc
-```
-
-```bash
-// bun
-bun add @thednp/rpc
 ```
 
 ### 2. Configuration

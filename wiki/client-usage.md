@@ -2,11 +2,11 @@
 
 Server functions, despite their name, work in both server and client side (transformed into `fetch` based modules by our plugin), a perfect fit for isomorphic rendering.
 
-In most apps you will be working with client focused apps.
+In most cases you will be working with client focused apps.
 
 ## Auto-Generated Client Modules
 
-When you import from `./api` in your client code, the plugin intercepts the import and generates a client module for each server function.
+When you import from `./api` in your client code, the plugin intercepts the import and resolves a generated client module for each server function.
 
 ```ts
 import { sayHi, add } from './api';

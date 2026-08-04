@@ -15,8 +15,8 @@ const sharedCfg: UserConfig = {
       "fastify-plugin",
       "express",
       "picocolors",
-"@thednp/rpc",
-    "@thednp/rpc/server",
+      "@thednp/rpc",
+      "@thednp/rpc/server",
     ],
     onlyBundle: false
   },

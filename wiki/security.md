@@ -2,7 +2,7 @@
 
 ## Prefix Boundary Check
 
-All adapters use `new RegExp(\`^/${escapeRegExp(rpcPrefix)}/\`)` instead of `startsWith` to match the RPC endpoint path. The prefix is escaped with `escapeRegExp()` before being embedded in the boundary regex, preventing ReDoS or unintended matching from metacharacters in the prefix. This prevents path-segment bypass attacks:
+All adapters use `RegExp` instead of `startsWith` to match the RPC endpoint path. The prefix is escaped with `escapeRegExp()` before being embedded in the boundary regex, preventing ReDoS or unintended matching from metacharacters in the prefix. This prevents path-segment bypass attacks:
 
 ```
 rpcPrefix = '__rpc'
@@ -44,7 +44,7 @@ This blocks the simplest CSRF vector: an attacker page embedding `<img src="/__r
 `@thednp/rpc` performs no origin validation by default, but `createRPCMiddleware()` accepts an `origin` option:
 
 ```ts
-app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
+app.use(createRPCMiddleware({ origin: 'same-origin' }));
 ```
 
 When set, any request carrying an `Origin` header that does not match the configured origin is rejected with `403 Forbidden`. Requests **without** an `Origin` header (curl, native clients) pass through — the check only rejects when the browser-provided header disagrees. This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices Guide](./best-practices.md) for custom middleware alternatives.
@@ -59,7 +59,7 @@ app.use(authMiddleware);             // auth first
 app.use(createRPCMiddleware());      // RPC second
 ```
 
-Do not add auth hooks inside the plugin. Use your framework's standard middleware pattern. Check [Best Practices Guide](./best-practices.md) for more detailed examples.
+**Do not add auth hooks inside the plugin.** Use your framework's standard middleware pattern. Check [Best Practices Guide](./best-practices.md) for more detailed examples.
 
 ## Body Size Limits
 
