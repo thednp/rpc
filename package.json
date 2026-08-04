@@ -65,6 +65,7 @@
     "up:examples": "pnpm up:examples:lib && pnpm up -r --latest --filter \"./examples/*\" && pnpm ci -r --filter \"./examples/*\"",
     "up:examples:lib": "node scripts/update-examples.js",
     "up:root": "pnpm up --latest",
+    "release": "node scripts/release.js",
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "pnpm up:examples:lib && pnpm up:examples && pnpm up:root",
     "audit:src": "node scripts/audit-src.js",
