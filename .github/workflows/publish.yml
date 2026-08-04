@@ -1,7 +1,6 @@
-name: Publish to npm & jsr
+name: Publish to npm/jsr
 
 on:
-  workflow_dispatch:
   release:
     types: [published] # Triggers on GitHub Release creation (with tag)
 
@@ -10,23 +9,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # For checkout
-      id-token: write # OIDC Trusted Publisher (npm) + JSR publishing.
+      id-token: write # Required for provenance / trusted publishing
 
-    environment: Publish
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22" # Or 'lts/*'
+          registry-url: "https://registry.npmjs.org" # Optional if using trusted publishing
 
       - name: PNPM setup
-        uses: pnpm/action-setup@v6
-
-      - name: Node.js Setup
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24 # Or 'lts/*'
-          # registry-url http/https is required so npm resolves the public
-          # registry default; OIDC supplies the credential (no _authToken).
-          registry-url: https://registry.npmjs.org/
+        uses: pnpm/action-setup@v3
 
       - name: Deno Setup
         uses: denoland/setup-deno@v2
@@ -34,25 +30,24 @@ jobs:
           deno-version: v2.x
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
-      # npm trusted publishing requires npm >= 11.5.1; Node 24's bundled npm
-      # is usually fine, but pin latest like the reference demo does.
-      - name: Update npm to latest
-        run: npm i -g npm@latest
+      # - name: Install Playwright
+      #   run: pnpm exec playwright install
 
-      # Release script: version guard → build → npm publish (vite-style plain
-      # OIDC, no --provenance; retried with auth-type=legacy, then raw-PUT
-      # break-glass) → jsr.
-      - name: Release
-        run: node scripts/release.js
+      - name: Build (if needed)
+        run: pnpm build # Optional
+
+      - name: Test (optional but recommended)
+        run: pnpm test
+
+      - name: Publish to npm
+        run: pnpm publish --provenance --access public --no-git-checks # --access public for new/public packages
         env:
-          NPM_CONFIG_LOGLEVEL: notice
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # Only needed if NOT using trusted publishing
 
-      - name: "Diagnostic: npm debug log (403 body)"
-        if: failure()
-        continue-on-error: true
-        run: |
-          LOG=$(ls -1t /home/runner/.npm/_logs/*-debug-0.log 2>/dev/null | head -1)
-          echo "===== npm debug: $LOG (npm $(npm -v)) ====="
-          [ -n "$LOG" ] && grep -aiE 'oidc|token|PUT |fetch (GET|POST|PUT)|visibility|proven|403|authori|deni|E403|error' "$LOG" | tail -n 120
+      - name: Publish to jsr
+        run: deno publish
+        # env:
+        #   Needed only if JSR OIDC (trusted publishing) is not enabled for this repo
+        #   JSR_TOKEN: ${{ secrets.JSR_TOKEN }}

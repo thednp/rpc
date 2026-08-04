@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -68,21 +68,19 @@
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "pnpm up:examples:lib && pnpm up:examples && pnpm up:root",
     "audit:src": "node scripts/audit-src.js",
-    "release": "node scripts/release.js",
-    "prepareOnly": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
-    "prepublishOnly_": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
+    "prepublishOnly": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "build": "tsdown"
   },
   "dependencies": {
     "express": "^5.2.1",
-    "fastify": "^5.11.0",
+    "fastify": "^5.11.2",
     "fastify-plugin": "^6.0.0",
-    "hono": "^4.12.33",
+    "hono": "^4.13.0",
     "koa": "^3.2.1",
     "vite": "^8.2.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^2.0.12",
+    "@hono/node-server": "^2.1.0",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
     "@types/node": "^26.1.2",

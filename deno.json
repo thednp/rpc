@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "keywords": [
@@ -12,6 +12,7 @@
     "hono",
     "koa"
   ],
+  "minimumDependencyAge": 0,
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
@@ -49,23 +50,10 @@
     "test-dev": "deno run -A scripts/dev-test.js",
     "test-prod": "deno run -A scripts/dev-test.js --mode=preview",
     "format": "deno fmt src tests examples/**/src",
-    "clean": "rm -rf examples/**/dist examples/**/node_modules examples/**/package-lock.json examples/**/pnpm-lock.yaml examples/**/bun.lockb examples/**/deno.lock",
-    "dev": "cd examples/spa && deno update && deno task dev",
-    "dev:koa": "cd examples/koa && deno update && deno task dev",
-    "dev:express": "cd examples/express && deno update && deno task dev",
-    "dev:fastify": "cd examples/fastify && deno update && deno task dev",
-    "dev:hono": "cd examples/hono && deno update && deno task dev",
-    "dev:ssr": "cd examples/ssr && deno update && deno task dev",
     "lint": "deno task lint:ts && deno task check:ts",
     "lint:ts": "deno lint src",
     "fix:ts": "deno lint src --fix",
     "check:ts": "tsc -noEmit",
-    "up:examples": "pnpm up -r --latest --filter \"./examples/*\" && pnpm ci -r --filter \"./examples/*\"",
-    "up:root": "pnpm up --latest",
-    "up:deno": "deno update --latest && deno -A scripts/update-deno.js",
-    "upd": "deno task up:examples && deno task up:root && deno task up:deno",
-    "audit:src": "node scripts/audit-src.js",
-    "prepublishOnly": "deno task upd && deno task lint && pnpm ci && deno task format && deno task audit:src && deno task build",
-    "build": "tsdown"
+    "up:deno": "deno update --latest && deno -A scripts/update-deno.js"
   }
 }

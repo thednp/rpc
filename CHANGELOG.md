@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.0.13] - 2026-08-04
+
+### Chores
+
+- Bump version to `0.0.13`
+- Add `hono@4.13.0` and `@hono/node-server@2.1.0` to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml` so pnpm 11's default 1-day minimum release age doesn't hold back the freshly published versions
+- Update dependencies: `hono ^4.13.0`, `@hono/node-server ^2.1.0`, `fastify ^5.11.2`; sync all 6 examples to `@thednp/rpc ^0.0.12`
+- Restore the `prepublishOnly` script name in `package.json`
+
+### Docs
+
+- Clarify `wiki/client-usage.md` and `wiki/security.md`, `README.md`, and `tsdown.config.ts` comments
+
+## [0.0.12] - 2026-08-03
+
+### Chores
+
+- Bump version to `0.0.12`
+- Publish workflow: drop `--provenance` from the npm publish step to match the vite-style publish flow (npm 11 auto-attaches provenance in trusted-publishing mode; the raw well-formed PUT fallback remains the working publish path)
+- Add `scripts/update-examples.js` — syncs all examples to the latest published `@thednp/rpc` version — wired as `up:examples:lib` and included in `up:examples`
+- Update all 6 examples to `@thednp/rpc ^0.0.11`
+
 ## [0.0.11] - 2026-08-02
 
 ### Chores
