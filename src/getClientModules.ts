@@ -81,20 +81,19 @@ export const getClientModules = (
 ): string => {
   // Validate prefix once at the top level
   validatePathSegment(initialOptions.rpcPrefix, "rpcPrefix");
-
-  return `
+  const entries = Array.from(serverFunctionsMap.entries())
+    .filter(([, entry]) => entry.exportName)
+    .map(([registeredName, entry]) =>
+      getModule(registeredName, entry.exportName!, {
+        ...initialOptions,
+        ...((entry.options as ServerFunctionOptions) || {}),
+      })
+    )
+    .join("\n");
+  const output = `
 // Client-side RPC modules
 import { innerModule } from "@thednp/rpc/helpers";
-${
-    Array.from(serverFunctionsMap.entries())
-      .filter(([, entry]) => entry.exportName)
-      .map(([registeredName, entry]) =>
-        getModule(registeredName, entry.exportName!, {
-          ...initialOptions,
-          ...((entry.options as ServerFunctionOptions) || {}),
-        })
-      )
-      .join("\n")
-  }
-`.trim();
+${entries}`;
+
+  return output.trim();
 };

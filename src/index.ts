@@ -4,7 +4,6 @@ import { loadConfigFromFile, mergeConfig } from "vite";
 import { resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
-import { createRPCMiddleware } from "./express/createMiddleware.ts";
 import { defaultRPCOptions } from "./options.ts";
 import type { RpcPluginOptions } from "./types.d.ts";
 import {
@@ -18,6 +17,8 @@ import {
   scanForServerFiles,
   serverFunctionsMap,
 } from "@thednp/rpc/server";
+
+import { createRPCMiddleware } from "@thednp/rpc/express";
 
 /**
  * Loads and transforms a single RPC config file using Vite's config loader.

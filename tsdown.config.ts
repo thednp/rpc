@@ -16,6 +16,7 @@ const sharedCfg: UserConfig = {
       "express",
       "picocolors",
       "@thednp/rpc",
+      "@thednp/rpc/express",
       "@thednp/rpc/server",
     ],
     onlyBundle: false

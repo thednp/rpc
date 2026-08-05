@@ -17,16 +17,18 @@ pnpm fix:ts # deno lint src --fix
 pnpm check:ts # tsc -noEmit
 pnpm format # deno fmt src
 pnpm build # tsdown (outputs to dist/)
-pnpm up:examples # Update all example deps
-pnpm up:src # Update all src deps
+pnpm up:examples # Update all example deps (to latest published @thednp/rpc + latest example deps)
+pnpm up:examples:lib # Sync examples to the latest published @thednp/rpc version
 pnpm up:root # Update root deps
-pnpm upd # Update all deps (up:examples + up:src + up:root)
-pnpm prepublishOnly # upd + lint + check:ts + format + build
+pnpm up:deno # deno update + sync deno.json deps
+pnpm upd # Update all deps (up:examples + up:examples:lib + up:root)
+pnpm prepareOnly # upd + up:deno + lint + format + audit:src + build
+pnpm release # Publish npm + jsr (scripts/release.js)
 ```
 
 ## Build Order
 
-`lint -> check:ts -> format -> build` (verified in `prepublishOnly`)
+`lint -> check:ts -> format -> build` (verified in `prepareOnly`)
 
 ## Examples
 

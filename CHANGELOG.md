@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.14] - 2026-08-05
+
+### Chores
+
+- Bump version to `0.0.14`
+- Rename the `prepublishOnly` script to `prepareOnly` in `package.json` (keeping `prepublishOnly_` as a non-triggering alias) so `npm publish` inside the release script no longer auto-runs the full pipeline
+- Import `createRPCMiddleware` from the `@thednp/rpc/express` subpath export in `src/index.ts` instead of the relative `./express/createMiddleware.ts`; add `@thednp/rpc/express` to the tsdown externals and the vitest alias map
+- Refactor `getClientModules` to build the generated client modules into a local `entries` const before assembling the output
+- Publish workflow: remove the npm debug-log diagnostic step
+- Sync all 6 examples to `@thednp/rpc ^0.0.13`; bump `@fastify/compress` to `^9.1.1` in the fastify example and add it to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`
+
 ## [0.0.13] - 2026-08-04
 
 ### Chores
