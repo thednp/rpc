@@ -99,29 +99,26 @@ Server errors return a generic `Internal Server Error` — no messages, codes, o
 Generic type inference flows from your server function's arguments and return type all the way to the client stub. You get autocomplete for function names, argument types, and return types without writing a single type annotation on the client side.
 </details>
 
-## Demos
-
-| Example         | Source Code                                                                    | Try online                                                                               |
-| -----------------| --------------------------------------------------------------------------------| ------------------------------------------------------------------------------------------|
-| SPA - node:http | [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)     |
-| SSR - node:http | [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)     |
-| Express         | [examples/express](https://github.com/thednp/rpc/tree/master/examples/express) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express) |
-| Fastify         | [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify) |
-| Hono            | [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)    |
-| Koa             | [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)     |
-
-> **NOTE**: Stackblitz is currently working on upgrading their platform. Demos may not work properly. 
-
 ## Examples
 
-| Example | Adapter                                       | Type | Run Command        | RPC Approach                       |
-| ---------| -----------------------------------------------| ------| --------------------| ------------------------------------|
-| spa     | Vite dev server (Connect, Express-compatible) | SPA  | `pnpm dev`         | Client stubs only                  |
-| express | Express                                       | SSR  | `pnpm dev:express` | Direct import (SSR) + client stubs |
-| fastify | Fastify                                       | SSR  | `pnpm dev:fastify` | Direct import (SSR) + client stubs |
-| hono    | Hono                                          | SSR  | `pnpm dev:hono`    | Direct import (SSR) + client stubs |
-| koa     | Koa                                           | SSR  | `pnpm dev:koa`     | Direct import (SSR) + client stubs |
-| ssr     | Custom `node:http` (Express-compatible)       | SSR  | `pnpm dev:ssr`     | Direct import (SSR) + client stubs |
+| Source                                                                        | Demo                                                                                     | Clone                                               |
+| --------------------------------------------------------------------------------| ------------------------------------------------------------------------------------------| -----------------------------------------------------|
+| [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)     | `pmpm dlx degit thednp/rpc/examples/spa my-app`     |
+| [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)     | `pnpm dlx degit thednp/rpc/examples/ssr my-app`     |
+| [examples/express](https://github.com/thednp/rpc/tree/master/examples/express) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express) | `pnpm dlx degit thednp/rpc/examples/express my-app` |
+| [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify) | `pnpm dlx degit thednp/rpc/examples/fastify my-app` |
+| [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)    | `pnpm dlx degit thednp/rpc/examples/hono my-app`    |
+| [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)     | `pnpm dlx degit thednp/rpc/examples/koa my-app`     |
+
+> **Clone an example**: `degit` scaffolds a fresh copy straight from the repo — no git history, ready to run:
+
+```bash
+# Scaffold the Express example
+pnpm dlx degit thednp/rpc/examples/express my-rpc-app
+cd my-rpc-app
+pnpm install
+pnpm dev
+```
 
 SSR examples demonstrate isomorphic usage: server functions are imported directly during server-side rendering (`entry-server.ts`) and also called from the client via auto-generated fetch stubs. The SPA example uses only the client-side stubs.
 
