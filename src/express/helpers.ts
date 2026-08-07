@@ -17,6 +17,9 @@ import type { RequestDetails, ResponseDetails } from "./types.d.ts";
  * @param app - Express application instance
  */
 export async function attachRPC(app: Express) {
+  // The main plugin entry statically imports Vite, so loadRPCConfig is
+  // imported lazily: function bundles that never call attachRPC (e.g.
+  // serverless functions) keep Vite out of the bundle (or externalized).
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { adapter: _adapter, ...options } = await loadRPCConfig();
   app.use(createRPCMiddleware(options));

@@ -8,6 +8,12 @@
 
 [functions]
   node_bundler = "esbuild"
+  # Vite is only ever imported by the Vite plugin entry (@thednp/rpc), which
+  # the Lambda bundle does not execute — it is only referenced via lazy
+  # imports in scanForServerFiles/attachRPC. Leave it external so the function
+  # zip does not bundle Vite's node chunk (which imports esbuild, absent with
+  # Vite 8's rolldown) — zisi installs it from demo's dependencies instead.
+  external_node_modules = ["vite"]
 
 # Live RPC backend: /@demo/* is never a static file, so Netlify
 # rewrites it to the serverless function (status 200 = rewrite).

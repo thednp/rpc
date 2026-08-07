@@ -1,6 +1,5 @@
 import type { ViteDevServer } from "vite";
 import type { ClientFunctionWithOptions, ScanConfig } from "./types.d.ts";
-import { createServer, normalizePath } from "vite";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -38,6 +37,14 @@ export const scanForServerFiles = async (
   if (isScanned && !devServer) {
     return;
   }
+  // Vite is only needed to spin up the internal dev server that loads the
+  // server function files, so it is imported lazily rather than at the top
+  // of the module. This keeps consumers of the standalone server entry that
+  // register their functions directly (e.g. serverless functions bundling
+  // the API module) free of a static Vite dependency — when Vite is
+  // externalized by the function bundler, this lazy import is left as a
+  // runtime require that is never executed.
+  const { createServer, normalizePath } = await import("vite");
   const config = (!initialCfg && !devServer) || !initialCfg
     ? {
       root: process.cwd(),
@@ -75,9 +82,9 @@ export const scanForServerFiles = async (
   const root = config.root || process.cwd();
   const resolvedScanRoot = resolve(
     root,
-    (config as ScanConfig).scanRoot ?? join(root, "src", "api"),
+    config.scanRoot ?? join(root, "src", "api"),
   );
-  const serverFiles: "exact" | "glob" = (config as ScanConfig).serverFiles ??
+  const serverFiles: "exact" | "glob" = config.serverFiles ??
     "exact";
 
   // Names registered during this scan run, used for duplicate detection

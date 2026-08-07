@@ -15,6 +15,9 @@ import { createRPCMiddleware } from "./createMiddleware.ts";
  * @param app - Hono application instance
  */
 export async function attachRPC(app: Hono) {
+  // The main plugin entry statically imports Vite, so loadRPCConfig is
+  // imported lazily: function bundles that never call attachRPC (e.g.
+  // serverless functions) keep Vite out of the bundle (or externalized).
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { adapter: _adapter, ...options } = await loadRPCConfig();
 

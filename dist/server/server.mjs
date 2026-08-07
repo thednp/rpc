@@ -1,4 +1,3 @@
-import { createServer, normalizePath } from "vite";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -103,6 +102,7 @@ const EXACT_NAMES = [
 */
 const scanForServerFiles = async (initialCfg, devServer) => {
 	if (isScanned && !devServer) return;
+	const { createServer, normalizePath } = await import("vite");
 	const config = !initialCfg && !devServer || !initialCfg ? {
 		root: process.cwd(),
 		base: process.env.BASE || "/",

@@ -1,4 +1,4 @@
-import { createServer, loadConfigFromFile, mergeConfig, normalizePath } from "vite";
+import { loadConfigFromFile, mergeConfig } from "vite";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
@@ -198,6 +198,7 @@ const EXACT_NAMES = [
 */
 const scanForServerFiles = async (initialCfg, devServer) => {
 	if (isScanned && !devServer) return;
+	const { createServer, normalizePath } = await import("vite");
 	const config = !initialCfg && !devServer || !initialCfg ? {
 		root: process.cwd(),
 		base: process.env.BASE || "/",
