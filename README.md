@@ -327,13 +327,13 @@ The full threat model, including edge cases and configuration options for tighte
 
 - [Quick Start](./wiki/quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
 - [Getting Started](./wiki/getting-started.md) — Installation, project structure, and your first function
-- [Configuration](./wiki/configuration.md)
-- [Server Functions](./wiki/server-functions.md)
-- [Client Usage](./wiki/client-usage.md)
+- [Configuration](./wiki/configuration.md) — Full configuration reference
+- [Server Functions](./wiki/server-functions.md) — Creating server functions
+- [Client Usage](./wiki/client-usage.md) — Client-side usage
 - [Wire Protocol](./wiki/wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
-- [Adapters](./wiki/adapters.md)
-- [Best Practices](./wiki/best-practices.md)
-- [Security](./wiki/security.md)
+- [Adapters](./wiki/adapters.md) — Framework adapters
+- [Best Practices](./wiki/best-practices.md) — Tips and best practices
+- [Security](./wiki/security.md) — Security hardening
 
 ## License
 
