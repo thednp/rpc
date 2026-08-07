@@ -61,8 +61,8 @@ importers:
   examples/express:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.0.13
-        version: 0.0.13(@types/node@26.1.2)(supports-color@7.2.0)
+        specifier: ^0.1.0
+        version: 0.1.0(@types/node@26.1.2)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
@@ -98,8 +98,8 @@ importers:
         specifier: ^10.1.3
         version: 10.1.3
       '@thednp/rpc':
-        specifier: ^0.0.13
-        version: 0.0.13(@types/node@26.1.2)(supports-color@7.2.0)
+        specifier: ^0.1.0
+        version: 0.1.0(@types/node@26.1.2)(supports-color@7.2.0)
       fastify:
         specifier: ^5.11.2
         version: 5.11.2
@@ -126,8 +126,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0(hono@4.13.1)
       '@thednp/rpc':
-        specifier: ^0.0.13
-        version: 0.0.13(@types/node@26.1.2)(supports-color@7.2.0)
+        specifier: ^0.1.0
+        version: 0.1.0(@types/node@26.1.2)(supports-color@7.2.0)
       hono:
         specifier: ^4.13.1
         version: 4.13.1
@@ -151,8 +151,8 @@ importers:
   examples/koa:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.0.13
-        version: 0.0.13(@types/node@26.1.2)(supports-color@7.2.0)
+        specifier: ^0.1.0
+        version: 0.1.0(@types/node@26.1.2)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
@@ -194,8 +194,8 @@ importers:
   examples/spa:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.0.13
-        version: 0.0.13(@types/node@26.1.2)(supports-color@7.2.0)
+        specifier: ^0.1.0
+        version: 0.1.0(@types/node@26.1.2)(supports-color@7.2.0)
       vite:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.1.2)
@@ -213,8 +213,8 @@ importers:
   examples/ssr:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.0.13
-        version: 0.0.13(@types/node@26.1.2)(supports-color@7.2.0)
+        specifier: ^0.1.0
+        version: 0.1.0(@types/node@26.1.2)(supports-color@7.2.0)
       vite:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.1.2)
@@ -499,8 +499,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@thednp/rpc@0.0.13':
-    resolution: {integrity: sha512-nKTNBthcN4GeDbvgaRjFMxKwdbtlDqzj8+PM7UwJUz09H3rz1GoQZ+gNK9KMrhbIsEdJRfeDAUEmXuIgiKXAlg==}
+  '@thednp/rpc@0.1.0':
+    resolution: {integrity: sha512-ItYbaVNZvRNzkqBO5T/83Orm1J650KH66OoMh/ZLbI04bUSKOIEc69Xw00yj5wL6nKucjEwJQ6efLaalkPDknQ==}
 
   '@types/accepts@1.3.7':
     resolution: {integrity: sha512-Pay9fq2lM2wXPWbteBsRAGiWH2hig4ZE2asK+mm7kUzlxRTfL961rj89I6zV/E3PcIkDqyuBEcMxFT7rccugeQ==}
@@ -2318,7 +2318,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@thednp/rpc@0.0.13(@types/node@26.1.2)(supports-color@7.2.0)':
+  '@thednp/rpc@0.1.0(@types/node@26.1.2)(supports-color@7.2.0)':
     dependencies:
       express: 5.2.1(supports-color@7.2.0)
       fastify: 5.11.2
