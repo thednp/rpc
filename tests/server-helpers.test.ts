@@ -8,9 +8,9 @@ describe("formatError", () => {
     });
   });
 
-  it("should leak message in dev", () => {
+  it("should not leak exception message in dev", () => {
     expect(formatError(new Error("secret"), false)).toEqual({
-      error: "secret",
+      error: "Internal Server Error",
     });
   });
 
@@ -43,9 +43,9 @@ describe("formatError", () => {
     });
   });
 
-  it("should serialize non-Error values in dev", () => {
+  it("should return generic error for non-Error values in dev", () => {
     expect(formatError("string failure", false)).toEqual({
-      error: "string failure",
+      error: "Internal Server Error",
     });
   });
 
@@ -53,12 +53,6 @@ describe("formatError", () => {
     expect(formatError(new RPCError(""), false)).toEqual({
       error: "Internal Server Error",
       code: "INTERNAL",
-    });
-  });
-
-  it("should fall back to generic error for empty non-Error value in dev", () => {
-    expect(formatError("", false)).toEqual({
-      error: "Internal Server Error",
     });
   });
 });

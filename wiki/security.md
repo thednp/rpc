@@ -35,14 +35,11 @@ Error responses do not echo the requested function name. This prevents function 
 Handler errors always produce `500 Internal Server Error`, but the response body depends on the environment:
 
 - **Production** (`NODE_ENV === 'production'`): a generic `{ "error": "Internal Server Error" }` — no message, code, or stack is sent to the client. Internals are logged server-side only.
-- **Development**: the error message (and for `RPCError` the `code` and optional `data`) are included so developers can identify issues immediately.
+- **Development**: only `RPCError` payloads (developer-authored `message`, `code`, optional `data`) are included so developers can identify issues immediately. Unexpected exceptions still return the generic message — their details are logged server-side only, so a misconfigured deployment cannot leak internals even in dev.
 
 ```jsonc
-// production (any error)
+// production (any error) — and any unexpected exception in dev
 { "error": "Internal Server Error" }
-
-// development: plain Error
-{ "error": "the underlying message" }
 
 // development: RPCError
 { "error": "validation failed", "code": "VALIDATION", "data": { "field": "email" } }

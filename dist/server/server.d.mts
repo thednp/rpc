@@ -217,10 +217,12 @@ declare class RPCError extends Error {
   constructor(message: string, code?: string, data?: JsonValue);
 }
 /**
- * Formats an error for the RCP middleware response.
- * In development the full message and stack are included so developers
- * can quickly identify issues. In production only the generic
- * "Internal Server Error" is sent, preventing information disclosure.
+ * Formats an error for the RPC middleware response.
+ * In development the full `RPCError` payload is included so developers
+ * can quickly identify issues. Unexpected exceptions never expose their
+ * message — only the generic "Internal Server Error" is sent, preventing
+ * information disclosure; server-side diagnostics are preserved via the
+ * middleware's `console.error` logging.
  */
 declare const formatError: (err: unknown, isProduction: boolean) => JsonObject;
 //#endregion

@@ -198,22 +198,22 @@ var RPCError = class extends Error {
 	}
 };
 /**
-* Formats an error for the RCP middleware response.
-* In development the full message and stack are included so developers
-* can quickly identify issues. In production only the generic
-* "Internal Server Error" is sent, preventing information disclosure.
+* Formats an error for the RPC middleware response.
+* In development the full `RPCError` payload is included so developers
+* can quickly identify issues. Unexpected exceptions never expose their
+* message — only the generic "Internal Server Error" is sent, preventing
+* information disclosure; server-side diagnostics are preserved via the
+* middleware's `console.error` logging.
 */
 const formatError = (err, isProduction) => {
-	if (!isProduction) {
-		if (err instanceof RPCError) {
-			const payload = {
-				error: err.message || "Internal Server Error",
-				code: err.code
-			};
-			if (err.data !== void 0) payload.data = err.data;
-			return payload;
-		}
-		return { error: (err instanceof Error ? err.message : String(err)) || "Internal Server Error" };
+	if (isProduction) return { error: INTERNAL_SERVER_ERROR };
+	if (err instanceof RPCError) {
+		const payload = {
+			error: err.message || "Internal Server Error",
+			code: err.code
+		};
+		if (err.data !== void 0) payload.data = err.data;
+		return payload;
 	}
 	return { error: INTERNAL_SERVER_ERROR };
 };

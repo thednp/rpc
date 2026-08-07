@@ -122,7 +122,7 @@ The generated client unwraps it — `await data` resolves to `<result>`.
 | `200`   | Success (with `{ data }`), **or** a function that returned `{ error: ... }` as its result. | `{ data: ... }` / `{ data: { error: ... } }` |
 | `404`   | Function not registered.                    | `{ error: "Function not found" }` |
 | `405`   | Method doesn't match (`POST` vs `GET`).     | `{ error: "Method not allowed" }` |
-| `500`   | Handler threw.                              | `{ error: "Internal Server Error" }` (production) — in development the error message (and `code`/`data` for `RPCError`) is included |
+| `500`   | Handler threw.                              | `{ error: "Internal Server Error" }` — always, even in development, for unexpected exceptions; in development `RPCError` payloads include `code`/`data` |
 
 ### Validation errors are data, not status codes
 

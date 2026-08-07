@@ -45,7 +45,7 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - Prefix regex: `new RegExp("^/" + escapeRegExp(prefix) + "/")` — not `startsWith` (prevents segment bypass like `/__rpc-evil/foo`)
 - Default POST methods — CSRF-safe (no `<img>`/form GET can trigger mutations)
 - 404s are generic — no function enumeration
-- 500s: generic in production (no message/stack leak); dev mode includes message + `code`/`data` for `RPCError`
+- 500s: always generic (no message/stack leak); dev mode includes `RPCError` payloads (`code`/`data`) only
 - Duplicate function names: throw in dev, warn + keep first in production
 - Auth, rate limiting, origin checks: all middleware-host, registered before `createRPCMiddleware()`
 - Body limits: host framework's parser (express.json, bodyLimit, koa-body, hono/body-limit)

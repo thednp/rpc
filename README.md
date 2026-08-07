@@ -90,7 +90,7 @@ Scan `src/api/` for classic `server.ts|js|mjs|mts` files, or switch to glob mode
 <details>
 <summary><b>Typed errors, safe by default</b></summary>
 
-Server errors return a generic `Internal Server Error` in production — no messages, codes, or stacks leak to clients. In development the message (and `code`/`data` for `RPCError`) is included so you can debug instantly. `multipart/form-data` content type is supported for file uploads via your framework's multipart parser.
+Server errors return a generic `Internal Server Error` — no messages, codes, or stacks leak to clients, in any environment. Only `RPCError` payloads (developer-authored `message`/`code`/`data`) reach the client, and only in development, so you can debug instantly. `multipart/form-data` content type is supported for file uploads via your framework's multipart parser.
 </details>
 
 <details>

@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.1.1] - 2026-08-07
+
+### Security
+
+- Unexpected exceptions no longer expose their message in development responses: `formatError` returns the generic `{ error: "Internal Server Error" }` for any non-`RPCError` error in every environment. `RPCError` payloads (developer-authored `message`, `code`, optional `data`) are still included in development so client-side error handling keeps working, while diagnostics stay server-side via the middleware's `console.error` logging (addresses the GitHub CodeQL `js/exception-information-leak` finding)
+
+### Refactor
+
+- `scanForServerFiles` lazy-imports Vite inside the scan function instead of importing it statically at the top of the module — the standalone server entry no longer carries a static Vite dependency, so serverless function bundles that register API modules directly no longer drag Vite's node chunk (which imports esbuild, absent with Vite 8's rolldown) into the bundle
+- Drop the redundant `config as ScanConfig` casts in `scanForServerFiles` (the merged config is already typed)
+
+### Fixes
+
+- Netlify serverless deployment: externalize Vite from the function bundle via `[functions] external_node_modules = ["vite"]` in `netlify.toml`, so `@netlify/zip-it-and-ship-it` no longer fails with "Could not resolve 'esbuild'" when bundling the RPC function
+- Fix broken documentation links in all 6 example READMEs (`wiki/setup.md` → `wiki/wire-protocol.md`, the former never existed)
+- Remove stale `demo/src/render-bak.ts`; clean up the pnpm lockfile
+
+### Docs
+
+- Update `wiki/security.md`, `wiki/wire-protocol.md`, `README.md`, and `llms.txt` to reflect that unexpected exception details never reach clients — only `RPCError` payloads, and only in development
+
+### Tests
+
+- `formatError` dev-mode tests updated to assert the generic message for unexpected exceptions (plain `Error` and non-`Error` values), keeping the `RPCError` payload assertions
+
+### Chores
+
+- Sync demo and all 6 examples to `@thednp/rpc ^0.1.0`
+- Remove the leftover `0.0.14` changelog header (its entry was merged into `0.1.0`)
+
 ## [0.1.0] - 2026-08-06
 
 ### Features
