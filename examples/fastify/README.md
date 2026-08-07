@@ -22,7 +22,7 @@ Server-Side Rendering (SSR) application using Fastify with `@thednp/rpc` for aut
 ## Resources
 
 - [Getting Started](https://github.com/thednp/rpc/blob/master/wiki/getting-started.md)
-- [Setup Guide](https://github.com/thednp/rpc/blob/master/wiki/setup.md)
+- [Wire Protocol](https://github.com/thednp/rpc/blob/master/wiki/wire-protocol.md)
 - [Server Functions](https://github.com/thednp/rpc/blob/master/wiki/server-functions.md)
 - [Client Usage](https://github.com/thednp/rpc/blob/master/wiki/client-usage.md)
 - [Fastify Adapter](https://github.com/thednp/rpc/blob/master/wiki/adapters.md#fastify)

@@ -19,7 +19,7 @@ Single-Page Application using Vite dev server with `@thednp/rpc` for automatic R
 ## Resources
 
 - [Getting Started](https://github.com/thednp/rpc/blob/master/wiki/getting-started.md)
-- [Setup Guide](https://github.com/thednp/rpc/blob/master/wiki/setup.md)
+- [Wire Protocol](https://github.com/thednp/rpc/blob/master/wiki/wire-protocol.md)
 - [Server Functions](https://github.com/thednp/rpc/blob/master/wiki/server-functions.md)
 - [Client Usage](https://github.com/thednp/rpc/blob/master/wiki/client-usage.md)
 - [Configuration](https://github.com/thednp/rpc/blob/master/wiki/configuration.md)

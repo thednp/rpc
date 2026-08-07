@@ -19,7 +19,7 @@ Server-Side Rendering application using a custom `node:http` server (Express-com
 ## Resources
 
 - [Getting Started](https://github.com/thednp/rpc/blob/master/wiki/getting-started.md)
-- [Setup Guide](https://github.com/thednp/rpc/blob/master/wiki/setup.md)
+- [Wire Protocol](https://github.com/thednp/rpc/blob/master/wiki/wire-protocol.md)
 - [Server Functions](https://github.com/thednp/rpc/blob/master/wiki/server-functions.md)
 - [Client Usage](https://github.com/thednp/rpc/blob/master/wiki/client-usage.md)
 - [Express Adapter](https://github.com/thednp/rpc/blob/master/wiki/adapters.md#express) (compatible middleware)
