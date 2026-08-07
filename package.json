@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -63,12 +63,12 @@
     "lint:ts": "deno lint src",
     "fix:ts": "deno lint src --fix",
     "check:ts": "tsc -noEmit",
-    "up:examples": "pnpm up:examples:lib && pnpm up -r --latest --filter \"./examples/*\" && pnpm ci -r --filter \"./examples/*\"",
-    "up:examples:lib": "node scripts/update-examples.js",
+    "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
+    "up:examples:lib": "deno run -A scripts/update-examples.js",
     "up:root": "pnpm up --latest",
     "release": "node scripts/release.js",
     "up:deno": "deno update && deno -A scripts/update-deno.js",
-    "upd": "pnpm up:examples:lib && pnpm up:examples && pnpm up:root",
+    "upd": "pnpm up:examples && pnpm up:root && pnpm up:examples:lib",
     "audit:src": "node scripts/audit-src.js",
     "prepareOnly": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "prepublishOnly_": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
@@ -78,9 +78,9 @@
     "express": "^5.2.1",
     "fastify": "^5.11.2",
     "fastify-plugin": "^6.0.0",
-    "hono": "^4.13.0",
+    "hono": "^4.13.1",
     "koa": "^3.2.1",
-    "vite": "^8.2.0"
+    "vite": "^8.2.1"
   },
   "devDependencies": {
     "@hono/node-server": "^2.1.0",
@@ -94,5 +94,5 @@
     "vite-plugin-strip-comments": "^0.0.10",
     "vitest": "^4.1.10"
   },
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "pnpm@11.20.0"
 }

@@ -60,6 +60,9 @@ type BodyResult = {
 } | {
   contentType: "text/plain";
   data: string;
+} | {
+  contentType: "multipart/form-data";
+  data: Record<string, unknown>;
 };
 // primitives and their compositions
 /**
@@ -75,7 +78,7 @@ type JsonObject = {
 /**
  * A JSON array of JSON values.
  */
-type JsonArray = JsonValue[];
+type JsonArray = (FormData | JsonValue)[];
 /**
  * Any JSON-serializable value: primitive, array, or object.
  */

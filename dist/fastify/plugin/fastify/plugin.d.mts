@@ -106,6 +106,20 @@ interface RpcPluginOptions {
    * @default express
    */
   adapter: "express" | "hono" | "fastify" | "koa";
+  /**
+   * Root directory from which the plugin scans for server files.
+   * Defaults to `<root>/src/api`. Use this in monorepos where server files
+   * live in a shared package outside the current project root.
+   * @default undefined (resolves to src/api relative to the Vite root)
+   */
+  scanRoot?: string;
+  /**
+   * Server file matching mode. Use `"exact"` (default) for the classic
+   * `server.ts|js|mjs|mts` names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}`
+   * inside the scan root.
+   * @default "exact"
+   */
+  serverFiles?: "exact" | "glob";
 }
 interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
   /**

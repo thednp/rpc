@@ -21,6 +21,7 @@ Server-Side Rendering (SSR) application using Express with `@thednp/rpc` for aut
 
 ## Resources
 
+- [Quick Start](https://github.com/thednp/rpc/blob/master/wiki/quickstart.md) — rebuild this example from `create-vite` in under a minute
 - [Getting Started](https://github.com/thednp/rpc/blob/master/wiki/getting-started.md)
 - [Setup Guide](https://github.com/thednp/rpc/blob/master/wiki/setup.md)
 - [Server Functions](https://github.com/thednp/rpc/blob/master/wiki/server-functions.md)

@@ -83,7 +83,7 @@ The tsdown.config.ts produces multiple entries:
 
 ## Important Notes
 
-- In dev mode, **only** the Vite dev server and Express/Connect middleware are available, which means adapters don't work in DEV mode
+- In dev mode, **only** the Vite dev server ([Connect](https://github.com/senchalabs/connect) powered) and Express middleware are available, which means adapters don't work in DEV mode
 - Uses `deno` for linting and formatting (not eslint/prettier)
 - Uses `tsdown` for bundling (not rollup/vite directly)
 - Uses `vitest` for testing with `istanbul` coverage
@@ -133,12 +133,12 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 
 ## Documentation
 
-- `wiki/index.md` — Overview
-- `wiki/getting-started.md` — Quick start
-- `wiki/setup.md` — Project structure and configuration
-- `wiki/server-functions.md` — Creating server functions
-- `wiki/client-usage.md` — Client-side usage
-- `wiki/configuration.md` — Configuration reference
-- `wiki/adapters.md` — Framework adapters
+- `wiki/quickstart.md` — Rebuild the Express SSR example from `create-vite` in under a minute (copy-paste)
+- `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
+- `wiki/configuration.md` — Configuration reference (`rpc.config.ts`, `vite.config.ts`, options)
+- `wiki/server-functions.md` — `createServerFunction` API, methods, validation
+- `wiki/client-usage.md` — Client-side usage, type safety, react-query integration
+- `wiki/wire-protocol.md` — HTTP contract, request/response bodies, curl debugging
+- `wiki/adapters.md` — Framework adapters (Express, Fastify, Hono, Koa)
 - `wiki/security.md` — Security hardening
-- `wiki/best-practices.md` — Tips and best practices
+- `wiki/best-practices.md` — Production patterns (auth, rate limiting, body limits, CSRF)

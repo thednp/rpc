@@ -113,6 +113,35 @@ describe("Koa helpers", () => {
       expect(onSpy).not.toHaveBeenCalled();
     });
 
+    it("should use pre-parsed multipart body from koa-body middleware", async () => {
+      const ctx = makeKoaCtx({
+        headers: { "content-type": "multipart/form-data; boundary=xyz" },
+      });
+      ctx.request.body = { name: "artae", file: "data" };
+
+      const result = await readBody(ctx);
+      expect(result).toEqual({
+        contentType: "multipart/form-data",
+        data: { name: "artae", file: "data" },
+      });
+    });
+
+    it("should return raw stream data for multipart when no parser ran", async () => {
+      const ctx = makeKoaCtx({
+        headers: { "content-type": "multipart/form-data; boundary=xyz" },
+      });
+      const p = readBody(ctx);
+      simulateKoaBody(
+        ctx,
+        '--xyz\r\nContent-Disposition: form-data; name="a"\r\n\r\n1\r\n--xyz--\r\n',
+      );
+      const result = await p;
+      expect(result.contentType).toBe("multipart/form-data");
+      expect(result.data).toEqual({
+        raw: expect.stringContaining('name="a"'),
+      });
+    });
+
     it("should fall through to raw stream when body is undefined", async () => {
       const ctx = makeKoaCtx({
         headers: { "content-type": "application/json" },
@@ -469,6 +498,8 @@ describe("Koa createRPCMiddleware", () => {
   });
 
   it("should return 500 on handler error", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
     createServerFunction(
       "errFn",
       vi.fn().mockRejectedValue(new Error("koa oops")),
@@ -480,6 +511,7 @@ describe("Koa createRPCMiddleware", () => {
     await mw(ctx, next);
     expect(ctx.status).toBe(500);
     expect(ctx.body).toEqual({ error: "Internal Server Error" });
+    process.env.NODE_ENV = prevEnv;
   });
 
   it("should call next() when prefix doesn't match", async () => {

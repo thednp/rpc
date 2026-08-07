@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleResponse, innerModule } from "../src/helpers.ts";
+import { handleResponse, innerModule } from "../src/client-helpers.ts";
 
 describe("handleResponse", () => {
   beforeEach(() => {

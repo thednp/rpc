@@ -5,18 +5,19 @@ import { resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
 import { defaultRPCOptions } from "./options.ts";
-import type { RpcPluginOptions } from "./types.d.ts";
+import type { RpcPluginOptions, ScanConfig } from "./types.d.ts";
 import {
   CONFIG_FILE_NOT_FOUND,
   FAILED_LOAD_CONFIG,
   NO_CONFIG_FOUND,
 } from "./constants.ts";
 
+import { getClientModules } from "./getClientModules.ts";
 import {
-  getClientModules,
   scanForServerFiles,
-  serverFunctionsMap,
-} from "@thednp/rpc/server";
+  scannedServerFiles,
+} from "./scanForServerFiles.ts";
+import { serverFunctionsMap } from "./functionsMap.ts";
 
 import { createRPCMiddleware } from "@thednp/rpc/express";
 
@@ -152,9 +153,12 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
  */
 function rpcPlugin(
   devOptions: Partial<RpcPluginOptions> = {},
-): Plugin<unknown> {
+): Plugin {
   // Internal type - adapters are handled at runtime
-  let options: RpcPluginOptions & { rpcPrefix: string };
+  let options: RpcPluginOptions & { rpcPrefix: string } = mergeConfig(
+    defaultRPCOptions,
+    devOptions,
+  ) as RpcPluginOptions;
   let config: ResolvedConfig;
   let viteServer: ViteDevServer;
   let isOxc = true;
@@ -185,7 +189,12 @@ function rpcPlugin(
       const { adapter: _adapter, ...rest } = options;
       // istanbul ignore else
       if (serverFunctionsMap.size === 0) {
-        await scanForServerFiles(config, viteServer);
+        const scanCfg: ScanConfig = {
+          ...config,
+          serverFiles: options.serverFiles,
+          scanRoot: options.scanRoot,
+        };
+        await scanForServerFiles(scanCfg, viteServer);
       }
 
       // in dev mode we always use express/connect adapter
@@ -198,7 +207,12 @@ function rpcPlugin(
 
       // Prepare the server functions
       if (!viteServer && config) {
-        await scanForServerFiles(config);
+        const scanCfg: ScanConfig = {
+          ...config,
+          serverFiles: options.serverFiles,
+          scanRoot: options.scanRoot,
+        };
+        await scanForServerFiles(scanCfg);
       }
     },
     async transform(code: string, id: string, ops?: { ssr?: boolean }) {
@@ -212,11 +226,25 @@ function rpcPlugin(
         return null;
       }
 
+      const vite = await import("vite");
+
       if (serverFunctionsMap.size === 0) {
-        await scanForServerFiles(config);
+        const scanCfg: ScanConfig = {
+          ...config,
+          serverFiles: options.serverFiles,
+          scanRoot: options.scanRoot,
+        };
+        await scanForServerFiles(scanCfg);
       }
 
-      const vite = await import("vite");
+      // Only transform modules that were scanned as server function files:
+      // pages or docs mentioning `createServerFunction` in prose must not
+      // be rewritten into the generated client bundle.
+      const idPath = vite.normalizePath(id.split("?")[0]);
+      if (!scannedServerFiles.has(idPath)) {
+        return null;
+      }
+
       const transformer = isOxc ? "transformWithOxc" : "transformWithEsbuild";
       const langProp = isOxc ? "lang" : "loader";
       const source = getClientModules({

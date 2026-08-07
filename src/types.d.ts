@@ -57,7 +57,10 @@ export type SupportableContentType =
 /**
  * Content types the RPC client modules send with each request.
  */
-export type ContentType = "application/json" | "text/plain";
+export type ContentType =
+  | "application/json"
+  | "text/plain"
+  | "multipart/form-data";
 
 /**
  * Fetch `credentials` policy used by the generated client modules.
@@ -69,7 +72,8 @@ export type Credentials = "same-origin" | "include" | "omit";
  */
 export type BodyResult =
   | { contentType: "application/json"; data: JsonValue }
-  | { contentType: "text/plain"; data: string };
+  | { contentType: "text/plain"; data: string }
+  | { contentType: "multipart/form-data"; data: Record<string, unknown> };
 
 /**
  * Options for a single server function, controlling how the generated
@@ -107,7 +111,7 @@ export type JsonObject = { [key: string]: JsonValue | JsonArray };
 /**
  * A JSON array of JSON values.
  */
-export type JsonArray = JsonValue[];
+export type JsonArray = (FormData | JsonValue)[];
 /**
  * Any JSON-serializable value: primitive, array, or object.
  */
@@ -150,7 +154,7 @@ export type ServerFunction<
  * Used when registering a function with `createServerFunction`.
  */
 export type ServerFunctionInit<
-  TArgs extends JsonArray = JsonArray,
+  TArgs extends FormData | JsonArray = JsonArray,
   TResult extends JsonValue = JsonValue,
 > = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 
@@ -193,9 +197,11 @@ export interface RpcPluginOptionsInternal {
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
  */
-export type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
-  /** Vite server options override (e.g. `middlewareMode`) */
+export type ScanConfig = Pick<ResolvedConfig, "base"> & {
+  root?: string;
   server?: Partial<ResolvedConfig["server"]>;
+  serverFiles?: "exact" | "glob";
+  scanRoot?: string;
 };
 
 /**
@@ -239,6 +245,22 @@ export interface RpcPluginOptions {
    * @default express
    */
   adapter: "express" | "hono" | "fastify" | "koa";
+
+  /**
+   * Root directory from which the plugin scans for server files.
+   * Defaults to `<root>/src/api`. Use this in monorepos where server files
+   * live in a shared package outside the current project root.
+   * @default undefined (resolves to src/api relative to the Vite root)
+   */
+  scanRoot?: string;
+
+  /**
+   * Server file matching mode. Use `"exact"` (default) for the classic
+   * `server.ts|js|mjs|mts` names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}`
+   * inside the scan root.
+   * @default "exact"
+   */
+  serverFiles?: "exact" | "glob";
 }
 
 export interface MiddlewareOptions<

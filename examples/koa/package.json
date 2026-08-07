@@ -21,7 +21,7 @@
     "koa-static": "^5.0.0",
     "sirv": "^3.0.2",
     "valibot": "^1.4.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.1"
   },
   "devDependencies": {
     "@types/koa": "^3.0.3",

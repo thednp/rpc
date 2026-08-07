@@ -81,11 +81,11 @@ export default defineConfig([
     },
     outDir: "dist/koa",
   },
-  // helpers
+  // client helpers
   {
     ...sharedCfg,
     entry: {
-      helpers: "src/helpers.ts",
+      helpers: "src/client-helpers.ts",
     },
     outDir: "dist/helpers",
   },

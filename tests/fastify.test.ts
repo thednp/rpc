@@ -118,6 +118,31 @@ describe("Fastify helpers", () => {
         data: { key: "value" },
       });
     });
+
+    it("should use pre-parsed multipart body from a multipart parser", async () => {
+      const req = makeFastifyReq({
+        headers: { "content-type": "multipart/form-data; boundary=xyz" },
+        body: JSON.stringify({ name: "artae" }),
+      });
+      const result = await readBody(req as any);
+      expect(result).toEqual({
+        contentType: "multipart/form-data",
+        data: { name: "artae" },
+      });
+    });
+
+    it("should return raw stream data for multipart when no parser ran", async () => {
+      const req = makeFastifyReq({
+        headers: { "content-type": "multipart/form-data; boundary=xyz" },
+      });
+      const p = readBody(req as any);
+      simulateRawBody(req, "--xyz--");
+      const result = await p;
+      expect(result).toEqual({
+        contentType: "multipart/form-data",
+        data: { raw: "--xyz--" },
+      });
+    });
   });
 
   describe("attachRPC", () => {
@@ -470,6 +495,8 @@ describe("Fastify createRPCMiddleware", () => {
   });
 
   it("should return 500 on handler error", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
     createServerFunction(
       "errFn",
       vi.fn().mockRejectedValue(new Error("fastify oops")),
@@ -486,6 +513,7 @@ describe("Fastify createRPCMiddleware", () => {
     await mw(req as never, reply as never, done);
     expect(reply.status).toHaveBeenCalledWith(500);
     expect(reply.send).toHaveBeenCalledWith({ error: "Internal Server Error" });
+    process.env.NODE_ENV = prevEnv;
   });
 
   it("should skip non-matching rpcPrefix (fallthrough)", async () => {

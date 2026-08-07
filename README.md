@@ -16,9 +16,9 @@ The server functions run **isomorphically** within any Vite powered runtime.
 
 ## Why this exists
 
-Most RPC solutions ask you to adopt a new way of thinking, require learning a complex API, some are vendor locked, some even allow you to blend in with your client code (via `"use server"` directive), for sure they are powerful and work well, they provide excellent DX, but complexity always comes with its own drawbacks.
+Many RPC solutions like to overcomplicate things to the point where you no longer ship features, you're maintaining a framework. RPC should be a bridge, not a metropolis.
 
-`@thednp/rpc` carves out the niche that wants to do RPC **without the weight of an entire framework**. If your app is a Vite site, a static SPA, or a small server powered by a single middleware — but you still want typed, cancellable, server-only functions callable from the client — you shouldn't have to adopt a full meta-framework, a full-stack router, or a build-time convention just to bridge the two. This plugin gives you that bridge alone: no framework to learn, no runtime to adopt, no vendor to sign up with.
+`@thednp/rpc` allows you to supercharge any vite powered SPA/SSR starter template in minutes. To prove it, we made a quick guide to [recreate our Express SSR example](./wiki/quickstart.md).
 
 ### Simplicity is best
 
@@ -26,7 +26,7 @@ Most RPC solutions ask you to adopt a new way of thinking, require learning a co
 <details>
 <summary><b>Server functions should just be functions</b></summary>
 
-You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client stub generation, middleware registration, request cancellation — without asking you to restructure your codebase.
+You define them in a file, import and call them where you need them. The plugin handles everything in between — system wide configuration, scanning, type inference, client fetch modules generation, middleware registration, request cancellation — without asking you to restructure your codebase.
 </details>
 
 <details>
@@ -34,7 +34,8 @@ You define them in a file, import and call them where you need them. The plugin 
 
 * `createFunction.ts` — server-side definition (wrapped handler with `AbortController`)
 * `getClientModules.ts` — build-time code generation (string template with validation)
-* `helpers.ts` — client-side runtime (thin `fetch` based modules)
+* `client-helpers.ts` — client-side runtime (thin `fetch` based modules)
+* `server-helpers.ts` — server-only utilities (`RPCError`, error formatting, glob file walking)
 * `scanForServerFiles.ts` — file discovery
 * **Adapters** — thin middleware wrappers
 </details>
@@ -78,6 +79,18 @@ Every server function call returns a handle with a `cancel()` helper. Under the 
 <summary><b>Your server framework is your business</b></summary>
 
 The core plugin doesn't care whether you're running Express, Fastify, Hono, or Koa. Adapters for all four are bundled with the package — you import the one you need, register it as middleware, and you're done. If you're building a plain SPA with no server framework at all, the Vite dev server handles RPC requests directly in development. No adapter needed.
+</details>
+
+<details>
+<summary><b>Flexible server file discovery</b></summary>
+
+Scan `src/api/` for classic `server.ts|js|mjs|mts` files, or switch to glob mode (`serverFiles: 'glob'`) to recursively pick up `*.server.{ts,js,mjs,mts}` files — handy for feature-based layouts. A `scanRoot` option points scanning at a shared package directory in monorepos. Duplicate function names throw in development so the conflict is fixed immediately (warning in production).
+</details>
+
+<details>
+<summary><b>Typed errors, safe by default</b></summary>
+
+Server errors return a generic `Internal Server Error` in production — no messages, codes, or stacks leak to clients. In development the message (and `code`/`data` for `RPCError`) is included so you can debug instantly. `multipart/form-data` content type is supported for file uploads via your framework's multipart parser.
 </details>
 
 <details>
@@ -170,7 +183,7 @@ Check [Configuration Guide](wiki/configuration.md) for details.
 Create `src/api/server.ts`:
 
 ```ts
-import { createServerFunction } from "@thednp/rpc/server";
+import { createServerFunction, RPCError } from "@thednp/rpc/server";
 
 export const greet = createServerFunction("greet", (signal, name: string) => {
   // access AbortSignal
@@ -178,10 +191,15 @@ export const greet = createServerFunction("greet", (signal, name: string) => {
 
   // add validation and other server ONLY functionality
 
+  // throw typed errors for server-side failures
+  if (!name) throw new RPCError("Name is required", "EMPTY_NAME");
+
   // return the result of processing
   return `Hello, ${name}!`;
 });
 ```
+
+`RPCError` is the typed error helper — in development its message (and `code`/`data`) reach the client for instant debugging; in production the response is always a generic `Internal Server Error`.
 
 Create `src/api/index.ts`:
 
@@ -231,7 +249,7 @@ pnpm test-ui      # Run tests with UI
 pnpm test --run   # Single run
 ```
 
-Tests use **Vitest** with **Istanbul** coverage. There are 6 test files covering all adapters plus the plugin.
+Tests use **Vitest** with **Istanbul** coverage — 8 test files covering the plugin, scanning, client/server helpers, and all four adapters, at 100% coverage.
 
 ### Live Testing
 
@@ -307,11 +325,12 @@ The full threat model, including edge cases and configuration options for tighte
 
 ## Documentation
 
-- [Getting Started](./wiki/getting-started.md)
-- [Setup Guide](./wiki/setup.md)
+- [Quick Start](./wiki/quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
+- [Getting Started](./wiki/getting-started.md) — Installation, project structure, and your first function
 - [Configuration](./wiki/configuration.md)
 - [Server Functions](./wiki/server-functions.md)
 - [Client Usage](./wiki/client-usage.md)
+- [Wire Protocol](./wiki/wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./wiki/adapters.md)
 - [Best Practices](./wiki/best-practices.md)
 - [Security](./wiki/security.md)

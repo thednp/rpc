@@ -13,6 +13,8 @@ export const defaultServerFnOptions = {
 export const defaultRPCOptions: RpcPluginOptions = {
   rpcPrefix: "__rpc",
   adapter: "express",
+  serverFiles: "exact",
+  scanRoot: undefined,
 };
 
 export const defaultMiddlewareOptions = {

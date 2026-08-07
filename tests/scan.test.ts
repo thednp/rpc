@@ -60,7 +60,7 @@ describe("scanForServerFiles", () => {
       } as unknown as ViteDevServer;
       serverFunctionsMap.clear();
       await scanForServerFiles(
-        { root: "examples/express", base: "/" },
+        { base: "/" },
         mockDevServer,
       );
       // ssrLoadModule should have been called for each server file in examples/express/src/api
@@ -109,7 +109,7 @@ describe("scanForServerFiles", () => {
       const origWarn = console.error;
       serverFunctionsMap.clear();
       await scanForServerFiles(
-        { root: "examples/express", base: "/" },
+        { base: "/" },
         mockDevServer,
       );
       // The error should be caught and logged, not thrown
@@ -134,7 +134,7 @@ describe("scanForServerFiles", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       serverFunctionsMap.clear();
       await scanForServerFiles(
-        { root: "examples/express", base: "/" },
+        { base: "/" },
         mockDevServer,
       );
       expect(console.warn).toHaveBeenCalledWith("No server function found.");
@@ -160,7 +160,7 @@ describe("scanForServerFiles", () => {
     process.chdir("tests/fixtures/scan-api");
     try {
       await scanForServerFiles(
-        { root: "tests/fixtures/scan-api", base: "/" },
+        { base: "/" },
         mockDevServer,
       );
       // Only server.ts should be loaded; server.tsx, my-server.ts,
@@ -168,6 +168,142 @@ describe("scanForServerFiles", () => {
       expect(ssrLoadModule).toHaveBeenCalledTimes(1);
       expect(serverFunctionsMap.get("test-fn")?.exportName).toBe("testFn");
     } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should scan *.server.* files recursively in glob mode", async () => {
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockImplementation(async (file: string) => {
+      if (file.includes("users.server.ts")) {
+        return { getUsers: { name: "get-users" } };
+      }
+      if (file.includes("upload.server.mts")) {
+        return { uploadFile: { name: "upload-file" } };
+      }
+      return { unknownFn: { name: "unknown-fn" } };
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    serverFunctionsMap.clear();
+    process.chdir("tests/fixtures/scan-api");
+    try {
+      await scanForServerFiles(
+        {
+          base: "/",
+          serverFiles: "glob",
+        },
+        mockDevServer,
+      );
+      expect(ssrLoadModule).toHaveBeenCalledTimes(2);
+      expect(serverFunctionsMap.get("get-users")?.exportName).toBe(
+        "getUsers",
+      );
+      expect(serverFunctionsMap.get("upload-file")?.exportName).toBe(
+        "uploadFile",
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should use explicit scanRoot in glob mode", async () => {
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockImplementation(async (file: string) => {
+      if (file.includes("users.server.ts")) {
+        return { getUsers: { name: "get-users" } };
+      }
+      return { uploadFile: { name: "upload-file" } };
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    serverFunctionsMap.clear();
+    process.chdir("examples/express");
+    try {
+      await scanForServerFiles(
+        {
+          base: "/",
+          serverFiles: "glob",
+          scanRoot: `${originalCwd}/tests/fixtures/scan-api/src/api`,
+        },
+        mockDevServer,
+      );
+      expect(ssrLoadModule).toHaveBeenCalledTimes(2);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should throw on duplicate server function names in dev mode", async () => {
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockResolvedValue({
+      firstFn: { name: "dup-fn" },
+      secondFn: { name: "dup-fn" },
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    serverFunctionsMap.clear();
+    process.chdir("tests/fixtures/scan-api");
+    try {
+      await expect(
+        scanForServerFiles(
+          { base: "/" },
+          mockDevServer,
+        ),
+      ).rejects.toThrow(
+        'Duplicate server function "dup-fn" detected. Each server function must have a unique name. Remove or rename the duplicate.',
+      );
+      expect(serverFunctionsMap.size).toBe(1);
+      expect(serverFunctionsMap.get("dup-fn")?.exportName).toBe("firstFn");
+    } finally {
+      errorSpy.mockRestore();
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should warn and keep the first on duplicates in production mode", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockResolvedValue({
+      firstFn: { name: "dup-fn" },
+      secondFn: { name: "dup-fn" },
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    serverFunctionsMap.clear();
+    process.chdir("tests/fixtures/scan-api");
+    try {
+      await scanForServerFiles(
+        { base: "/" },
+        mockDevServer,
+      );
+      expect(console.warn).toHaveBeenCalledWith(
+        'Duplicate server function "dup-fn" detected. Each server function must have a unique name. Remove or rename the duplicate.',
+      );
+      expect(serverFunctionsMap.size).toBe(1);
+      expect(serverFunctionsMap.get("dup-fn")?.exportName).toBe("firstFn");
+    } finally {
+      warnSpy.mockRestore();
+      process.env.NODE_ENV = prevEnv;
       process.chdir(originalCwd);
     }
   });

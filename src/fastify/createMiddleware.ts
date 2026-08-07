@@ -12,10 +12,10 @@ import type { JsonValue } from "../types.d.ts";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { escapeRegExp } from "../tools.ts";
+import { formatError } from "../server-helpers.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
-  INTERNAL_SERVER_ERROR,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
@@ -180,7 +180,9 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
           if (raw) args = JSON.parse(raw);
         } else {
           const body = await readBody(req);
-          args = Array.isArray(body.data) ? body.data : [body.data];
+          args = Array.isArray(body.data)
+            ? body.data as JsonValue[]
+            : [body.data as JsonValue];
         }
         const { data: dataResult, cancel } = serverFunction.handler(...args);
         const onClose = () => cancel(CLIENT_DISCONNECTED);
@@ -193,7 +195,8 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         if (!reply.raw.headersSent) reply.status(200).send({ data });
       } catch (err) {
         console.error(String(err));
-        reply.status(500).send({ error: INTERNAL_SERVER_ERROR });
+        const isProduction = process.env.NODE_ENV === "production";
+        reply.status(500).send(formatError(err, isProduction));
       }
     },
   });

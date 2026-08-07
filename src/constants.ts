@@ -40,3 +40,7 @@ export const CONFIG_FILE_NOT_FOUND = (
 export const NO_CONFIG_FOUND = ` ⚡︎ No RPC config found, loading the defaults..`;
 
 export const FAILED_LOAD_CONFIG = ` ⚠︎ Failed to load RPC config:`;
+
+/** Error template for duplicate server function names across files. @param name - The duplicate registered name */
+export const DUPLICATE_FUNCTION_NAME = (name: string) =>
+  `Duplicate server function "${name}" detected. Each server function must have a unique name. Remove or rename the duplicate.`;

@@ -1,19 +1,62 @@
 # @thednp/rpc
 
-Vite plugin for automatic RPC generation from server functions.
+Vite plugin for automatic RPC generation from server functions. One module (`src/api/server.ts`), two resolutions: real functions on SSR/Node, fetch stubs in the browser. Types flow through because tsc sees the source module — only the Vite bundler swaps the implementation.
 
 ## Core API
-- `createServerFunction(name, handler, options?)` — define a server function
-- `import { fn } from "./api"` — call it from the client (auto-transformed to fetch) or server (the actual function)
-- Returns `{ data: Promise<T>, cancel: (reason) => void }`
+- `createServerFunction(name, handler, options?)` — define a server function: first arg is `AbortSignal`, remaining args are JSON-serializable
+- `import { fn } from "./api"` — on the server calls the real handler, in the browser calls auto-generated `fetch` stubs
+- Returns `{ data: Promise<T>, cancel: (reason: string) => void }`
+- Options: `{ method: "GET" | "POST", contentType: "application/json" | "text/plain" | "multipart/form-data", credentials }`
+- `RPCError(message, code?, data?)` — throwable typed error, exported from `@thednp/rpc/server` (as is `formatError`); throw for server-side failures (not validation — return `{ error }` for expected user-facing problems). Dev 500 body: `{ error, code, data }`; prod: generic `{ error: "Internal Server Error" }` only. Client rejection `message` = the error string
+- Registered function names become URL paths: `POST /{prefix}/{name}` with body `JSON.stringify(args)`
+
+## Wire Protocol (client module → server)
+- **POST (default):** `/{prefix}/{fnName}` body = `JSON.stringify(args)` (bare JSON array, not `{data:[...]}`)
+- **text/plain** POST: body = `args[0]` as raw string
+- **multipart/form-data** POST: client sends the `FormData` passed as the first argument (browser sets the boundary). Server-side, parse before the handler runs — framework multipart middleware BEFORE the RPC middleware (multer, @fastify/multipart, koa-body, hono formData) and the parsed fields object becomes the function argument; without a parser the handler gets `{ raw: "<body>" }`, which you must parse yourself (busboy or formidable — Node has no built-in multipart parser)
+- **GET:** `/{prefix}/{fnName}?args=encodeURIComponent(JSON.stringify(args))`
+- **Response:** always `{ data: <result> }` — 200 wraps everything, even `{ error }` responses (they resolve as data, not thrown)
+- **Status codes:** 200 (success or validation-as-data), 404/405/500 (transport errors → data promise rejects). 500 body: generic `{ error: "Internal Server Error" }` in production; dev includes the message (and `code`/`data` for `RPCError`)
+- See `wiki/wire-protocol.md` for full curl examples
 
 ## Config
-- `rpc.config.ts` with `defineConfig({ adapter, rpcPrefix })`
-- Adapters: "express" | "fastify" | "hono" | "koa"
+- `rpc.config.ts` with `defineConfig({ rpcPrefix: "__rpc", adapter: "express" | "fastify" | "hono" | "koa" })`
+- `serverFiles: "exact" | "glob"` — `"exact"` (default) matches `server.ts|js|mjs|mts`; `"glob"` recursively matches `*.server.{ts,js,mjs,mts}` under the scan root
+- `scanRoot: string` — scan directory (default `<root>/src/api`); point it at a shared package in monorepos
+- `loadRPCConfig()` loads config programmatically
+- `createRPCMiddleware({ origin })` — optional origin check: requests with a mismatching `Origin` header get 403; requests without one pass through
+- Plugin options in `vite.config.ts` (`rpc()`) override `rpc.config.ts` in dev only
+- Config discovery: `rpc.config.ts` > `.js` > `.mjs` > `.mts` > `.rpcrc.ts` > `.rpcrc.js`
+
+## Project Structure
+- `src/api/server.ts` — server functions (auto-scanned). Aliases: `server.js`, `.mjs`, `.mts`; glob mode matches `*.server.{ts,js,mjs,mts}`
+- `src/api/index.ts` — `export * from "./server"` (single import point for SSR + client — types flow through this)
+- SSR: `src/entry-server.ts` (imports real functions) and `src/entry-client.ts` (imports fetch stubs)
+- SPA: just import from `./api` in client code
 
 ## Rules
-- Server functions live in `src/api/server.ts`
-- Re-export from `src/api/index.ts`
-- First argument of server functions is always `AbortSignal`
-- Arguments must be JSON-serializable
-- Do NOT pass DOM nodes, functions, or class instances as arguments
+- First handler argument is always `(signal: AbortSignal, ...args)`
+- Handler args must be JSON-serializable (string, number, boolean, null, array, plain object) — or a `FormData` instance as the single arg of a `multipart/form-data` function
+- Do NOT pass DOM nodes, functions, class instances, or circular refs
+- Export functions individually (named exports). No default export or bundled objects
+- Re-export from `src/api/index.ts` — this is non-negotiable for SSR/client duality
+
+## Security Boundaries
+- Prefix regex: `new RegExp("^/" + escapeRegExp(prefix) + "/")` — not `startsWith` (prevents segment bypass like `/__rpc-evil/foo`)
+- Default POST methods — CSRF-safe (no `<img>`/form GET can trigger mutations)
+- 404s are generic — no function enumeration
+- 500s: generic in production (no message/stack leak); dev mode includes message + `code`/`data` for `RPCError`
+- Duplicate function names: throw in dev, warn + keep first in production
+- Auth, rate limiting, origin checks: all middleware-host, registered before `createRPCMiddleware()`
+- Body limits: host framework's parser (express.json, bodyLimit, koa-body, hono/body-limit)
+
+## Wiki Pages (in learning order)
+- `wiki/quickstart.md` — Rebuild the Express SSR example from `create-vite` in under a minute
+- `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
+- `wiki/configuration.md` — `rpc.config.ts`, `vite.config.ts`, `loadRPCConfig`
+- `wiki/server-functions.md` — `createServerFunction` API, methods, content types (JSON/text/multipart), validation (zod + valibot), typed errors (`RPCError`), AbortSignal
+- `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration
+- `wiki/wire-protocol.md` — HTTP contract: request/response bodies, status codes, curl debugging
+- `wiki/adapters.md` — Express, Fastify, Hono, Koa (`attachRPC`, `attachVite`, body limits)
+- `wiki/security.md` — Prefix guards, method enforcement, origin, CSRF hardening
+- `wiki/best-practices.md` — Auth middleware, rate limiting, per-function authorization, body limits

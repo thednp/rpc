@@ -26,7 +26,7 @@ type JsonObject = {
 /**
  * A JSON array of JSON values.
  */
-type JsonArray = JsonValue[];
+type JsonArray = (FormData | JsonValue)[];
 /**
  * Any JSON-serializable value: primitive, array, or object.
  */
@@ -42,7 +42,7 @@ type InnerModReturn = {
   cancel: (reason: string) => void;
 };
 //#endregion
-//#region src/helpers.d.ts
+//#region src/client-helpers.d.ts
 /**
  * Processes an HTTP fetch response from the RPC server.
  * On HTTP 499 or 408 (client cancellation), logs a warning and returns undefined.

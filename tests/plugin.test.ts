@@ -4,6 +4,7 @@ import { default as rpcPlugin, loadRPCConfig } from "../src/index.ts";
 import type { ServerFnEntry, ServerFunctionInit } from "../src/types.d.ts";
 import { createServerFunction } from "../src/createFunction.ts";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
+import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import { getClientModules } from "../src/getClientModules.ts";
 import {
   validateCredentials,
@@ -280,6 +281,20 @@ describe("getClientModules", () => {
     expect(code).toContain("body = args[0]");
   });
 
+  it("should pass FormData as body with no Content-Type for multipart", () => {
+    serverFunctionsMap.set("upload", {
+      name: "upload",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "multipart/form-data" },
+      exportName: "upload",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(code).toContain("body = args[0]");
+    expect(code).toContain("headers = {}");
+    expect(code).not.toContain("Content-Type");
+  });
+
   it("should generate JSON body for JSON content type", () => {
     serverFunctionsMap.set("add", {
       name: "add",
@@ -385,6 +400,7 @@ describe("getClientModules", () => {
     const plugin = rpcPlugin();
     (plugin.buildStart as any)?.call(mockPlugin7Context);
     (plugin.configResolved as any)({ mode: "development" } as any);
+    scannedServerFiles.add("some-id.ts");
 
     const result = await (plugin.transform as any)(
       "createServerFunction()",
@@ -400,6 +416,7 @@ describe("getClientModules", () => {
     const plugin = rpcPlugin();
     (plugin.buildStart as any)?.call(mockPlugin8Context);
     (plugin.configResolved as any)({ mode: "development" } as any);
+    scannedServerFiles.add("some-id.ts");
 
     const result = await (plugin.transform as any)(
       "createServerFunction()",
@@ -409,6 +426,26 @@ describe("getClientModules", () => {
 
     expect(result?.code.length).toBeGreaterThan(0);
     expect(result?.map).toBeDefined();
+  });
+
+  it("should not rewrite non-scanned modules mentioning createServerFunction", async () => {
+    const plugin = rpcPlugin();
+    (plugin.buildStart as any)?.call(mockPlugin8Context);
+    (plugin.configResolved as any)({ mode: "development" } as any);
+    scannedServerFiles.clear();
+    serverFunctionsMap.set("fn", {
+      name: "fn",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      exportName: "fn",
+    });
+
+    const result = await (plugin.transform as any)(
+      "marketing copy with createServerFunction() in it",
+      "src/main.ts",
+      { ssr: false },
+    );
+
+    expect(result).toBeNull();
   });
 });
 
@@ -460,6 +497,8 @@ describe("validatePathSegment", () => {
     expect(validatePathSegment("hello", "fn")).toBe("hello");
     expect(validatePathSegment("_foo/bar_", "fn")).toBe("_foo/bar_");
     expect(validatePathSegment("a1", "fn")).toBe("a1");
+    expect(validatePathSegment("@demo", "prefix")).toBe("@demo");
+    expect(validatePathSegment("api/@v1/rpc", "prefix")).toBe("api/@v1/rpc");
   });
 
   it("should throw for segments starting with /", () => {

@@ -2,7 +2,7 @@ import type { Credentials } from "./types.d.ts";
 import { INVALID_IDENTIFIER, INVALID_PATH_SEGMENT } from "./constants.ts";
 
 const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/;
+const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@][A-Za-z0-9_$@/-]*$/;
 const CREDENTIALS_VALUES: readonly Credentials[] = [
   "same-origin",
   "include",
@@ -26,7 +26,7 @@ export function validateIdentifier(name: string, label: string): string {
 
 /**
  * Validates that a string is a safe path segment for RPC routing.
- * Allows alphanumeric characters, underscores, dollar signs, hyphens, and forward slashes.
+ * Allows alphanumeric characters, underscores, dollar signs, at signs, hyphens, and forward slashes.
  * @param segment - The string to validate
  * @param label - Human-readable label for error messages (e.g. "rpcPrefix")
  * @returns The validated segment if it passes

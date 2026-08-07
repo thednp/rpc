@@ -94,14 +94,23 @@ export const readBody = async (
 ): Promise<BodyResult> => {
   const contentType = c.req.header("content-type")?.toLowerCase() || "";
   const isJSON = contentType.includes("json");
+  const isMultipart = contentType.includes("multipart/form-data");
   const incoming = (c.env as HttpBindings).incoming as
     | IncomingWithBody
     | undefined;
   if (incoming?.body !== undefined) {
     const reqBody = incoming.body;
     return {
-      contentType: isJSON ? "application/json" : "text/plain",
-      data: isJSON ? reqBody : String(reqBody),
+      contentType: isMultipart
+        ? "multipart/form-data"
+        : isJSON
+        ? "application/json"
+        : "text/plain",
+      data: isMultipart
+        ? (reqBody as Record<string, unknown>)
+        : isJSON
+        ? reqBody
+        : String(reqBody),
     } as BodyResult;
   }
   if (isJSON) {
@@ -113,5 +122,10 @@ export const readBody = async (
   }
 
   const text = await c.req.text();
-  return { contentType: "text/plain", data: String(text) };
+  return {
+    contentType: isMultipart ? "multipart/form-data" : "text/plain",
+    data: isMultipart
+      ? ({ raw: text } as Record<string, unknown>)
+      : String(text),
+  } as BodyResult;
 };

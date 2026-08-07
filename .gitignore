@@ -1,8 +1,10 @@
 node_modules
 coverage
 experiments
+TEMP
 examples/**/pnpm-lock.yaml
 examples/**/package-lock.json
 examples/**/deno.lock
 examples/**/node_modules
 .env
+demo/dist

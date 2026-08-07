@@ -11,7 +11,7 @@ import "koa";
 /**
  * Content types the RPC client modules send with each request.
  */
-type ContentType = "application/json" | "text/plain";
+type ContentType = "application/json" | "text/plain" | "multipart/form-data";
 /**
  * Fetch `credentials` policy used by the generated client modules.
  */
@@ -53,7 +53,7 @@ type JsonObject = {
 /**
  * A JSON array of JSON values.
  */
-type JsonArray = JsonValue[];
+type JsonArray = (FormData | JsonValue)[];
 /**
  * Any JSON-serializable value: primitive, array, or object.
  */
@@ -62,7 +62,7 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
-type ServerFunctionInit<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 /**
  * Client-side stub signature generated for each server function.
  * Returns a promise-backed `data` handle plus a `cancel` function
@@ -96,9 +96,11 @@ interface RpcPluginOptionsInternal {
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
  */
-type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
-  /** Vite server options override (e.g. `middlewareMode`) */
+type ScanConfig = Pick<ResolvedConfig, "base"> & {
+  root?: string;
   server?: Partial<ResolvedConfig["server"]>;
+  serverFiles?: "exact" | "glob";
+  scanRoot?: string;
 };
 /**
  * Entry in the server functions map: registered name, client handler,
@@ -139,17 +141,37 @@ interface RpcPluginOptions {
    * @default express
    */
   adapter: "express" | "hono" | "fastify" | "koa";
+  /**
+   * Root directory from which the plugin scans for server files.
+   * Defaults to `<root>/src/api`. Use this in monorepos where server files
+   * live in a shared package outside the current project root.
+   * @default undefined (resolves to src/api relative to the Vite root)
+   */
+  scanRoot?: string;
+  /**
+   * Server file matching mode. Use `"exact"` (default) for the classic
+   * `server.ts|js|mjs|mts` names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}`
+   * inside the scan root.
+   * @default "exact"
+   */
+  serverFiles?: "exact" | "glob";
 }
 //#endregion
 //#region src/functionsMap.d.ts
 declare const serverFunctionsMap: Map<string, ServerFnEntry>;
 //#endregion
 //#region src/scanForServerFiles.d.ts
+/** Absolute ids (normalized) of the scanned server function files. */
+declare const scannedServerFiles: Set<string>;
 /**
- * Scans `src/api/` for server function files (`server.ts`, `server.js`, `server.mjs`, `server.mts`)
+ * Scans `src/api/` (or an explicit `scanRoot`) for server function files
  * and populates the global `serverFunctionsMap` with their exported functions.
  * Uses Vite's SSR module loading to resolve and execute each file.
- * @param initialCfg - Optional Vite config overrides (root, base, server)
+ *
+ * Supports two matching modes via `config.serverFiles`:
+ *   `"exact"` — classic `server.ts|js|mjs|mts` names in the api directory
+ *   `"glob"` — recursively walking `scanRoot` to match `*.server.{ts,js,mjs,mts}`
+ * @param initialCfg - Optional Vite config overrides (root, base, server, serverFiles, scanRoot)
  * @param devServer - Optional running Vite dev server instance; when provided, skips creating a new one
  */
 declare const scanForServerFiles: (initialCfg?: ScanConfig, devServer?: ViteDevServer) => Promise<void>;
@@ -176,6 +198,32 @@ declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResu
  */
 declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => string;
 //#endregion
+//#region src/server-helpers.d.ts
+/**
+ * Recursively walks `dir` and collects absolute paths to files whose
+ * basename matches the `*.server.{ts,js,mjs,mts}` glob pattern.
+ */
+declare const walkGlobFiles: (dir: string) => Promise<string[]>;
+/**
+ * A typed error thrown from server functions.
+ * The middleware serializes the `message` and `code` in the response,
+ * allowing clients to recognise and handle specific error conditions.
+ */
+declare class RPCError extends Error {
+  /** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
+  code: string;
+  /** Optional diagnostic payload */
+  data?: JsonValue;
+  constructor(message: string, code?: string, data?: JsonValue);
+}
+/**
+ * Formats an error for the RCP middleware response.
+ * In development the full message and stack are included so developers
+ * can quickly identify issues. In production only the generic
+ * "Internal Server Error" is sent, preventing information disclosure.
+ */
+declare const formatError: (err: unknown, isProduction: boolean) => JsonObject;
+//#endregion
 //#region src/options.d.ts
 declare const defaultServerFnOptions: {
   contentType: "application/json";
@@ -189,5 +237,5 @@ declare const defaultMiddlewareOptions: {
   origin: undefined;
 };
 //#endregion
-export { createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, getClientModules, scanForServerFiles, serverFunctionsMap };
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, formatError, getClientModules, scanForServerFiles, scannedServerFiles, serverFunctionsMap, walkGlobFiles };
 //# sourceMappingURL=server.d.mts.map

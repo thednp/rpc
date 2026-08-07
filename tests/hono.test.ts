@@ -88,6 +88,31 @@ describe("Hono helpers", () => {
         data: "pre-parsed body",
       });
     });
+
+    it("should return multipart fields from pre-parsed body", async () => {
+      const c = makeHonoContext({
+        headers: { "content-type": "multipart/form-data; boundary=xyz" },
+        body: "ignored",
+      });
+      (c.env as any).incoming = { body: { name: "artae" } };
+      const result = await readBody(c);
+      expect(result).toEqual({
+        contentType: "multipart/form-data",
+        data: { name: "artae" },
+      });
+    });
+
+    it("should return raw text for multipart when no parser ran", async () => {
+      const c = makeHonoContext({
+        headers: { "content-type": "multipart/form-data; boundary=xyz" },
+        body: "--xyz--",
+      });
+      const result = await readBody(c);
+      expect(result).toEqual({
+        contentType: "multipart/form-data",
+        data: { raw: "--xyz--" },
+      });
+    });
   });
 
   describe("attachRPC", () => {
@@ -334,6 +359,8 @@ describe("Hono createRPCMiddleware", () => {
   });
 
   it("should return 500 on handler error", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
     createServerFunction(
       "errFn",
       vi.fn().mockRejectedValue(new Error("hono oops")),
@@ -346,6 +373,7 @@ describe("Hono createRPCMiddleware", () => {
       { error: "Internal Server Error" },
       500,
     );
+    process.env.NODE_ENV = prevEnv;
   });
 
   it("should call next() when prefix doesn't match", async () => {

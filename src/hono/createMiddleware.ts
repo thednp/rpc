@@ -6,10 +6,10 @@ import { createMiddleware as createHonoMiddleware } from "hono/factory";
 import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import { escapeRegExp } from "../tools.ts";
+import { formatError } from "../server-helpers.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
-  INTERNAL_SERVER_ERROR,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
@@ -159,7 +159,9 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
           if (raw) args = JSON.parse(raw);
         } else {
           const body = await readBody(c);
-          args = Array.isArray(body.data) ? body.data : [body.data];
+          args = Array.isArray(body.data)
+            ? body.data as JsonValue[]
+            : [body.data as JsonValue];
         }
         const fnResult = serverFunction.handler(...args);
         const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);
@@ -172,7 +174,8 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         return c.json({ data: result }, 200);
       } catch (err) {
         console.error(String(err));
-        return c.json({ error: INTERNAL_SERVER_ERROR }, 500);
+        const isProduction = process.env.NODE_ENV === "production";
+        return c.json(formatError(err, isProduction), 500);
       }
     },
   });

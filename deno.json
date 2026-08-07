@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "keywords": [
@@ -19,7 +19,7 @@
     "./express": "./src/express/index.ts",
     "./fastify": "./src/fastify/index.ts",
     "./fastify/plugin": "./src/fastify/plugin.ts",
-    "./helpers": "./src/helpers.ts",
+    "./helpers": "./src/client-helpers.ts",
     "./hono": "./src/hono/index.ts",
     "./koa": "./src/koa/index.ts",
     "./server": "./src/server.ts"
@@ -32,7 +32,7 @@
     "@thednp/rpc/fastify/plugin": "./src/fastify/plugin.ts",
     "@thednp/rpc/hono": "./src/hono/index.ts",
     "@thednp/rpc/koa": "./src/koa/index.ts",
-    "@thednp/rpc/helpers": "./src/helpers.ts"
+    "@thednp/rpc/helpers": "./src/client-helpers.ts"
   },
   "publish": {
     "include": [

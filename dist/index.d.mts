@@ -126,7 +126,7 @@ type SupportableContentType = "multipart/form-data" | "application/json" | "text
 /**
  * Content types the RPC client modules send with each request.
  */
-type ContentType = "application/json" | "text/plain";
+type ContentType = "application/json" | "text/plain" | "multipart/form-data";
 /**
  * Fetch `credentials` policy used by the generated client modules.
  */
@@ -140,6 +140,9 @@ type BodyResult = {
 } | {
   contentType: "text/plain";
   data: string;
+} | {
+  contentType: "multipart/form-data";
+  data: Record<string, unknown>;
 };
 /**
  * Options for a single server function, controlling how the generated
@@ -178,7 +181,7 @@ type JsonObject = {
 /**
  * A JSON array of JSON values.
  */
-type JsonArray = JsonValue[];
+type JsonArray = (FormData | JsonValue)[];
 /**
  * Any JSON-serializable value: primitive, array, or object.
  */
@@ -211,7 +214,7 @@ type ServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonVal
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
-type ServerFunctionInit<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 /**
  * Client-side stub signature generated for each server function.
  * Returns a promise-backed `data` handle plus a `cancel` function
@@ -245,9 +248,11 @@ interface RpcPluginOptionsInternal {
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
  */
-type ScanConfig = Pick<ResolvedConfig, "root" | "base"> & {
-  /** Vite server options override (e.g. `middlewareMode`) */
+type ScanConfig = Pick<ResolvedConfig, "base"> & {
+  root?: string;
   server?: Partial<ResolvedConfig["server"]>;
+  serverFiles?: "exact" | "glob";
+  scanRoot?: string;
 };
 /**
  * Entry in the server functions map: registered name, client handler,
@@ -288,6 +293,20 @@ interface RpcPluginOptions {
    * @default express
    */
   adapter: "express" | "hono" | "fastify" | "koa";
+  /**
+   * Root directory from which the plugin scans for server files.
+   * Defaults to `<root>/src/api`. Use this in monorepos where server files
+   * live in a shared package outside the current project root.
+   * @default undefined (resolves to src/api relative to the Vite root)
+   */
+  scanRoot?: string;
+  /**
+   * Server file matching mode. Use `"exact"` (default) for the classic
+   * `server.ts|js|mjs|mts` names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}`
+   * inside the scan root.
+   * @default "exact"
+   */
+  serverFiles?: "exact" | "glob";
 }
 interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
   /**
@@ -377,7 +396,7 @@ declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
  * @param devOptions - Development-only overrides (merged on top of config file values)
  * @returns A Vite plugin object
  */
-declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin<unknown>;
+declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin;
 //#endregion
 export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map

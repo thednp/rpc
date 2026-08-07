@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0] - 2026-08-06
+
+### Features
+
+- **Typed errors with env-aware responses**: new `RPCError` class (`message` + `code` + optional `data`) and `formatError` helper. All adapters now return `{ error: "Internal Server Error" }` in production (no message/stack leak) and include the error message (plus `code`/`data` for `RPCError`) in development
+- **Duplicate server function detection**: the scan throws in development when two files export functions with the same registered name, so the conflict surfaces at dev-server startup; in production it warns and keeps the first registration
+- **Glob server file scanning**: new `serverFiles: "glob"` option recursively matches `*.server.{ts,js,mjs,mts}` under the scan root, complementing the classic exact `server.ts|js|mjs|mts` names
+- **`scanRoot` option**: point scanning at any directory (relative to the Vite root), e.g. a shared RPC package in a monorepo
+- **`multipart/form-data` content type**: the `contentType` option and `BodyResult` now include multipart; adapters detect multipart bodies from framework parsers (`multer`, `@fastify/multipart`, `koa-body`, Hono form helpers) and pass the parsed fields as the function argument, falling back to `{ raw: <body> }` on the raw stream path
+
+### Refactor
+
+- `src/index.ts` imports `scanForServerFiles`/`getClientModules`/`serverFunctionsMap` from source modules instead of the `@thednp/rpc/server` self-reference (which resolved to stale `dist/` types during type-checking)
+- Plugin `options` initialized from `defaultRPCOptions` at creation time, so hooks can be invoked without `configResolved` having run
+
+### Tests
+
+- `formatError` unit tests (production vs development, `RPCError` code/data)
+- Multipart `readBody` tests for all four adapters (pre-parsed and raw stream paths)
+- Scan tests: glob mode (recursive + explicit `scanRoot`), duplicate detection (throw in dev, warn in production)
+
 ## [0.0.14] - 2026-08-05
 
 ### Chores

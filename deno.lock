@@ -1,22 +1,22 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@hono/node-server@^2.1.0": "2.1.0_hono@4.13.0",
+    "npm:@hono/node-server@^2.1.0": "2.1.0_hono@4.13.1",
     "npm:@types/express@^5.0.6": "5.0.6",
     "npm:@types/koa@^3.0.3": "3.0.3",
     "npm:@types/node@^26.1.2": "26.1.2",
-    "npm:@vitest/coverage-istanbul@^4.1.10": "4.1.10_vitest@4.1.10_@types+node@26.1.2_@vitest+ui@4.1.10_vite@8.2.0__@types+node@26.1.2",
-    "npm:@vitest/ui@^4.1.10": "4.1.10_vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_vite@8.2.0__@types+node@26.1.2",
+    "npm:@vitest/coverage-istanbul@^4.1.10": "4.1.10_vitest@4.1.10_vite@8.2.1__@types+node@26.1.2",
+    "npm:@vitest/ui@^4.1.10": "4.1.10_vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_vite@8.2.1__@types+node@26.1.2",
     "npm:express@^5.2.1": "5.2.1",
     "npm:fastify-plugin@6": "6.0.0",
     "npm:fastify@^5.11.2": "5.11.2",
-    "npm:hono@^4.13.0": "4.13.0",
+    "npm:hono@^4.13.1": "4.13.1",
     "npm:koa@^3.2.1": "3.2.1",
     "npm:tsdown@~0.22.14": "0.22.14_typescript@7.0.2",
     "npm:typescript@^7.0.2": "7.0.2",
     "npm:vite-plugin-strip-comments@^0.0.10": "0.0.10",
-    "npm:vite@^8.2.0": "8.2.0_@types+node@26.1.2",
-    "npm:vitest@^4.1.10": "4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_@vitest+ui@4.1.10_vite@8.2.0__@types+node@26.1.2"
+    "npm:vite@^8.2.1": "8.2.1_@types+node@26.1.2",
+    "npm:vitest@^4.1.10": "4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_@vitest+ui@4.1.10_vite@8.2.1__@types+node@26.1.2"
   },
   "npm": {
     "@babel/code-frame@7.29.7": {
@@ -191,7 +191,7 @@
         "ipaddr.js@2.4.0"
       ]
     },
-    "@hono/node-server@2.1.0_hono@4.13.0": {
+    "@hono/node-server@2.1.0_hono@4.13.1": {
       "integrity": "sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==",
       "dependencies": [
         "hono"
@@ -554,7 +554,7 @@
       "os": ["win32"],
       "cpu": ["x64"]
     },
-    "@vitest/coverage-istanbul@4.1.10_vitest@4.1.10_@types+node@26.1.2_@vitest+ui@4.1.10_vite@8.2.0__@types+node@26.1.2": {
+    "@vitest/coverage-istanbul@4.1.10_vitest@4.1.10_vite@8.2.1__@types+node@26.1.2": {
       "integrity": "sha512-AyNJ5pQRFqCX7pwB9PSTmoVKPaZ4H5IEVJfJsT+q1DYkXvZMEFYgJlyk5sfStmt9rVYRyYYRRsuBeImCOc39ww==",
       "dependencies": [
         "@babel/core",
@@ -581,7 +581,7 @@
         "tinyrainbow"
       ]
     },
-    "@vitest/mocker@4.1.10_vite@8.2.0__@types+node@26.1.2_@types+node@26.1.2": {
+    "@vitest/mocker@4.1.10_vite@8.2.1__@types+node@26.1.2_@types+node@26.1.2": {
       "integrity": "sha512-v0xaezt+DKEmKfaxg133ldzADrwLGd7Ze1MfQQTYfvs8OqZIwbxyxaYURivwV7sWy5fqn3rH5uOrSp07bp44Ow==",
       "dependencies": [
         "@vitest/spy",
@@ -618,7 +618,7 @@
     "@vitest/spy@4.1.10": {
       "integrity": "sha512-PLf/Ugvoq5wO/b4rwYCR1h2PSIdXz7wnkQFMiUpLdtM7l6pqVFcQIBEHyT1+l+cj7mNwAfZHzqXqDyjvOuwbDw=="
     },
-    "@vitest/ui@4.1.10_vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_vite@8.2.0__@types+node@26.1.2": {
+    "@vitest/ui@4.1.10_vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_vite@8.2.1__@types+node@26.1.2": {
       "integrity": "sha512-EOUqfXHTXtpSHsyLHH40ts3Ue+hRhSGwzwzMlK0dTEOLSDYyOXLyr5JDGmHQWhN2DYI30gw6dVx3cdgM9FZl+Q==",
       "dependencies": [
         "@vitest/utils",
@@ -1160,8 +1160,8 @@
         "function-bind"
       ]
     },
-    "hono@4.13.0": {
-      "integrity": "sha512-jhunvfHWxd7J5EFfSgH4xsYJzSe/lfqbUCxiyyeaQasUsXeEHXtzVid+7EOGByc5JnFa23SSFL3Y2RV/z1T+eQ=="
+    "hono@4.13.1": {
+      "integrity": "sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw=="
     },
     "hookable@6.1.1": {
       "integrity": "sha512-U9LYDy1CwhMCnprUfeAZWZGByVbhd54hwepegYTK7Pi5NvqEj63ifz5z+xukznehT7i6NIZRu89Ay1AZmRsLEQ=="
@@ -1884,8 +1884,8 @@
     "vite-plugin-strip-comments@0.0.10": {
       "integrity": "sha512-LuWP3zfnxIBy67LCvH8qKGey+glLznRv+/oIKr165dPzfNBxleaq9+YwfEP617FPgl6mB5D7d5IUWuZ3OrehsA=="
     },
-    "vite@8.2.0_@types+node@26.1.2": {
-      "integrity": "sha512-pn+CFpM0lwDeKwmOq1ZaBK/9sjorZcgqxki6MbY/jPEVd9vichIlmlD4HmQ5wdP5EgqQCFRaACBxMC7uEGc6lQ==",
+    "vite@8.2.1_@types+node@26.1.2": {
+      "integrity": "sha512-EU/eS7BH3XROHh2YnBefjM6DBKA6ZeMZEYQbj7NLWg5wHYlhB8B/Mayd5XsgWq+NFYccDOTemRpdETWR6Ka/lw==",
       "dependencies": [
         "@types/node",
         "lightningcss",
@@ -1902,7 +1902,7 @@
       ],
       "bin": true
     },
-    "vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_@vitest+ui@4.1.10_vite@8.2.0__@types+node@26.1.2": {
+    "vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-istanbul@4.1.10_@vitest+ui@4.1.10_vite@8.2.1__@types+node@26.1.2": {
       "integrity": "sha512-R9jUTe5S4Qb0HCd4TNqpC7oGcrMssMRGXLW80ubjWsW9VH5GF8y1Y0SFLY9AbqSk6nt0PnOx4H4WNJYZ13GUPw==",
       "dependencies": [
         "@types/node",
@@ -2008,12 +2008,12 @@
         "npm:express@^5.2.1",
         "npm:fastify-plugin@6",
         "npm:fastify@^5.11.2",
-        "npm:hono@^4.13.0",
+        "npm:hono@^4.13.1",
         "npm:koa@^3.2.1",
         "npm:tsdown@~0.22.14",
         "npm:typescript@^7.0.2",
         "npm:vite-plugin-strip-comments@^0.0.10",
-        "npm:vite@^8.2.0",
+        "npm:vite@^8.2.1",
         "npm:vitest@^4.1.10"
       ]
     }

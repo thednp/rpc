@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+@plugin "daisyui" {
+  themes: "rpc", "rpc-dark" --default;
+  logs: false;
+}
+
+/* "RPC" palette — pink brand (#E91E63), warm amber secondary, blue accent (#2196F3) */
+@plugin "daisyui/theme" {
+  name: "rpc";
+  color-scheme: light;
+
+  --color-base-100: oklch(98.5% 0.006 286);
+  --color-base-200: oklch(96.2% 0.01 286);
+  --color-base-300: oklch(92.6% 0.016 286);
+  --color-base-content: oklch(25% 0.04 286);
+
+  --color-primary: oklch(60.6% 0.23 9.6);
+  --color-primary-content: oklch(99% 0.004 9.6);
+
+  --color-secondary: oklch(48% 0.13 78);
+  --color-secondary-content: oklch(27% 0.05 78);
+
+  --color-accent: oklch(65.8% 0.169 248.8);
+  --color-accent-content: oklch(98% 0.006 248.8);
+
+  --color-neutral: oklch(33% 0.045 286);
+  --color-neutral-content: oklch(96% 0.008 286);
+
+  --color-info: oklch(61% 0.15 236);
+  --color-info-content: oklch(98% 0.005 236);
+  --color-success: oklch(66% 0.17 152);
+  --color-success-content: oklch(98% 0.006 152);
+  --color-warning: oklch(79% 0.14 84);
+  --color-warning-content: oklch(28% 0.05 84);
+  --color-error: oklch(61% 0.22 25);
+  --color-error-content: oklch(98% 0.005 25);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "rpc-dark";
+  default: true;
+  color-scheme: dark;
+
+  --color-base-100: oklch(19.5% 0.025 286);
+  --color-base-200: oklch(24.5% 0.03 286);
+  --color-base-300: oklch(29.5% 0.035 286);
+  --color-base-content: oklch(93% 0.01 286);
+
+  --color-primary: oklch(60.6% 0.23 9.6);
+  --color-primary-content: oklch(22% 0.04 9.6);
+
+  --color-secondary: oklch(80% 0.13 82);
+  --color-secondary-content: oklch(26% 0.05 82);
+
+  --color-accent: oklch(65.8% 0.169 248.8);
+  --color-accent-content: oklch(20% 0.03 248.8);
+
+  --color-neutral: oklch(96% 0.008 286);
+  --color-neutral-content: oklch(33% 0.045 286);
+
+  --color-info: oklch(66% 0.14 236);
+  --color-info-content: oklch(20% 0.03 236);
+  --color-success: oklch(69% 0.16 152);
+  --color-success-content: oklch(20% 0.04 152);
+  --color-warning: oklch(81% 0.13 84);
+  --color-warning-content: oklch(25% 0.05 84);
+  --color-error: oklch(64% 0.2 25);
+  --color-error-content: oklch(20% 0.03 25);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.card-body,
+.hero-content {
+  min-width: 0;
+}
+
+.mockup-code {
+  max-width: 100%;
+  min-width: 0;
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+}
+
+::selection {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+}
+
+/* theme-aware code highlights (mix toward base-content so contrast holds in both themes) */
+.footer-title {
+  opacity: 1;
+  color: color-mix(in oklab, var(--color-base-content) 85%, var(--color-base-100));
+}
+
+.code-hl-inline {
+  color: color-mix(in oklab, var(--color-primary) 45%, var(--color-base-content));
+}
+
+.code-comment {
+  color: color-mix(in oklab, var(--color-success) 30%, var(--color-neutral-content));
+}
+
+.code-hl,
+.code-hl-blue,
+.code-hl-green {
+  color: color-mix(in oklab, var(--color-primary) 45%, var(--color-base-content));
+}
+
+.code-hl {
+  background: color-mix(in oklab, var(--color-primary) 15%, var(--color-base-100));
+}
+
+.code-hl-blue {
+  color: color-mix(in oklab, var(--color-accent) 45%, var(--color-base-content));
+  background: color-mix(in oklab, var(--color-accent) 15%, var(--color-base-100));
+}
+
+.code-hl-green {
+  color: color-mix(in oklab, var(--color-success) 45%, var(--color-base-content));
+  background: color-mix(in oklab, var(--color-success) 15%, var(--color-base-100));
+}
+
+/* subtle reveal-on-scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+
+.reveal.reveal-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}

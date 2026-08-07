@@ -3,10 +3,10 @@ import type { Context, Next } from "koa";
 import type { KoaMiddlewareFn, KoaMiddlewareOptions } from "./types.d.ts";
 import type { JsonValue } from "../types.d.ts";
 import { escapeRegExp } from "../tools.ts";
+import { formatError } from "../server-helpers.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
-  INTERNAL_SERVER_ERROR,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
@@ -158,7 +158,9 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
           if (raw) args = JSON.parse(raw);
         } else {
           const body = await readBody(ctx);
-          args = Array.isArray(body.data) ? body.data : [body.data];
+          args = Array.isArray(body.data)
+            ? body.data as JsonValue[]
+            : [body.data as JsonValue];
         }
         const { data: resultData, cancel } = serverFunction.handler(...args);
         const onClose = () => cancel(CLIENT_DISCONNECTED);
@@ -169,8 +171,9 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
         ctx.body = { data: result };
       } catch (err) {
         console.error(String(err));
+        const isProduction = process.env.NODE_ENV === "production";
         ctx.status = 500;
-        ctx.body = { error: INTERNAL_SERVER_ERROR };
+        ctx.body = formatError(err, isProduction);
       }
     },
   });

@@ -3,6 +3,7 @@ import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
+import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import {
   attachRPC,
   attachVite,
@@ -151,6 +152,40 @@ describe("Express helpers extended", () => {
         data: { data: 42 },
       });
       expect(onSpy).not.toHaveBeenCalled();
+    });
+
+    it("should return multipart fields when req.body is set by a multipart parser", async () => {
+      const req = makeReq({
+        originalUrl: "/test",
+        headers: {
+          "content-type": "multipart/form-data; boundary=xyz",
+        },
+      });
+      (req as any).body = { name: "artae", file: "data" };
+      const result = await readBody(req);
+      expect(result).toEqual({
+        contentType: "multipart/form-data",
+        data: { name: "artae", file: "data" },
+      });
+    });
+
+    it("should return raw stream data for multipart when no parser ran", async () => {
+      const req = makeReq({
+        originalUrl: "/test",
+        headers: {
+          "content-type": "multipart/form-data; boundary=xyz",
+        },
+      });
+      const p = readBody(req);
+      simulateBody(
+        req,
+        '--xyz\r\nContent-Disposition: form-data; name="a"\r\n\r\n1\r\n--xyz--\r\n',
+      );
+      const result = await p;
+      expect(result.contentType).toBe("multipart/form-data");
+      expect(result.data).toEqual({
+        raw: expect.stringContaining('name="a"'),
+      });
     });
   });
 
@@ -418,6 +453,8 @@ describe("Express createRPCMiddleware handler", () => {
   });
 
   it("should return 500 on handler error", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
     createServerFunction(
       "err-fn",
       vi.fn().mockRejectedValue(new Error("oops")),
@@ -435,6 +472,7 @@ describe("Express createRPCMiddleware handler", () => {
     expect(res.status).toHaveBeenCalledWith(500);
     const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
     expect(sentData).toEqual({ error: "Internal Server Error" });
+    process.env.NODE_ENV = prevEnv;
   });
 
   it("should return 405 when method does not match POST default", async () => {
@@ -582,6 +620,7 @@ describe("plugin lifecycle", () => {
   it("transform should return transformed code for RPC code in Node env", async () => {
     // Seed map so scanForServerFiles is skipped (it would fail without real config)
     seedServerMap();
+    scannedServerFiles.add("test.ts");
     const plugin = rpcPlugin();
     await (plugin as any).configResolved({ root: process.cwd(), base: "/" });
     const result = await (plugin as any).transform(
@@ -621,6 +660,7 @@ describe("plugin lifecycle", () => {
     const plugin = rpcPlugin();
     await (plugin as any).configResolved({ root: process.cwd(), base: "/" });
     serverFunctionsMap.clear();
+    scannedServerFiles.add("test.ts");
     const result = await (plugin as any).transform(
       "createServerFunction('test', async () => {})",
       "test.ts",

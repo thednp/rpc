@@ -1,5 +1,7 @@
 # Best Practices
 
+Production patterns for authentication, validation, body limits, rate limiting, and CSRF protection — and what `@thednp/rpc` deliberately leaves to you.
+
 ## @thednp/rpc is a Transport Pipe
 
 The best thing to do **first** is to understand `@thednp/rpc` is that it only handles **transport** and **serialization**.
@@ -18,76 +20,18 @@ Use dedicated tools for these concerns.
 
 All major frameworks have a `@tanstack/<framework>-query` made by [Tanstack](https://tanstack.com/) to cover all needs except validation and authentication.
 
-For instance the `@tanstack/react-query` is the recommended layer for React apps client-side caching, invalidation, and stale-while-revalidate:
-
-```ts
-// src/components/GreetUser.tsx
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { sayHi } from '../api';
-
-function GreetUser({ name }: { name: string }) {
-  const { data } = useQuery({
-    queryKey: ['say-hi', name],
-    queryFn: ({ signal }) => {
-      const result = sayHi(name);
-      signal.addEventListener('abort', () => result.cancel('query cancelled'));
-      return result.data;
-    },
-  });
-  return <div>{data ?? 'Loading...'}</div>;
-}
-```
+The full `@tanstack/react-query` integration example (including wiring `cancel()` to the query signal) lives in [Client Usage — @tanstack/react-query Integration](./client-usage.md).
 
 ## AbortSignal Best Practices
 
-Always check `signal.aborted` or call `signal.throwIfAborted()` in long-running server functions:
-
-```ts
-export const processBatch = createServerFunction(
-  'process-batch',
-  async (signal: AbortSignal, items: string[]) => {
-    const results = [];
-    const errors = [];
-    for (const item of items) {
-      signal.throwIfAborted();
-      const result = await heavyWork(item);
-      results.push(result);
-      // handle errors properly
-    }
-    return results;
-  },
-);
-```
+Always check `signal.aborted` or call `signal.throwIfAborted()` in long-running server functions — especially inside loops, where a step may take a while and the client may have already cancelled. The full pattern is in [Server Functions — AbortSignal](./server-functions.md#abortsignal).
 
 ## Input Validation
 
-Always validate client-provided data before using it in server functions. Use libraries like **zod** or **valibot** to parse and validate inputs:
+Client-provided data is untrusted — always validate before use. Return expected problems (validation failures, business rules) as structured data so the client can type-narrow on the result; **throw** `RPCError` only for server-side failures:
 
-```ts
-// src/api/server.ts
-import { z } from 'zod';
-import { createServerFunction } from '@thednp/rpc/server';
-
-const ProfileSchema = z.object({
-  name: z.string().min(1).max(100),
-  age: z.number().int().positive(),
-});
-
-export const updateProfile = createServerFunction(
-  'update-profile',
-  async (signal, raw) => {
-    const parsed = ProfileSchema.safeParse(raw);
-    if (!parsed.success) {
-      return { ok: false, errors: parsed.error.flatten().fieldErrors };
-    }
-    // parsed.data is fully typed
-    await saveToDb(parsed.data);
-    return { ok: true };
-  },
-);
-```
-
-Return validation errors as structured data — the client's `handleResponse` will surface them as an `Error`. Check [Server Functions Guide](./server-functions.md) for more detailed examples.
+- Return `{ error: ... }` → arrives as resolved `data` (no rejection) — [Server Functions — Input Validation](./server-functions.md#input-validation) shows both zod and valibot patterns
+- Throw `new RPCError(msg, code, data)` → client's `data` promise rejects with the message — [Server Functions — Typed Errors](./server-functions.md#typed-errors-rpcerror)
 
 ## Authentication
 
@@ -340,15 +284,13 @@ app.use(createRPCMiddleware());
 
 Note that strict checks rejecting requests *without* these headers (TanStack Start style) will break curl and native clients — only enforce when the header is present, or provide an opt-out.
 
-## SSR Guidance
+## SSR vs SPA
 
-- On the **server**, `createServerFunction` runs directly (not Vite-transformed).
-- On the **client**, the plugin replaces server function calls with `fetch` based client modules.
-- Keep `src/entry-client.ts` and `src/entry-server.ts` separate for proper hydration.
+The plugin resolves server functions differently between the server and client bundles — see [Getting Started — SSR vs SPA](./getting-started.md#ssr-vs-spa) for how both projects look. The same import works in both; on the client it's swapped for a `fetch`-based module at build time.
 
 ## File Naming
 
-Only files matching `server.ts`, `server.js`, `server.mjs`, `server.mts` in `src/api/` are scanned. Export functions individually for proper client module mapping:
+Only files matching `server.ts`, `server.js`, `server.mjs`, `server.mts` in `src/api/` are scanned (see [Getting Started — Project Structure](./getting-started.md#required-project-structure)). Export functions individually for proper client module mapping:
 
 ```ts
 // ✅ Good — individual exports
@@ -359,6 +301,18 @@ export const add = createServerFunction('add-numbers', fn);
 export default { sayHi, add };
 ```
 
-## Cache is Not @thednp/rpc's Job
+> End of the guide. Each page in the [Table of Contents](#table-of-contents) below is self-contained — jump in anywhere or revisit the [Quick Start](./quickstart.md) to see everything wired together.
 
-Use `react-query`, `SWR`, or your framework's data hooks for caching. `@thednp/rpc` is the **transport layer only**.
+---
+
+## Table of Contents
+
+- [Quick Start](./quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
+- [Getting Started](./getting-started.md) — Installation and quick start
+- [Configuration](./configuration.md) — Configuration reference
+- [Server Functions](./server-functions.md) — Creating server functions
+- [Client Usage](./client-usage.md) — Client-side usage
+- [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
+- [Adapters](./adapters.md) — Framework adapters
+- [Security](./security.md) — Security hardening
+- [Best Practices](./best-practices.md) — Tips and best practices

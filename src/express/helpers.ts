@@ -48,9 +48,18 @@ export const readBody = (
       // istanbul ignore next
       const contentType = req.headers["content-type"]?.toLowerCase() || "";
       const isJSON = contentType.includes("json");
+      const isMultipart = contentType.includes("multipart/form-data");
       resolve({
-        contentType: isJSON ? "application/json" : "text/plain",
-        data: isJSON ? req.body : String(req.body),
+        contentType: isMultipart
+          ? "multipart/form-data"
+          : isJSON
+          ? "application/json"
+          : "text/plain",
+        data: isMultipart
+          ? (req.body as Record<string, unknown>)
+          : isJSON
+          ? req.body
+          : String(req.body),
       } as BodyResult);
       return;
     }
@@ -73,12 +82,17 @@ export const readBody = (
       toggleListeners();
       const incomingType = req.headers["content-type"]?.toLowerCase() || "";
       const isJSON = incomingType.includes("json");
+      const isMultipart = incomingType.includes("multipart/form-data");
       try {
-        const data = JSON.parse(body);
+        const data = isMultipart ? { raw: body } : JSON.parse(body);
         resolve({
-          contentType: isJSON ? "application/json" : "text/plain",
-          data,
-        });
+          contentType: isMultipart
+            ? "multipart/form-data"
+            : isJSON
+            ? "application/json"
+            : "text/plain",
+          data: isMultipart ? (data as Record<string, unknown>) : data,
+        } as BodyResult);
       } catch (_e) {
         resolve({ contentType: "text/plain", data: String(body) });
       }

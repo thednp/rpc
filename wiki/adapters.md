@@ -23,14 +23,11 @@ attachVite(app, vite);
 ### Installation
 
 ```bash
-// jsr registry
-pnpm add jsr:@thednp/rpc express
-```
-
-```bash
 // npmjs registry
 pnpm add @thednp/rpc express
 ```
+
+> See [Getting Started](./getting-started.md) for other package managers and the JSR registry.
 
 ### Usage
 
@@ -67,14 +64,11 @@ app.use(express.json({ limit: 1024 * 1024 })); // 1 MB
 ### Installation
 
 ```bash
-// jsr registry
-pnpm add jsr:@thednp/rpc fastify
-```
-
-```bash
 // npmjs registry
 pnpm add @thednp/rpc fastify
 ```
+
+> See [Getting Started](./getting-started.md) for other package managers and the JSR registry.
 
 ### Usage
 
@@ -112,14 +106,11 @@ const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 }); // 1 MB
 ### Installation
 
 ```bash
-// jsr registry
-pnpm add jsr:@thednp/rpc hono
-```
-
-```bash
 // npmjs registry
 pnpm add @thednp/rpc hono
 ```
+
+> See [Getting Started](./getting-started.md) for other package managers and the JSR registry.
 
 ### Usage
 
@@ -159,14 +150,11 @@ app.use('*', bodyLimit({ maxSize: 1024 * 1024 })); // 1 MB
 ### Installation
 
 ```bash
-// jsr registry
-pnpm add jsr:@thednp/rpc koa koa-body
-```
-
-```bash
 // npmjs registry
 pnpm add @thednp/rpc koa koa-body
 ```
+
+> See [Getting Started](./getting-started.md) for other package managers and the JSR registry.
 
 ### Usage
 
@@ -204,3 +192,19 @@ Set `jsonLimit` on `koa-body` (see [examples/koa/server.js](../examples/koa/serv
 ```ts
 app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1 MB
 ```
+
+> **Next:** [Security](./security.md) — the threats the framework handles for you and what it expects you to own.
+
+---
+
+## Table of Contents
+
+- [Quick Start](./quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
+- [Getting Started](./getting-started.md) — Installation and quick start
+- [Configuration](./configuration.md) — Configuration reference
+- [Server Functions](./server-functions.md) — Creating server functions
+- [Client Usage](./client-usage.md) — Client-side usage
+- [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
+- [Adapters](./adapters.md) — Framework adapters
+- [Security](./security.md) — Security hardening
+- [Best Practices](./best-practices.md) — Tips and best practices

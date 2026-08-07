@@ -2,7 +2,7 @@
 const REQUEST_CANCELLED = "Request was cancelled";
 const FETCH_ERROR_PREFIX = "Fetch error: ";
 //#endregion
-//#region src/helpers.ts
+//#region src/client-helpers.ts
 /**
 * Processes an HTTP fetch response from the RPC server.
 * On HTTP 499 or 408 (client cancellation), logs a warning and returns undefined.

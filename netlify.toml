@@ -1,0 +1,18 @@
+[build]
+  command = "pnpm install && pnpm build && pnpm --dir demo install && pnpm --dir demo build"
+  publish = "demo/dist"
+  functions = "demo/netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Live RPC backend: /@demo/* is never a static file, so Netlify
+# rewrites it to the serverless function (status 200 = rewrite).
+# Static files keep priority, so assets are served normally.
+[[redirects]]
+  from = "/@demo/*"
+  to = "/.netlify/functions/rpc/:splat"
+  status = 200

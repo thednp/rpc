@@ -44,6 +44,14 @@ const getModule = (
         headers = `{ 'Content-Type': 'text/plain' }`;
       }
       break;
+    case "multipart/form-data":
+      {
+        // FormData carries its own multipart content type with a random boundary,
+        // so the browser must generate the header (setting it manually strips the boundary)
+        body = `args[0]`;
+        headers = `{}`;
+      }
+      break;
     default: {
       body = `JSON.stringify(args)`;
       headers = `{ 'Content-Type': 'application/json' }`;

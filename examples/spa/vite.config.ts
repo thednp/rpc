@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, Plugin } from "vite";
 import { default as rpc, loadRPCConfig } from "@thednp/rpc";
 
 export default defineConfig(async (config) => {
@@ -11,7 +11,7 @@ export default defineConfig(async (config) => {
   }
 
   return {
-    plugins: [rpc()],
+    plugins: [rpc() as any],
     preview: {
       port: 5173,
       proxy: {

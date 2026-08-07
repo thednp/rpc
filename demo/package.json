@@ -1,0 +1,27 @@
+{
+  "name": "spa-marketing-rpc",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "pnpm build && pnpm start",
+    "kill": "node ./scripts/kill.mjs",
+    "start": "pnpm kill; (trap 'kill 0' INT TERM EXIT; node --experimental-strip-types ./server.ts & vite preview)"
+  },
+  "dependencies": {
+    "@thednp/rpc": "link:..",
+    "vite": "^8.2.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "daisyui": "^5.7.16",
+    "picocolors": "^1.1.1",
+    "serverless-http": "^4.0.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~7.0.2",
+    "valibot": "^1.4.2"
+  },
+  "packageManager": "pnpm@11.18.0"
+}

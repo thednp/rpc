@@ -3,7 +3,9 @@ import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/options.ts
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
-	adapter: "express"
+	adapter: "express",
+	serverFiles: "exact",
+	scanRoot: void 0
 };
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
@@ -32,6 +34,45 @@ const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
+//#region src/server-helpers.ts
+/**
+* A typed error thrown from server functions.
+* The middleware serializes the `message` and `code` in the response,
+* allowing clients to recognise and handle specific error conditions.
+*/
+var RPCError = class extends Error {
+	/** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
+	code;
+	/** Optional diagnostic payload */
+	data;
+	constructor(message, code = "INTERNAL", data) {
+		super(message);
+		this.name = "RPCError";
+		this.code = code;
+		this.data = data;
+	}
+};
+/**
+* Formats an error for the RCP middleware response.
+* In development the full message and stack are included so developers
+* can quickly identify issues. In production only the generic
+* "Internal Server Error" is sent, preventing information disclosure.
+*/
+const formatError = (err, isProduction) => {
+	if (!isProduction) {
+		if (err instanceof RPCError) {
+			const payload = {
+				error: err.message || "Internal Server Error",
+				code: err.code
+			};
+			if (err.data !== void 0) payload.data = err.data;
+			return payload;
+		}
+		return { error: (err instanceof Error ? err.message : String(err)) || "Internal Server Error" };
+	}
+	return { error: INTERNAL_SERVER_ERROR };
+};
+//#endregion
 //#region src/fastify/helpers.ts
 /**
 * Reads and parses the HTTP request body from a Fastify request.
@@ -45,9 +86,10 @@ const readBody = (req) => {
 		const reqBody = req.body;
 		if (reqBody !== void 0) {
 			const isJSON = contentType.includes("json");
+			const isMultipart = contentType.includes("multipart/form-data");
 			resolve({
-				contentType: isJSON ? "application/json" : "text/plain",
-				data: isJSON ? reqBody : String(reqBody)
+				contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : "text/plain",
+				data: isMultipart ? reqBody : isJSON ? reqBody : String(reqBody)
 			});
 			return;
 		}
@@ -64,11 +106,12 @@ const readBody = (req) => {
 		const onEnd = () => {
 			toggleListeners();
 			const isJSON = contentType.includes("json");
+			const isMultipart = contentType.includes("multipart/form-data");
 			try {
-				const data = JSON.parse(body);
+				const data = isMultipart ? { raw: body } : JSON.parse(body);
 				resolve({
-					contentType: isJSON ? "application/json" : "text/plain",
-					data
+					contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : "text/plain",
+					data: isMultipart ? data : data
 				});
 			} catch (_e) {
 				resolve({
@@ -181,7 +224,8 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				if (!reply.raw.headersSent) reply.status(200).send({ data });
 			} catch (err) {
 				console.error(String(err));
-				reply.status(500).send({ error: INTERNAL_SERVER_ERROR });
+				const isProduction = process.env.NODE_ENV === "production";
+				reply.status(500).send(formatError(err, isProduction));
 			}
 		}
 	});

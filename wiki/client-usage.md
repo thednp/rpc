@@ -21,6 +21,8 @@ Each imported function returns:
 - **`data`** — A promise that resolves to the server function's return value.
 - **`cancel(reason: string)`** — Aborts the underlying fetch request, causing `signal.aborted` to be set in the server function.
 
+> What actually hits the network (URLs, request/response bodies, status codes) is documented in the [Wire Protocol](./wire-protocol.md) guide — handy for `curl` debugging or native clients.
+
 ### Example
 
 ```ts
@@ -31,11 +33,62 @@ const result = await data; // "Hello World!"
 cancel('user cancelled'); // triggers AbortController on the client side
 ```
 
+## Type Safety
+
+Client code keeps **full type inference** — the `TArgs`/`TResult` types from `createServerFunction` flow through to the generated stubs:
+
+```ts
+import { addNumbers } from './api';
+
+const { data } = addNumbers(JSON.stringify({ a: 2, b: 3 }));
+const result = await data;
+// result: { error: {...} | undefined; sum?: undefined }
+//       | { sum: number; error?: undefined }
+
+if (result && 'error' in result) {
+  result.error; // valibot field errors — type-narrowed
+} else {
+  result.sum; // number — type-narrowed
+}
+```
+
+This works because TypeScript resolves `./api` to the real typed server module (via the `src/api/index.ts` re-export), while the Vite plugin swaps in the fetch stubs **only at bundle time**. Your editor and `tsc` see the actual handler signatures; the browser runs the `fetch`-based stubs. The shapes are identical by design: both are `(...args: TArgs) => { data: Promise<TResult>, cancel }`.
+
+> Keep the `src/api/index.ts` re-export as the single import source — importing server modules directly in client code would bypass the plugin's client-module swap.
+
 ## Error Handling
 
 - **Fetch errors** (network failure, CORS) — thrown from `await data`
-- **HTTP 4xx/5xx responses** — thrown from `await data`
+- **HTTP 4xx/5xx responses** — thrown from `await data`; the rejection's `message` is the error string from the response body
+- **Validation-as-data** — returned `{ error }` from a server function resolves normally; check `'error' in result` (see [Server Functions](./server-functions.md#input-validation))
 - **Cancellation** — aborts the fetch and warns `"Request was cancelled"` in the console
+
+When a server function **throws** (including `RPCError`, see [Server Functions](./server-functions.md#typed-errors-rpcerror)), the client's `data` promise rejects with an `Error` whose `message` is the error string:
+
+```ts
+try {
+  const { data } = getProfile(userId);
+  const profile = await data;
+} catch (err) {
+  (err as Error).message; // "User not found" (dev) / "Internal Server Error" (prod)
+}
+```
+
+> In development the 500 response body also carries the `RPCError` `code` and `data` fields, so you can inspect them with the raw fetch in devtools. In production only the generic message is ever sent. The generated client throws a plain `Error` — the `code`/`data` fields are not re-exposed on the rejection.
+
+## Multipart / File Uploads
+
+For functions declared with `contentType: 'multipart/form-data'`, the generated client sends the `FormData` you pass as the first argument — the browser sets the multipart boundary, so don't set `Content-Type`:
+
+```ts
+// uploadFile(fields) with contentType: 'multipart/form-data'
+const form = new FormData();
+form.append('file', fileInput.files[0]);
+
+const { data } = uploadFile(form); // → POST /__rpc/upload-file (multipart/form-data)
+```
+
+Server-side, the body must be parsed before your handler sees it (Node has no built-in multipart parser): register your framework's parser (`multer`, `@fastify/multipart`, `koa-body`, Hono's `formData` helpers) **before** the RPC middleware — the adapter then forwards the parsed fields object as the function's first argument. Without a parser, the handler receives `{ raw: <string> }`, which you parse with `busboy`/`formidable` inside the function. See [Wire Protocol — Multipart](./wire-protocol.md#post--multipartform-data).
 
 ## @tanstack/react-query Integration
 
@@ -64,3 +117,19 @@ function GreetUser({ name }: { name: string }) {
 Combine `cancel()` with React Query's `signal` for proper abort handling during component unmount or query invalidation.
 
 Other frameworks have a `@tanstack/<framework>-query` made by [Tanstack](https://tanstack.com/).
+
+> **Next:** [Wire Protocol](./wire-protocol.md) — what these client modules actually send over the network.
+
+---
+
+## Table of Contents
+
+- [Quick Start](./quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
+- [Getting Started](./getting-started.md) — Installation and quick start
+- [Configuration](./configuration.md) — Configuration reference
+- [Server Functions](./server-functions.md) — Creating server functions
+- [Client Usage](./client-usage.md) — Client-side usage
+- [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
+- [Adapters](./adapters.md) — Framework adapters
+- [Security](./security.md) — Security hardening
+- [Best Practices](./best-practices.md) — Tips and best practices

@@ -1,0 +1,12 @@
+# @thednp/rpc
+
+> A Vite plugin for creating server functions with automatic, type-safe RPC.
+
+- [npm](https://www.npmjs.com/package/@thednp/rpc): published package
+- [JSR](https://jsr.io/@thednp/rpc): published package (Deno)
+- [GitHub](https://github.com/thednp/rpc): source repository
+- [Getting started](https://github.com/thednp/rpc/blob/master/wiki/getting-started.md): installation and first function
+- [Server functions](https://github.com/thednp/rpc/blob/master/wiki/server-functions.md): createServerFunction API
+- [Wire protocol](https://github.com/thednp/rpc/blob/master/wiki/wire-protocol.md): HTTP contract
+- [Security](https://github.com/thednp/rpc/blob/master/wiki/security.md): hardening model
+- [Best practices](https://github.com/thednp/rpc/blob/master/wiki/best-practices.md): production patterns
