@@ -21,11 +21,8 @@
 - Multipart `readBody` tests for all four adapters (pre-parsed and raw stream paths)
 - Scan tests: glob mode (recursive + explicit `scanRoot`), duplicate detection (throw in dev, warn in production)
 
-## [0.0.14] - 2026-08-05
-
 ### Chores
 
-- Bump version to `0.0.14`
 - Rename the `prepublishOnly` script to `prepareOnly` in `package.json` (keeping `prepublishOnly_` as a non-triggering alias) so `npm publish` inside the release script no longer auto-runs the full pipeline
 - Import `createRPCMiddleware` from the `@thednp/rpc/express` subpath export in `src/index.ts` instead of the relative `./express/createMiddleware.ts`; add `@thednp/rpc/express` to the tsdown externals and the vitest alias map
 - Refactor `getClientModules` to build the generated client modules into a local `entries` const before assembling the output
