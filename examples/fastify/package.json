@@ -14,7 +14,7 @@
   "dependencies": {
     "@fastify/compress": "^9.1.1",
     "@fastify/static": "^10.1.3",
-    "@thednp/rpc": "^0.0.13",
+    "@thednp/rpc": "^0.1.0",
     "fastify": "^5.11.2",
     "vite": "^8.2.1"
   },
