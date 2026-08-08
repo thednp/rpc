@@ -119,8 +119,40 @@ const showToast = (text: string, colorClass: string, duration = 4000) => {
   toastTimer = window.setTimeout(() => toast.classList.add("hidden"), duration);
 };
 
+const buildIssueUrl = (formData: FormData, ghLogin = "") => {
+  const topic = String(formData.get("topic") ?? "");
+  const issueTitle = String(formData.get("title") ?? "");
+  const message = String(formData.get("message") ?? "");
+
+  if (topic === "Bug report") {
+    const params = new URLSearchParams({
+      template: "bug_report.yml",
+      title: issueTitle,
+      description: [
+        message,
+        "",
+        ghLogin ? `Reported by ${ghLogin} via the [@thednp/rpc demo](https://thednp.github.io/rpc/).` : "*Submitted from the [@thednp/rpc demo](https://thednp.github.io/rpc/).*",
+      ].join("\n"),
+    });
+    return `https://github.com/thednp/rpc/issues/new?${params.toString()}`;
+  }
+
+  const title = `[${topic}] ${issueTitle}`;
+  const body = [
+    "*Submitted from the [@thednp/rpc demo](https://thednp.github.io/rpc/).*",
+    ghLogin ? `Reported by ${ghLogin}.` : "",
+    "",
+    "**Message:**",
+    message,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const params = new URLSearchParams({ title, body });
+  return `https://github.com/thednp/rpc/issues/new?${params.toString()}`;
+};
+
 export const setupContact = (form: HTMLFormElement) => {
-  const fields = ["name", "email", "topic", "message"] as const;
+  const fields = ["name", "email", "topic", "title", "message"] as const;
   const successBox = document.getElementById("contact-success")!;
   const successText = successBox.querySelector("span")!;
   const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
@@ -144,11 +176,35 @@ export const setupContact = (form: HTMLFormElement) => {
       const res = await data;
 
       if (res.status === "ok") {
-        form.reset();
+        let ghLogin = "";
+
+        const githubBox = document.getElementById("contact-github")!;
+        if (res.githubUser) {
+          const { login, name, bio, avatar_url, html_url } = res.githubUser;
+          (document.getElementById("github-avatar") as HTMLImageElement).src = avatar_url;
+          (document.getElementById("github-avatar") as HTMLImageElement).alt = `@${login}`;
+          const link = document.getElementById("github-link") as HTMLAnchorElement;
+          ghLogin = `@${login}`;
+          link.textContent = ghLogin;
+          link.href = html_url;
+          (document.getElementById("github-name") as HTMLElement).textContent = name ?? "";
+          (document.getElementById("github-bio") as HTMLElement).textContent = bio ?? "";
+          githubBox.classList.remove("hidden");
+          githubBox.classList.add("flex");
+        } else {
+          githubBox.classList.remove("flex");
+          githubBox.classList.add("hidden");
+        }
+
+        const issueUrl = buildIssueUrl(formData, ghLogin);
+
         successText.textContent = `Message received — ticket ${res.ticket}. We'll get back to you at ${new Date(
           res.receivedAt!,
         ).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}.`;
         successBox.classList.remove("hidden");
+
+        open(issueUrl, "_blank");
+        form.reset();
         showToast("Message sent!", "alert-success");
       } else {
         fields.forEach((field) => {
@@ -162,7 +218,8 @@ export const setupContact = (form: HTMLFormElement) => {
         }
         showToast("Check the highlighted fields.", "alert-warning");
       }
-    } catch {
+    } catch (_er) {
+      // console.log("[DEBUG]", _er); // DEBUG only
       showToast("Couldn't reach the server.", "alert-error");
     } finally {
       spinner.classList.add("hidden");

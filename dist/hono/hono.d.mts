@@ -61,6 +61,9 @@ type BodyResult = {
   contentType: "text/plain";
   data: string;
 } | {
+  contentType: "application/x-www-form-urlencoded";
+  data: Record<string, unknown>;
+} | {
   contentType: "multipart/form-data";
   data: Record<string, unknown>;
 };

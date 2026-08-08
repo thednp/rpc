@@ -98,6 +98,7 @@ export const readBody = async (
   const contentType = c.req.header("content-type")?.toLowerCase() || "";
   const isJSON = contentType.includes("json");
   const isMultipart = contentType.includes("multipart/form-data");
+  const isUrlEncoded = contentType.includes("urlencoded");
   const incoming = (c.env as HttpBindings).incoming as
     | IncomingWithBody
     | undefined;
@@ -108,11 +109,15 @@ export const readBody = async (
         ? "multipart/form-data"
         : isJSON
         ? "application/json"
+        : isUrlEncoded
+        ? "application/x-www-form-urlencoded"
         : "text/plain",
       data: isMultipart
         ? (reqBody as Record<string, unknown>)
         : isJSON
         ? reqBody
+        : isUrlEncoded
+        ? (reqBody as Record<string, unknown>)
         : String(reqBody),
     } as BodyResult;
   }
@@ -126,9 +131,15 @@ export const readBody = async (
 
   const text = await c.req.text();
   return {
-    contentType: isMultipart ? "multipart/form-data" : "text/plain",
+    contentType: isMultipart
+      ? "multipart/form-data"
+      : isUrlEncoded
+      ? "application/x-www-form-urlencoded"
+      : "text/plain",
     data: isMultipart
       ? ({ raw: text } as Record<string, unknown>)
+      : isUrlEncoded
+      ? Object.fromEntries(new URLSearchParams(text))
       : String(text),
   } as BodyResult;
 };

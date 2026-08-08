@@ -60,6 +60,7 @@ export type SupportableContentType =
 export type ContentType =
   | "application/json"
   | "text/plain"
+  | "application/x-www-form-urlencoded"
   | "multipart/form-data";
 
 /**
@@ -73,6 +74,10 @@ export type Credentials = "same-origin" | "include" | "omit";
 export type BodyResult =
   | { contentType: "application/json"; data: JsonValue }
   | { contentType: "text/plain"; data: string }
+  | {
+    contentType: "application/x-www-form-urlencoded";
+    data: Record<string, unknown>;
+  }
   | { contentType: "multipart/form-data"; data: Record<string, unknown> };
 
 /**

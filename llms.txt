@@ -6,13 +6,14 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `createServerFunction(name, handler, options?)` — define a server function: first arg is `AbortSignal`, remaining args are JSON-serializable
 - `import { fn } from "./api"` — on the server calls the real handler, in the browser calls auto-generated `fetch` stubs
 - Returns `{ data: Promise<T>, cancel: (reason: string) => void }`
-- Options: `{ method: "GET" | "POST", contentType: "application/json" | "text/plain" | "multipart/form-data", credentials }`
+- Options: `{ method: "GET" | "POST", contentType: "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data", credentials }`
 - `RPCError(message, code?, data?)` — throwable typed error, exported from `@thednp/rpc/server` (as is `formatError`); throw for server-side failures (not validation — return `{ error }` for expected user-facing problems). Dev 500 body: `{ error, code, data }`; prod: generic `{ error: "Internal Server Error" }` only. Client rejection `message` = the error string
 - Registered function names become URL paths: `POST /{prefix}/{name}` with body `JSON.stringify(args)`
 
 ## Wire Protocol (client module → server)
 - **POST (default):** `/{prefix}/{fnName}` body = `JSON.stringify(args)` (bare JSON array, not `{data:[...]}`)
 - **text/plain** POST: body = `args[0]` as raw string
+- **application/x-www-form-urlencoded** POST: body = `new URLSearchParams(args[0]).toString()` (single object arg; server parses back to an object of strings via `URLSearchParams`)
 - **multipart/form-data** POST: client sends the `FormData` passed as the first argument (browser sets the boundary). Server-side, parse before the handler runs — framework multipart middleware BEFORE the RPC middleware (multer, @fastify/multipart, koa-body, hono formData) and the parsed fields object becomes the function argument; without a parser the handler gets `{ raw: "<body>" }`, which you must parse yourself (busboy or formidable — Node has no built-in multipart parser)
 - **GET:** `/{prefix}/{fnName}?args=encodeURIComponent(JSON.stringify(args))`
 - **Response:** always `{ data: <result> }` — 200 wraps everything, even `{ error }` responses (they resolve as data, not thrown)
@@ -33,6 +34,7 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `src/api/index.ts` — `export * from "./server"` (single import point for SSR + client — types flow through this)
 - SSR: `src/entry-server.ts` (imports real functions) and `src/entry-client.ts` (imports fetch stubs)
 - SPA: just import from `./api` in client code
+- Example apps: `examples/` — `spa`, `express`, `fastify`, `hono`, `koa`, `ssr` (plain RPC + DOM update), plus `react-query` and `solid-query` (show `@tanstack/*-query` integration on top of RPC)
 
 ## Rules
 - First handler argument is always `(signal: AbortSignal, ...args)`
@@ -54,8 +56,8 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `wiki/quickstart.md` — Rebuild the Express SSR example from `create-vite` in under a minute
 - `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
 - `wiki/configuration.md` — `rpc.config.ts`, `vite.config.ts`, `loadRPCConfig`
-- `wiki/server-functions.md` — `createServerFunction` API, methods, content types (JSON/text/multipart), validation (zod + valibot), typed errors (`RPCError`), AbortSignal
-- `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration
+- `wiki/server-functions.md` — `createServerFunction` API, methods, content types (JSON/text/urlencoded/multipart), validation (zod + valibot), typed errors (`RPCError`), AbortSignal
+- `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration, and an SSR gotcha for disabled queries (solid-query hangs `renderToStringAsync`; use `queryClient.fetchQuery()` on submit instead)
 - `wiki/wire-protocol.md` — HTTP contract: request/response bodies, status codes, curl debugging
 - `wiki/adapters.md` — Express, Fastify, Hono, Koa (`attachRPC`, `attachVite`, body limits)
 - `wiki/security.md` — Prefix guards, method enforcement, origin, CSRF hardening

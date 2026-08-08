@@ -139,12 +139,13 @@ const readBody = async (c) => {
 	const contentType = c.req.header("content-type")?.toLowerCase() || "";
 	const isJSON = contentType.includes("json");
 	const isMultipart = contentType.includes("multipart/form-data");
+	const isUrlEncoded = contentType.includes("urlencoded");
 	const incoming = c.env.incoming;
 	if (incoming?.body !== void 0) {
 		const reqBody = incoming.body;
 		return {
-			contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : "text/plain",
-			data: isMultipart ? reqBody : isJSON ? reqBody : String(reqBody)
+			contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : isUrlEncoded ? "application/x-www-form-urlencoded" : "text/plain",
+			data: isMultipart ? reqBody : isJSON ? reqBody : isUrlEncoded ? reqBody : String(reqBody)
 		};
 	}
 	if (isJSON) return {
@@ -153,8 +154,8 @@ const readBody = async (c) => {
 	};
 	const text = await c.req.text();
 	return {
-		contentType: isMultipart ? "multipart/form-data" : "text/plain",
-		data: isMultipart ? { raw: text } : String(text)
+		contentType: isMultipart ? "multipart/form-data" : isUrlEncoded ? "application/x-www-form-urlencoded" : "text/plain",
+		data: isMultipart ? { raw: text } : isUrlEncoded ? Object.fromEntries(new URLSearchParams(text)) : String(text)
 	};
 };
 //#endregion

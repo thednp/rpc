@@ -295,6 +295,21 @@ describe("getClientModules", () => {
     expect(code).not.toContain("Content-Type");
   });
 
+  it("should serialize args to URLSearchParams for urlencoded content type", () => {
+    serverFunctionsMap.set("form", {
+      name: "form",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/x-www-form-urlencoded" },
+      exportName: "form",
+    });
+
+    const code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(code).toContain("body = new URLSearchParams(args[0]).toString()");
+    expect(code).toContain(
+      "Content-Type': 'application/x-www-form-urlencoded'",
+    );
+  });
+
   it("should generate JSON body for JSON content type", () => {
     serverFunctionsMap.set("add", {
       name: "add",

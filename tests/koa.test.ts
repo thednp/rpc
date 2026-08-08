@@ -142,6 +142,32 @@ describe("Koa helpers", () => {
       });
     });
 
+    it("should use pre-parsed urlencoded body from koa-body middleware", async () => {
+      const ctx = makeKoaCtx({
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+      });
+      ctx.request.body = { name: "artae", job: "developer" };
+
+      const result = await readBody(ctx);
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
+
+    it("should parse urlencoded body from the raw stream", async () => {
+      const ctx = makeKoaCtx({
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+      });
+      const p = readBody(ctx);
+      simulateKoaBody(ctx, "name=artae&job=developer");
+      const result = await p;
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
+
     it("should fall through to raw stream when body is undefined", async () => {
       const ctx = makeKoaCtx({
         headers: { "content-type": "application/json" },

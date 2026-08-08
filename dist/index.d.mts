@@ -126,7 +126,7 @@ type SupportableContentType = "multipart/form-data" | "application/json" | "text
 /**
  * Content types the RPC client modules send with each request.
  */
-type ContentType = "application/json" | "text/plain" | "multipart/form-data";
+type ContentType = "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data";
 /**
  * Fetch `credentials` policy used by the generated client modules.
  */
@@ -140,6 +140,9 @@ type BodyResult = {
 } | {
   contentType: "text/plain";
   data: string;
+} | {
+  contentType: "application/x-www-form-urlencoded";
+  data: Record<string, unknown>;
 } | {
   contentType: "multipart/form-data";
   data: Record<string, unknown>;

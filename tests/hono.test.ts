@@ -113,6 +113,31 @@ describe("Hono helpers", () => {
         data: { raw: "--xyz--" },
       });
     });
+
+    it("should return urlencoded fields from pre-parsed body", async () => {
+      const c = makeHonoContext({
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "ignored",
+      });
+      (c.env as any).incoming = { body: { name: "artae", job: "developer" } };
+      const result = await readBody(c);
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
+
+    it("should parse urlencoded body from the request text", async () => {
+      const c = makeHonoContext({
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "name=artae&job=developer",
+      });
+      const result = await readBody(c);
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
   });
 
   describe("attachRPC", () => {

@@ -310,6 +310,10 @@ const getModule = (fnName, fnEntry, options) => {
 			body = `args[0]`;
 			headers = `{ 'Content-Type': 'text/plain' }`;
 			break;
+		case "application/x-www-form-urlencoded":
+			body = `new URLSearchParams(args[0]).toString()`;
+			headers = `{ 'Content-Type': 'application/x-www-form-urlencoded' }`;
+			break;
 		case "multipart/form-data":
 			body = `args[0]`;
 			headers = `{}`;

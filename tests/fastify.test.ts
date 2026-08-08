@@ -143,6 +143,31 @@ describe("Fastify helpers", () => {
         data: { raw: "--xyz--" },
       });
     });
+
+    it("should use pre-parsed urlencoded body from a urlencoded parser", async () => {
+      const req = makeFastifyReq({
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({ name: "artae" }),
+      });
+      const result = await readBody(req as any);
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae" },
+      });
+    });
+
+    it("should parse urlencoded body from the raw stream", async () => {
+      const req = makeFastifyReq({
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+      });
+      const p = readBody(req as any);
+      simulateRawBody(req, "name=artae&job=developer");
+      const result = await p;
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
   });
 
   describe("attachRPC", () => {

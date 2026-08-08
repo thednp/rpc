@@ -1,4 +1,3 @@
-import "./style.css";
 import { setupForm, setupGetTime, setupGreeting } from "./hydrate";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `

@@ -118,6 +118,48 @@ Combine `cancel()` with React Query's `signal` for proper abort handling during 
 
 Other frameworks have a `@tanstack/<framework>-query` made by [Tanstack](https://tanstack.com/).
 
+## SSR Gotcha: Queries Disabled at Server Render
+
+The example apps in this repository keep query libraries optional — the plain SSR examples (`express`, `fastify`, `hono`, `koa`, `ssr`, `spa`) call RPC functions directly and update the DOM when the promise resolves, with no query-framework hydration involved. The `react-query` and `solid-query` examples demonstrate how to integrate `@tanstack/*-query` on top of that.
+
+If you integrate a query library into an SSR setup, be aware of a **disabled-query hang** that only surfaces on the server:
+
+- `@tanstack/solid-query` forces `defaultOptions.experimental_prefetchInRender = true` when `isServer`, which adds a live `promise` field (a `PendingThenable`) to the observer result.
+- For a query with `enabled: false`, that thenable is **never settled** (there is no data and no error to finalize it).
+- Solid's serializer (seroval) sees the nested pending promise inside the serialized observer result and awaits it forever, so `renderToStringAsync` hangs until its `timeoutMs` fires.
+
+**Reproduction:** any `createQuery(() => ({ ..., enabled: false }))` rendered inside `renderToStringAsync` on the server.
+
+**Workaround:** don't let a disabled query participate in server rendering. Instead of creating the disabled query and calling `refetch()` on a user action, call `queryClient.fetchQuery()` directly from the event handler and keep the result in a plain signal:
+
+```ts
+import { createSignal } from "solid-js";
+import { useQueryClient } from "@tanstack/solid-query";
+import { getServerTime } from "./api";
+
+function TimeForm() {
+  const [locale, setLocale] = createSignal("en-US");
+  const [time, setTime] = createSignal<string | null>(null);
+  const [fetching, setFetching] = createSignal(false);
+  const queryClient = useQueryClient();
+
+  const onSubmit = (e: SubmitEvent) => {
+    e.preventDefault();
+    setFetching(true);
+    queryClient
+      .fetchQuery({
+        queryKey: ["getServerTime", locale()],
+        queryFn: () => getServerTime(locale()).data,
+      })
+      .then((res) => setTime(res.time))
+      .finally(() => setFetching(false));
+  };
+  // ...
+}
+```
+
+Because the query is only created on demand (client-side), nothing async is serialized during SSR and `renderToStringAsync` completes normally. The fully working pattern lives in the `solid-query` example app.
+
 > **Next:** [Wire Protocol](./wire-protocol.md) — what these client modules actually send over the network.
 
 ---

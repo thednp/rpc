@@ -52,16 +52,21 @@ export const readBody = (
     if (reqBody !== undefined) {
       const isJSON = contentType.includes("json");
       const isMultipart = contentType.includes("multipart/form-data");
+      const isUrlEncoded = contentType.includes("urlencoded");
       resolve({
         contentType: isMultipart
           ? "multipart/form-data"
           : isJSON
           ? "application/json"
+          : isUrlEncoded
+          ? "application/x-www-form-urlencoded"
           : "text/plain",
         data: isMultipart
           ? (reqBody as Record<string, unknown>)
           : isJSON
           ? reqBody
+          : isUrlEncoded
+          ? (reqBody as Record<string, unknown>)
           : String(reqBody),
       } as BodyResult);
       return;
@@ -84,13 +89,20 @@ export const readBody = (
       toggleListeners();
       const isJSON = contentType.includes("json");
       const isMultipart = contentType.includes("multipart/form-data");
+      const isUrlEncoded = contentType.includes("urlencoded");
       try {
-        const data = isMultipart ? { raw: body } : JSON.parse(body);
+        const data = isMultipart
+          ? { raw: body }
+          : isUrlEncoded
+          ? Object.fromEntries(new URLSearchParams(body))
+          : JSON.parse(body);
         resolve({
           contentType: isMultipart
             ? "multipart/form-data"
             : isJSON
             ? "application/json"
+            : isUrlEncoded
+            ? "application/x-www-form-urlencoded"
             : "text/plain",
           data: isMultipart ? (data as Record<string, unknown>) : data,
         } as BodyResult);

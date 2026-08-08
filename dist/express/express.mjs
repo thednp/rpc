@@ -44,9 +44,10 @@ const readBody = (req) => {
 			const contentType = req.headers["content-type"]?.toLowerCase() || "";
 			const isJSON = contentType.includes("json");
 			const isMultipart = contentType.includes("multipart/form-data");
+			const isUrlEncoded = contentType.includes("urlencoded");
 			resolve({
-				contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : "text/plain",
-				data: isMultipart ? req.body : isJSON ? req.body : String(req.body)
+				contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : isUrlEncoded ? "application/x-www-form-urlencoded" : "text/plain",
+				data: isMultipart ? req.body : isJSON ? req.body : isUrlEncoded ? req.body : String(req.body)
 			});
 			return;
 		}
@@ -65,10 +66,11 @@ const readBody = (req) => {
 			const incomingType = req.headers["content-type"]?.toLowerCase() || "";
 			const isJSON = incomingType.includes("json");
 			const isMultipart = incomingType.includes("multipart/form-data");
+			const isUrlEncoded = incomingType.includes("urlencoded");
 			try {
-				const data = isMultipart ? { raw: body } : JSON.parse(body);
+				const data = isMultipart ? { raw: body } : isUrlEncoded ? Object.fromEntries(new URLSearchParams(body)) : JSON.parse(body);
 				resolve({
-					contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : "text/plain",
+					contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : isUrlEncoded ? "application/x-www-form-urlencoded" : "text/plain",
 					data: isMultipart ? data : data
 				});
 			} catch (_e) {

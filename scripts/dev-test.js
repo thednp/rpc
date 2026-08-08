@@ -53,6 +53,8 @@ const PREFIX_MAP = {
   fastify: "_server",
   hono: "_server",
   koa: "__A_server",
+  "react-query": "__A_server",
+  "solid-query": "__A_server",
   spa: "_server",
   ssr: "_server",
 };
@@ -282,7 +284,11 @@ async function verifyHTML(name) {
           "SSR placeholder was not replaced in HTML response",
         );
       }
-      if (!text.includes("Hello World")) {
+      if (
+        !text.includes("Hello World") &&
+        !text.includes("Hello Jane") &&
+        !text.includes('id="addForm"')
+      ) {
         throw new Error(
           "HTML body missing expected SSR content",
         );

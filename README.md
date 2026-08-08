@@ -6,7 +6,7 @@
 [![JSR Version](https://img.shields.io/jsr/v/@thednp/rpc.svg)](https://jsr.io/@thednp/rpc)
 [![NPM Downloads](https://img.shields.io/npm/dm/@thednp/rpc.svg)](http://npm-stat.com/charts.html?package=@thednp/rpc)
 
-A Vite plugin for automatic RPC generation — simple, framework agnostic, and easy to use.
+A Vite plugin for automatic RPC generation — write server functions, re-export them, call them. Simple and framework agnostic.
 
 ## Isomorphic Design
 
@@ -101,14 +101,16 @@ Generic type inference flows from your server function's arguments and return ty
 
 ## Examples
 
-| Source                                                                        | Demo                                                                                     | Clone                                               |
-| --------------------------------------------------------------------------------| ------------------------------------------------------------------------------------------| -----------------------------------------------------|
-| [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)     | `pmpm dlx degit thednp/rpc/examples/spa my-app`     |
-| [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)     | `pnpm dlx degit thednp/rpc/examples/ssr my-app`     |
-| [examples/express](https://github.com/thednp/rpc/tree/master/examples/express) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express) | `pnpm dlx degit thednp/rpc/examples/express my-app` |
-| [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify) | `pnpm dlx degit thednp/rpc/examples/fastify my-app` |
-| [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)    | `pnpm dlx degit thednp/rpc/examples/hono my-app`    |
-| [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)     | `pnpm dlx degit thednp/rpc/examples/koa my-app`     |
+| Source                                                                                 | Demo                                                                                         | Clone                                                   |
+| ----------------------------------------------------------------------------------------| ----------------------------------------------------------------------------------------------| ---------------------------------------------------------|
+| [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)         | `pmpm dlx degit thednp/rpc/examples/spa my-app`         |
+| [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)         | `pnpm dlx degit thednp/rpc/examples/ssr my-app`         |
+| [examples/express](https://github.com/thednp/rpc/tree/master/examples/express)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express)     | `pnpm dlx degit thednp/rpc/examples/express my-app`     |
+| [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify)     | `pnpm dlx degit thednp/rpc/examples/fastify my-app`     |
+| [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)               | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)        | `pnpm dlx degit thednp/rpc/examples/hono my-app`        |
+| [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)         | `pnpm dlx degit thednp/rpc/examples/koa my-app`         |
+| [examples/react-query](https://github.com/thednp/rpc/tree/master/examples/react-query) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/react-query) | `pnpm dlx degit thednp/rpc/examples/react-query my-app` |
+| [examples/solid-query](https://github.com/thednp/rpc/tree/master/examples/solid-query) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/solid-query) | `pnpm dlx degit thednp/rpc/examples/solid-query my-app` |
 
 > **Clone an example**: `degit` scaffolds a fresh copy straight from the repo — no git history, ready to run:
 

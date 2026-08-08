@@ -1,4 +1,3 @@
-import "./style.css";
 import { setupForm, setupGetTime, setupGreeting } from "./hydrate";
 
 setupGreeting(document.querySelector("h1") as HTMLHeadingElement);

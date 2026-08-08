@@ -60,7 +60,7 @@ const featuresMarkup = features
     <div class="card-body">
       <div class="size-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center">${f.icon}</div>
       <h3 class="card-title text-lg mt-2">${f.title}</h3>
-      <p class="text-sm text-base-content/70 leading-relaxed">${f.text}</p>
+      <p class="text-sm text-base-content/80 leading-relaxed">${f.text}</p>
     </div>
   </div>`,
   )
@@ -70,7 +70,8 @@ const featuresMarkup = features
 
 export const renderPage = (): string => `
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 btn btn-primary btn-sm">Skip to main content</a>
-<header class="navbar sticky top-0 z-40 bg-base-100/85 backdrop-blur-md border-b border-base-300/60 px-4 sm:px-8">
+<header class="sticky top-0 z-40 bg-base-100/85 backdrop-blur-md border-b border-base-300/60">
+  <div class="navbar max-w-6xl mx-auto px-4 sm:px-8">
   <div class="navbar-start">
     <a href="#top" class="flex items-center gap-2 font-bold text-lg">
       <span class="size-8 rounded-lg bg-primary text-primary-content flex items-center justify-center">${iconBolt}</span>
@@ -119,12 +120,13 @@ export const renderPage = (): string => `
       </ul>
     </div>
   </div>
+  </div>
 </header>
 
 <main id="main">
 <section id="top" class="hero max-w-full min-h-[88vh] bg-linear-to-b from-base-200 via-base-100 to-base-100">
-  <div class="hero-content max-w-full lg:max-w-6xl min-w-0 flex-col lg:flex-row gap-10 lg:gap-16 py-16 lg:py-24">
-    <div class="flex-1 max-w-full min-w-0">
+  <div class="hero-content max-w-full lg:max-w-6xl px-4 sm:px-8 min-w-0 flex-col lg:flex-row gap-10 lg:gap-16 py-16 lg:py-24">
+    <div class="flex-1 max-w-full min-w-full lg:min-w-0">
       <div class="flex flex-wrap items-center gap-2 mb-6">
         <span class="badge badge-primary badge-lg gap-2">${iconBolt}<strong id="lib-version">v0.1.0</strong></span>
         <span class="badge badge-outline border-base-300 badge-neutral badge-lg gap-2 text-sm">
@@ -135,15 +137,15 @@ export const renderPage = (): string => `
 
       <h1 class="text-4xl sm:text-5xl xl:text-6xl font-semibold leading tracking-tight text-balance">
         Server functions
-        <span class="text-primary font-extrabold">
-          with client ergonomics.
+        <span class="text-primary font-black text-3xl sm:text-4xl xl:text-5xl">
+          <span class="italic font-serif text-accent font-normal">with</span> client ergonomics.
         </span>
       </h1>
 
-      <p class="mt-6 text-lg text-base-content/70 max-w-xl leading-relaxed text-pretty">
-        No router. No fetch wrapper. No duplicated types.
+      <p class="mt-6 text-lg text-base-content/80 max-w-xl leading-relaxed text-pretty">
         <code class="font-mono code-hl-inline" translate="no">@thednp/rpc</code> turns your Vite dev server into an RPC backend —
-        export a function, import it in the browser, and call it with full type safety.
+        export a function, import it anywhere in your app and call it with full type safety.
+        No router. No fetch wrapper. No duplicated types.
       </p>
 
       <div class="mt-8 flex flex-wrap items-center gap-3">
@@ -153,7 +155,7 @@ export const renderPage = (): string => `
         <a href="#demo" class="btn btn-outline btn-neutral btn-lg">Try the live demo</a>
       </div>
 
-      <div class="mt-8 flex flex-col md:flex-row md:items-center gap-2 text-sm text-base-content/60">
+      <div class="mt-8 flex flex-col md:flex-row md:items-center gap-2 text-sm text-base-content/80">
         <span class="flex gap-2 items-center">
           <span class="status status-primary"></span>
           Server time via <code class="font-mono">GET /@demo/get-server-time</code>:
@@ -162,7 +164,7 @@ export const renderPage = (): string => `
       </div>
     </div>
 
-    <div class="flex-1 max-w-full min-w-0">
+    <div class="flex-1 max-w-full min-w-full lg:min-w-0">
       <div class="mockup-code bg-base-100 text-base-content border border-base-300 shadow-xl text-sm sm:text-base overflow-x-auto">
         <pre data-prefix="$" class="mt-3 code-hl-green"><code># install from npm</code></pre>
         <pre data-prefix="$"><code>pnpm add @thednp/rpc valibot</code></pre>
@@ -186,23 +188,23 @@ export const renderPage = (): string => `
   <div class="max-w-6xl mx-auto px-4 sm:px-8">
     <div class="stats stats-vertical sm:stats-horizontal w-full bg-base-100 border border-base-300 shadow-sm">
       <div class="stat">
+        <div class="stat-title text-base-content">Examples</div>
+        <div class="stat-value text-primary">8</div>
+        <div class="stat-desc text-base-content/85">Tanstack, React, Solid and Vanilla</div>
+      </div>
+      <div class="stat">
         <div class="stat-title text-base-content">Adapters</div>
-        <div class="stat-value text-primary">4</div>
+        <div class="stat-value text-accent">4</div>
         <div class="stat-desc text-base-content/85">Express · Fastify · Hono · Koa</div>
       </div>
       <div class="stat">
-        <div class="stat-title text-base-content">Boilerplate</div>
-        <div class="stat-value">0</div>
-        <div class="stat-desc text-base-content/85">lines of config to start</div>
-      </div>
-      <div class="stat">
         <div class="stat-title text-base-content">Type safety</div>
-        <div class="stat-value text-accent">100%</div>
+        <div class="stat-value text-success">100%</div>
         <div class="stat-desc text-base-content/85">client &amp; server, compile-checked</div>
       </div>
       <div class="stat">
         <div class="stat-title text-base-content">First call</div>
-        <div class="stat-value text-secondary">~60s</div>
+        <div class="stat-value text-orange">~60s</div>
         <div class="stat-desc text-base-content/85">from an empty project</div>
       </div>
     </div>
@@ -212,9 +214,11 @@ export const renderPage = (): string => `
 <section id="features" class="py-20 scroll-mt-16">
   <div class="max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
-      <span class="badge badge-ghost badge-lg mb-4">Why @thednp/rpc</span>
+      <span class="mb-4">
+        Why <span class="badge badge-primary">@thednp/rpc</span>
+      </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Everything between the import and the database</h2>
-      <p class="mt-4 text-base-content/70">One plugin. One endpoint. The boring plumbing of a web API — routing, serialization, cancellation — handled for you.</p>
+      <p class="mt-4 text-base-content/80">One plugin. One endpoint. The boring plumbing of a web API — routing, serialization, cancellation — handled for you.</p>
     </div>
 
     <div class="reveal grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -226,27 +230,29 @@ export const renderPage = (): string => `
 <section id="how" class="py-20 bg-base-200/60 border-y border-base-300/60 scroll-mt-16">
   <div class="flex flex-col items-center max-w-5xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
-      <span class="badge badge-ghost badge-lg mb-4">How it works</span>
-      <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Three steps, no ceremony</h2>
+      <span class="mb-4">
+        How it <span class="badge badge-accent">works</span>
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Three steps, complete control</h2>
     </div>
 
     <ul class="reveal steps steps-vertical lg:steps-horizontal w-full gap-2">
       <li class="step step-primary text-start lg:text-center" data-content="1">
         <div class="lg:max-w-xs pt-2">
           <h3 class="font-bold">Export a function</h3>
-          <p class="text-sm text-base-content/70 mt-1">Wrap logic in <code class="font-mono">createServerFunction()</code> inside <code class="font-mono">src/api/server.ts</code>. The plugin scans and indexes it automatically.</p>
+          <p class="text-sm text-base-content/80 mt-1">Wrap logic in <code class="font-mono code-hl-inline" translate="no">createServerFunction()</code> inside <code class="font-mono code-hl-inline" translate="no">src/api/server.ts</code>. The plugin scans and indexes it automatically.</p>
         </div>
       </li>
       <li class="step step-primary text-start lg:text-center" data-content="2">
         <div class="lg:max-w-xs pt-2">
           <h3 class="font-bold">Import it anywhere</h3>
-          <p class="text-sm text-base-content/70 mt-1">In the browser, the same module becomes fetch-based stubs with identical signatures — SSR and SPA use the same code.</p>
+          <p class="text-sm text-base-content/80 mt-1">In the browser, the same module becomes fetch-based stubs with identical signatures — SSR and SPA use the same code.</p>
         </div>
       </li>
       <li class="step step-primary text-start lg:text-center" data-content="3">
         <div class="lg:max-w-xs pt-2">
           <h3 class="font-bold">Call, cancel, cache</h3>
-          <p class="text-sm text-base-content/70 mt-1">Full type safety, <code class="font-mono">AbortController</code> cancellation, and a <code class="font-mono">{ data, cancel }</code> shape made for TanStack Query.</p>
+          <p class="text-sm text-base-content/80 mt-1">Full type safety, <code class="font-mono">AbortController</code> cancellation, and a <code class="font-mono code-hl-inline" translate="no">{ data, cancel }</code> shape made for TanStack Query.</p>
         </div>
       </li>
     </ul>
@@ -255,7 +261,7 @@ export const renderPage = (): string => `
       <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
           <h3 class="card-title text-base">The manual way</h3>
-          <p class="text-xs text-base-content/60 -mt-1 mb-2">Router · schema · fetch wrapper · hand-kept types</p>
+          <p class="text-xs text-base-content/80 -mt-1 mb-2">Router · schema · fetch wrapper · hand-kept types</p>
           <div class="mockup-code bg-base-200 text-base-content border border-base-300 shadow-xl text-xs overflow-x-auto">
             <pre data-prefix="1"><code>app.post("/api/register", async (req, res) => {</code></pre>
             <pre data-prefix="2"><code>  const user = validate(req.body); // schema</code></pre>
@@ -271,15 +277,17 @@ export const renderPage = (): string => `
 
       <div class="card bg-primary/5 border border-primary/30 shadow-sm">
         <div class="card-body">
-          <h3 class="card-title text-base"><span>With <code class="font-mono text-xs" translate="no">@thednp/rpc</code></span></h3>
-          <p class="text-xs text-base-content/60 -mt-1 mb-2">One module, zero plumbing</p>
+          <h3 class="card-title text-base"><span>With <code class="font-mono" translate="no">@thednp/rpc</code></span></h3>
+          <p class="text-xs text-base-content/80 -mt-1 mb-2">One module, zero plumbing</p>
           <div class="mockup-code bg-base-100 text-base-content border border-base-300 shadow-xl text-xs overflow-x-auto">
             <pre data-prefix="1" class="code-hl-green"><code>// src/api/server.ts</code></pre>
             <pre data-prefix="2" class="code-hl-green"><code>export const register = createServerFunction(</code></pre>
             <pre data-prefix="3" class="code-hl-green"><code>  "register", async (_s, user: User) => save(user));</code></pre>
-            <pre data-prefix="4"><code>// anywhere — same module, same types</code></pre>
-            <pre data-prefix="5" class="code-hl-blue"><code>import { register } from "./api";</code></pre>
-            <pre data-prefix="6" class="code-hl-blue"><code>const { data } = register(user); // typed</code></pre>
+            <pre data-prefix="4" class="code-hl-green"><code>});</code></pre>
+            <pre data-prefix="5"></pre>
+            <pre data-prefix="6"><code>// anywhere — same module, same types</code></pre>
+            <pre data-prefix="7" class="code-hl-blue"><code>import { register } from "./api";</code></pre>
+            <pre data-prefix="8" class="code-hl-blue"><code>const { data } = register(user); // typed</code></pre>
           </div>
         </div>
       </div>
@@ -290,9 +298,11 @@ export const renderPage = (): string => `
 <section id="demo" class="py-20 scroll-mt-16">
   <div class="max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
-      <span class="badge badge-ghost badge-lg mb-4">Live demo</span>
+      <span class="mb-4">
+        Live <span class="badge badge-warning">demo</span>
+      </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Real functions. Real wire calls.</h2>
-      <p class="mt-4 text-base-content/70">Everything in this window is a live <code class="font-mono">@thednp/rpc</code> call — try it right now.</p>
+      <p class="mt-4 text-base-content/80">Everything in this window is a live <code class="font-mono">@thednp/rpc</code> call — try it right now.</p>
     </div>
 
     <div class="reveal grid lg:grid-cols-2 gap-6 items-stretch">
@@ -305,7 +315,7 @@ export const renderPage = (): string => `
             <span class="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">${iconSparkle}</span>
             <div>
               <p class="text-sm font-semibold">Greeting — <code class="font-mono text-xs">POST /@demo/say-hi</code></p>
-              <p class="text-xs text-base-content/60">Cancellable, <code class="font-mono">text/plain</code> response</p>
+              <p class="text-xs text-base-content/80">Cancellable, <code class="font-mono">text/plain</code> response</p>
             </div>
           </div>
 
@@ -333,12 +343,12 @@ export const renderPage = (): string => `
             <span class="size-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0">${iconClock}</span>
             <div>
               <p class="text-sm font-semibold">Server time — <code class="font-mono text-xs">GET /@demo/get-server-time</code></p>
-              <p class="text-xs text-base-content/60">Polled every 5 seconds, rendered client-side</p>
+              <p class="text-xs text-base-content/80">Polled every 5 seconds, rendered client-side</p>
             </div>
           </div>
           <div class="flex items-baseline gap-2">
             <span id="demo-time" class="font-mono text-2xl font-bold tabular-nums">—</span>
-            <span id="demo-date" class="text-sm text-base-content/60"></span>
+            <span id="demo-date" class="text-sm text-base-content/80"></span>
           </div>
         </div>
       </div>
@@ -347,7 +357,7 @@ export const renderPage = (): string => `
         <div class="card bg-base-100 border border-base-300 shadow-sm flex-1">
           <div class="card-body">
             <h3 class="card-title text-lg">${iconCode} The wire protocol is just HTTP</h3>
-            <p class="text-sm text-base-content/70">
+            <p class="text-sm text-base-content/80">
               No magic transport. A call is a <code class="font-mono">fetch()</code> to the
               RPC-prefixed endpoint with a bare JSON array of arguments:
             </p>
@@ -382,15 +392,16 @@ export const renderPage = (): string => `
   <div class="max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal hero bg-linear-to-r from-primary to-accent text-primary-content rounded-3xl shadow-xl">
       <div class="hero-content text-center py-14 flex-col">
-        <span class="badge badge-neutral badge-lg">${iconBolt} Free · MIT · npm &amp; JSR</span>
+        <span class="badge badge-neutral badge-lg">${iconBolt} Free · MIT · npm &amp; jsr</span>
         <h2 class="text-3xl sm:text-4xl font-bold max-w-2xl tracking-tight text-balance">Ship your first server function in under a minute</h2>
         <p class="text-primary-content/85 max-w-xl">
           Scaffold the SPA or SSR example, add <code class="font-mono">@thednp/rpc</code> and valibot,
           and call your first endpoint before the coffee is ready.
         </p>
         <div class="flex flex-wrap justify-center gap-3 mt-2">
-          <a href="https://github.com/thednp/rpc/blob/master/wiki/quickstart.md" target="_blank" rel="noreferrer" class="btn btn-neutral btn-lg">Start the quickstart</a>
-          <a href="https://www.npmjs.com/package/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-neutral btn-lg">Install from npm</a>
+          <a href="https://github.com/thednp/rpc/blob/master/wiki/quickstart.md" target="_blank" rel="noreferrer" class="btn btn-accent btn-lg">Start the quickstart</a>
+          <a href="https://www.npmjs.com/package/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-outline btn-lg">Install from npm</a>
+          <a href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-outline btn-lg">Install from jsr</a>
         </div>
       </div>
     </div>
@@ -402,7 +413,7 @@ export const renderPage = (): string => `
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="badge badge-ghost badge-lg mb-4">Multipart demo</span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Questions? Ideas? Bugs?</h2>
-      <p class="mt-4 text-base-content/70 text-pretty">
+      <p class="mt-4 text-base-content/80 text-pretty">
         This form is a live <code class="font-mono" translate="no">@thednp/rpc</code> call: the server
         function is declared with <code class="font-mono" translate="no">contentType: "multipart/form-data"</code>
         and every field is validated server-side with valibot.
@@ -425,7 +436,7 @@ export const renderPage = (): string => `
                 <a href="https://www.npmjs.com/package/@thednp/rpc" target="_blank" rel="noreferrer" class="flex items-center gap-3">${iconCode}<span>npm package</span></a>
               </li>
               <li>
-                <a href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer" class="flex items-center gap-3">${iconCode}<span>JSR package</span></a>
+                <a href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer" class="flex items-center gap-3">${iconCode}<span>jsr package</span></a>
               </li>
             </ul>
           </div>
@@ -470,6 +481,12 @@ export const renderPage = (): string => `
           </fieldset>
 
           <fieldset class="fieldset">
+            <legend class="fieldset-legend">Title</legend>
+            <input name="title" id="title" type="title" class="input input-bordered w-full" placeholder="Server crashed because..." autocomplete="off" spellcheck="true" aria-label="Issue Title" aria-required="true" aria-describedby="error-title" />
+            <p id="error-title" data-error="title" class="text-error text-xs mt-1" aria-live="polite"></p>
+          </fieldset>
+
+          <fieldset class="fieldset">
             <legend class="fieldset-legend">Message</legend>
             <textarea name="message" id="contact-message" class="textarea textarea-bordered w-full h-32" placeholder="Tell us everything…" aria-label="Message" aria-required="true" aria-describedby="error-message"></textarea>
             <p id="error-message" data-error="message" class="text-error text-xs mt-1" aria-live="polite"></p>
@@ -478,6 +495,15 @@ export const renderPage = (): string => `
           <div id="contact-success" class="alert alert-success hidden" role="status">
             <svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
             <span></span>
+          </div>
+
+          <div id="contact-github" class="hidden items-center gap-3 rounded-box border border-base-300 bg-base-100 p-3">
+            <img id="github-avatar" src="" alt="" width="48" height="48" class="size-12 rounded-full" loading="lazy" />
+            <div class="min-w-0">
+              <a id="github-link" href="#" target="_blank" rel="noreferrer" class="font-semibold link link-hover truncate">@login</a>
+              <p id="github-name" class="text-sm text-base-content/80 truncate"></p>
+              <p id="github-bio" class="text-xs text-base-content/50 truncate"></p>
+            </div>
           </div>
 
           <div class="card-actions justify-end mt-1">
@@ -491,20 +517,22 @@ export const renderPage = (): string => `
     </div>
   </div>
 </section>
-
 </main>
 
-<footer class="footer sm:footer-horizontal bg-base-100 text-base-content p-10 border-t border-base-300/60">
+
+
+<footer class="bg-base-100 text-base-content p-10 border-t border-base-300/60">
+<div class="max-w-6xl mx-auto px-4 sm:px-8 footer sm:footer-horizontal">
   <aside class="max-w-sm">
     <a href="#top" class="flex items-center gap-2 font-bold text-lg">
       <span class="size-8 rounded-lg bg-primary text-primary-content flex items-center justify-center">${iconBolt}</span>
       <span translate="no">@thednp/rpc</span>
     </a>
-    <p class="text-sm text-base-content/70 leading-relaxed">
+    <p class="text-sm text-base-content/80 leading-relaxed">
       A Vite plugin for creating server functions with automatic, type-safe RPC.
-      MIT licensed, available on npm and JSR.
+      MIT licensed, available on npm and jsr.
     </p>
-    <p class="text-xs text-base-content/70">
+    <p class="text-xs text-base-content/80">
       © 2026 thednp · This page's forms and clocks are live RPC calls.
     </p>
   </aside>
@@ -529,9 +557,10 @@ export const renderPage = (): string => `
     <h3 class="footer-title text-base-content/85">Community</h3>
     <a class="link link-hover" href="https://github.com/thednp/rpc" target="_blank" rel="noreferrer">GitHub</a>
     <a class="link link-hover" href="https://www.npmjs.com/package/@thednp/rpc" target="_blank" rel="noreferrer">npm</a>
-    <a class="link link-hover" href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer">JSR</a>
+    <a class="link link-hover" href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer">jsr</a>
     <a class="link link-hover" href="https://github.com/thednp/rpc/blob/master/CHANGELOG.md" target="_blank" rel="noreferrer">Changelog</a>
   </nav>
+</div>
 </footer>
 
 <div class="toast toast-end toast-bottom z-50">

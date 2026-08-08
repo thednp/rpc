@@ -44,6 +44,12 @@ const getModule = (
         headers = `{ 'Content-Type': 'text/plain' }`;
       }
       break;
+    case "application/x-www-form-urlencoded":
+      {
+        body = `new URLSearchParams(args[0]).toString()`;
+        headers = `{ 'Content-Type': 'application/x-www-form-urlencoded' }`;
+      }
+      break;
     case "multipart/form-data":
       {
         // FormData carries its own multipart content type with a random boundary,

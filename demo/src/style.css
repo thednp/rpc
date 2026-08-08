@@ -29,12 +29,15 @@
 
   --color-info: oklch(61% 0.15 236);
   --color-info-content: oklch(98% 0.005 236);
-  --color-success: oklch(66% 0.17 152);
-  --color-success-content: oklch(98% 0.006 152);
+  --color-success: var(--color-green-700);
+  --color-success-content: var(--color-green-50);
   --color-warning: oklch(79% 0.14 84);
   --color-warning-content: oklch(28% 0.05 84);
   --color-error: oklch(61% 0.22 25);
   --color-error-content: oklch(98% 0.005 25);
+
+  --color-orange: var(--color-orange-600);
+  --color-orange-content: var(--color-orange-50);
 
   --radius-selector: 0.5rem;
   --radius-field: 0.625rem;
@@ -70,12 +73,15 @@
 
   --color-info: oklch(66% 0.14 236);
   --color-info-content: oklch(20% 0.03 236);
-  --color-success: oklch(69% 0.16 152);
-  --color-success-content: oklch(20% 0.04 152);
+  --color-success: var(--color-green-400);
+  --color-success-content: var(--color-green-950);
   --color-warning: oklch(81% 0.13 84);
   --color-warning-content: oklch(25% 0.05 84);
   --color-error: oklch(64% 0.2 25);
   --color-error-content: oklch(20% 0.03 25);
+
+  --color-orange: var(--color-orange-400);
+  --color-orange-content: var(--color-orange-950);
 
   --radius-selector: 0.5rem;
   --radius-field: 0.625rem;
@@ -99,6 +105,14 @@ html {
 .mockup-code {
   max-width: 100%;
   min-width: 0;
+}
+
+.text-orange {
+  color: var(--color-orange)
+}
+
+.text-orange-content {
+  color: var(--color-orange-content)
 }
 
 body {

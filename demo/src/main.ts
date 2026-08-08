@@ -1,4 +1,3 @@
-import "./style.css";
 // import { renderPage } from "./render";
 import {
   setupContact,

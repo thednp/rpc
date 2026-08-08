@@ -20,7 +20,7 @@ Every server function is reachable at:
 
 | Method | When                          | Arguments location                                                                              |
 |---------|--------------------------------|--------------------------------------------------------------------------------------------------|
-| `POST`  | Default for all functions.      | JSON array in the request body.<br/>`text/plain` functions send the single first argument as raw text. |
+| `POST`  | Default for all functions.      | JSON array in the request body.<br/>`text/plain` functions send the single first argument as raw text.<br/>`application/x-www-form-urlencoded` functions send the single object argument as `key=value&...`. |
 | `GET`   | Only when `{ method: 'GET' }`.  | `?args=<url-encoded JSON array>` query parameter (no body allowed on `GET`).                        |
 
 Requests whose method doesn't match the function's configured method are rejected with `405 Method Not Allowed`.
@@ -50,6 +50,28 @@ curl -s -X POST http://localhost:5173/__rpc/say-hi \
   -H 'Content-Type: text/plain' \
   -d 'World'
 ```
+
+### POST + `application/x-www-form-urlencoded`
+
+Designed for native HTML forms. The generated client serializes the single object argument with `new URLSearchParams(args[0]).toString()`:
+
+```ts
+// createUser({ name: "artae", job: "developer" })
+//   with { contentType: 'application/x-www-form-urlencoded' }
+//   →  POST /__rpc/create-user  body: name=artae&job=developer
+const { data } = await createUser({ name: "artae", job: "developer" });
+```
+
+The adapters parse `key=value&key2=value2` into an object using `URLSearchParams` — every value arrives as a **string** (`"artae"`, `"42"`), and repeated keys collapse to the last value. If your framework's urlencoded parser (`express.urlencoded()`, `@fastify/formbody`, `koa-body`) runs **before** the RPC middleware, its pre-parsed object is used directly:
+
+```bash
+# createUser(fields) →  args[0] = { name: "artae", job: "developer" }
+curl -s -X POST http://localhost:5173/__rpc/create-user \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'name=artae&job=developer'
+```
+
+> Use `multipart/form-data` for anything beyond flat string fields (file uploads, nested values); urlencoded is the lightweight option for simple text forms.
 
 ### POST + `multipart/form-data`
 

@@ -11,7 +11,7 @@ import "koa";
 /**
  * Content types the RPC client modules send with each request.
  */
-type ContentType = "application/json" | "text/plain" | "multipart/form-data";
+type ContentType = "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data";
 /**
  * Fetch `credentials` policy used by the generated client modules.
  */

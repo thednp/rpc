@@ -187,6 +187,37 @@ describe("Express helpers extended", () => {
         raw: expect.stringContaining('name="a"'),
       });
     });
+
+    it("should return urlencoded fields when req.body is set by express.urlencoded()", async () => {
+      const req = makeReq({
+        originalUrl: "/test",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+      });
+      (req as any).body = { name: "artae", job: "developer" };
+      const result = await readBody(req);
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
+
+    it("should parse urlencoded body from the raw stream", async () => {
+      const req = makeReq({
+        originalUrl: "/test",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+      });
+      const p = readBody(req);
+      simulateBody(req, "name=artae&job=developer");
+      const result = await p;
+      expect(result).toEqual({
+        contentType: "application/x-www-form-urlencoded",
+        data: { name: "artae", job: "developer" },
+      });
+    });
   });
 
   describe("getResponseDetails setHeader", () => {
@@ -390,6 +421,25 @@ describe("Express createRPCMiddleware handler", () => {
     simulateBody(req, JSON.stringify(["a", "b"]));
     await mw(req, res, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+  });
+
+  it("should pass parsed urlencoded body as single object arg", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("form-fn", fn);
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/form-fn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, "name=artae&job=developer");
+    await mw(req, res, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      name: "artae",
+      job: "developer",
+    });
   });
 
   it("should cancel on request close", async () => {
