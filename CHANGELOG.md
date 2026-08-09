@@ -1,31 +1,57 @@
 # Changelog
 
-## [0.1.2] - 2026-08-08
+## [0.2.0] - 2026-08-09
 
 ### Features
 
+- **h3 adapter**: new `@thednp/rpc/h3` adapter with `createRPCMiddleware`, `viteMiddleware`, `attachRPC`, `attachVite`, `readBody`, `redirect` — fully typed, 100% test coverage, SSR example at `examples/h3`
+- **Request Context API**: `provideRequestContext(init, cb)` / `getRequestContext()` — per-request `AsyncLocalStorage` context available to all server function code; `RequestEvent` includes `nativeEvent`, `locals`, adapter-bound `redirect`; works across Express, Fastify, Hono, Koa, and h3
+- **`redirect` helper**: a new `redirect(res, location, status?)` server utility exported from `@thednp/rpc/server` and every adapter. It defaults to `303 See Other` for Post/Redirect/Get flows. The core version accepts an Express `Response` or a raw Node `ServerResponse`, delegating to native `res.redirect()` when available and otherwise writing the status code and `Location` header directly — the raw path is safe on Connect-compatible middlewares and serverless adapters (e.g. Netlify's `serverless-http` mock). Each adapter exports a redirect typed for its response object: Fastify `reply.redirect(location, status)` (v5 URL-first), Koa `ctx.redirect(location)` then `ctx.status = status` (setting status *after*, per koajs/koa#857), and Hono `return redirect(c, location, status)` (the `Response` is returned from the handler)
+
 - **`application/x-www-form-urlencoded` content type**: the `contentType` option and `BodyResult` now include urlencoded. The generated client serializes the single object argument with `new URLSearchParams(args[0]).toString()`, so native HTML forms can POST straight to an RPC endpoint without client-side serialization. Adapters parse `key=value&key2=value2` into an object via `URLSearchParams` (every value arrives as a string; repeated keys collapse to the last value) and use the framework's pre-parsed body (`express.urlencoded()`, `@fastify/formbody`, `koa-body`) when one ran first
+- **Content-type enforcement**: the RPC middleware now validates the request's `Content-Type` against the function's declared `contentType` before parsing the body, rejecting mismatches with `415 Unsupported Media Type` on all four adapters. JSON and text functions are enforced strictly (exact match wins after stripping `charset`/`boundary` parameters); form functions (`multipart/form-data` or `application/x-www-form-urlencoded`) are lenient between the two encodings so native urlencoded form submissions keep working on multipart-declared endpoints. Requests without a `Content-Type` header (curl, GET, legacy clients) are exempt from enforcement. The check lives in the new `hasContentTypeMismatch`/`isFormContentType` helpers exported from `@thednp/rpc/server`
 
 ### Examples
 
+- Add the `h3` example (`examples/h3`): SSR with [h3](https://h3.unjs.io/) using `createRPCMiddleware`, `serveStatic`, `toNodeListener`, and `viteMiddleware`. Dev mode bridges Vite's connect stack; prod serves static assets via `serveStatic` and falls through to SSR.
+- The `demo` form-fallback middleware now uses the new `redirect` helper from `@thednp/rpc/express` instead of hand-writing the `303` + `Location` response
+- Add a nojs fallback to the `demo` contact form (progressive enhancement): the form now carries native `action="/@demo/submit-contact" method="post"` attributes, and a small app-layer `createFormFallback` middleware (mounted before the RPC middleware) intercepts browser form navigations — recognized by `POST` + `application/x-www-form-urlencoded` + `Accept: text/html`, which the JS client never sends. Valid submissions get a `303` redirect to the pre-filled GitHub issue URL; invalid ones get a `303` redirect back to `/?name=..&errors=..`, where the server-rendered page (and hydration) recover the form values and show the same field-level error messages the RPC path would have returned. Validation, issue-URL building, and field lists are shared with the server function via the new `demo/src/lib/contact-form.ts`, and the server function now normalizes both multipart (`{ raw }`) and plain-object (urlencoded/JSON-with-fields) payloads
 - Add the `react-query` example (Express + React 19 + `@tanstack/react-query` SSR): prefetches the greeting in `entry-server.tsx`, dehydrates it into `window.__REACT_QUERY_STATE__`, and hydrates on the client via `HydrationBoundary`
 - Add the `solid-query` example (Express + Solid + `@tanstack/solid-query` SSR): prefetches the greeting, serializes it with `renderToStringAsync`, and documents the disabled-query SSR gotcha — a disabled `createQuery` hangs `renderToStringAsync` because the observer result carries a never-settling `promise` (from `experimental_prefetchInRender`) that seroval awaits forever; the example calls `queryClient.fetchQuery()` on submit instead
 
 ### Docs
 
-- Add an "SSR Gotcha: Queries Disabled at Server Render" section to `wiki/client-usage.md`
-- Document the urlencoded content type in `wiki/server-functions.md` and `wiki/wire-protocol.md` (new `POST + application/x-www-form-urlencoded` section)
-- Update `llms.txt`, `AGENTS.md`, and `README.md` for the new examples and content type
+- Document Request Context API (`provideRequestContext`/`getRequestContext`) in `wiki/server-functions.md` — per-request `AsyncLocalStorage` context with `nativeEvent`, `locals`, adapter-bound `redirect` across all 5 adapters
+- Document urlencoded content type in `wiki/server-functions.md` and `wiki/wire-protocol.md` (new `POST + application/x-www-form-urlencoded` section)
+- Document the `415 Unsupported Media Type` response and content-type enforcement rules in `wiki/wire-protocol.md`
+- Document the strict/lenient content-type behavior in `wiki/server-functions.md`
+- Add a "Content-Type Enforcement" section to `wiki/security.md`
+- Document the `redirect` helper in `wiki/server-functions.md` (new "Redirects (`redirect`)" section) and cross-reference it from `wiki/adapters.md`
+- Add h3 adapter section to `wiki/adapters.md` (installation, usage, body limits)
+- Add h3 body limits to `wiki/best-practices.md` (Content-Length fast path + streaming cap via `for await (const chunk of event.req.body)`)
+- Update `llms.txt`, `AGENTS.md`, and `README.md` for the new adapter, examples, content type, enforcement behavior, redirect helper, and request context
 
 ### Tests
 
+- **100% coverage achieved** across all adapters (express, fastify, h3, hono, koa) — 920/920 statements, 559/559 branches, 144/144 functions, 898/898 lines
+- Add h3 adapter test suite (`tests/h3.test.ts`): viteMiddleware (node/web runtime paths, settle-twice guard), createMiddleware (prefix/path filtering, name deduplication), createRPCMiddleware (dispatch, content-type enforcement, origin check, redirect default 303, cancel on close, error handling)
+- Add redirect default-status tests to Express, Fastify, Hono, and Koa adapter suites (covers `status = 303` default param branch)
 - Add urlencoded `readBody` tests for all four adapters (pre-parsed and raw stream paths), a urlencoded client-module codegen test in `plugin.test.ts`, and an end-to-end RPC middleware dispatch test
+- Add content-type enforcement tests to the Express, Fastify, Hono, and Koa adapter suites (415 on json↔urlencoded/text↔json mismatch, lenient acceptance of urlencoded on multipart-declared functions) and unit tests for `hasContentTypeMismatch`/`isFormContentType` (parameter stripping, case insensitivity, no-header exemption, form leniency both directions)
+- Add `redirect` tests: raw `ServerResponse` write path and native `.redirect()` delegation in `server-helpers.test.ts`, plus per-adapter suites asserting each framework API (Express `res.redirect(status, url)` vs raw write, Fastify URL-first `reply.redirect`, Koa status-after-`ctx.redirect`, Hono returning `c.redirect`'s `Response`)
 - Fix `scripts/dev-test.js` to verify the query-framework examples' dynamically rendered greeting (`Hello Jane!`) instead of only the static `Hello World!` SSR marker; register the `solid-query` example prefix
 
 ### Chores
 
-- Bump version to `0.1.2`
+- Bump version to `0.2.0`
 - Sync `deno.json` version with `package.json`
+
+### Security
+
+- **Content-type check moved before body read**: all four adapters now evaluate `hasContentTypeMismatch` *before* calling `readBody`, so mismatched requests are rejected with `415 Unsupported Media Type` without ever buffering/parsing the body (previously the body was read first, contradicting the documented behavior)
+- **Streaming body-limit in the demo**: `demo/body-limit.ts` no longer buffers the entire body via `readBody` before checking the cap. It enforces the 1MB limit while the request stream is being read (dropping buffered chunks and destroying the request on overflow) and adds a `Content-Length` fast-path for obviously oversized requests — closing a memory-exhaustion gap on the demo's raw `node:http` and Netlify entry points
+- **Netlify URL rewrite tightened**: `demo/netlify/functions/rpc.ts` now matches the `/.netlify/functions/rpc/` marker against the parsed `pathname` only (prefix match), instead of `indexOf` on the raw URL which could match inside a query string and rewrite unintended requests
+- **`@hono/node-server` dedupe**: add a workspace `overrides: { '@hono/node-server': '>=2.0.5' }` in `pnpm-workspace.yaml` to collapse the vulnerable `1.19.17` transitive dependency (via `@hono/vite-dev-server`, which pins `^1.19.11`) onto the already-used patched `2.1.0`. `pnpm audit` is now clean
 
 ## [0.1.1] - 2026-08-07
 

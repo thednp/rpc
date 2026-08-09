@@ -53,6 +53,7 @@ const PREFIX_MAP = {
   fastify: "_server",
   hono: "_server",
   koa: "__A_server",
+  h3: "__A_server",
   "react-query": "__A_server",
   "solid-query": "__A_server",
   spa: "_server",

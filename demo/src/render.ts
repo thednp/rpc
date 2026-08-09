@@ -1,3 +1,17 @@
+import {
+  CONTACT_ERROR_MESSAGES,
+  escapeHtml,
+  type FormState,
+} from "./lib/contact-form";
+
+const contactValue = (state: FormState | undefined, field: string) =>
+  state?.values[field as never] ? escapeHtml(state.values[field as never]) : "";
+
+const contactError = (state: FormState | undefined, field: string) =>
+  state?.errors.includes(field as never)
+    ? CONTACT_ERROR_MESSAGES[field]
+    : "";
+
 /* ---------- inline SVG icons (Lucide style, MIT) ---------- */
 
 export const iconBolt = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>`;
@@ -34,7 +48,7 @@ const features = [
   {
     icon: iconPlug,
     title: "Framework-agnostic",
-    text: "Runs on the plain Vite dev server, or drop in adapters for Express, Fastify, Hono and Koa — the same functions everywhere.",
+    text: "Runs on the plain Vite dev server, or drop in adapters for Express, Fastify, Hono, H3 and Koa — the same functions everywhere.",
   },
   {
     icon: iconCancel,
@@ -68,7 +82,9 @@ const featuresMarkup = features
 
 /* ---------- page markup ---------- */
 
-export const renderPage = (): string => `
+
+
+export const renderPage = (state?: FormState): string => `
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 btn btn-primary btn-sm">Skip to main content</a>
 <header class="sticky top-0 z-40 bg-base-100/85 backdrop-blur-md border-b border-base-300/60">
   <div class="navbar max-w-6xl mx-auto px-4 sm:px-8">
@@ -194,8 +210,8 @@ export const renderPage = (): string => `
       </div>
       <div class="stat">
         <div class="stat-title text-base-content">Adapters</div>
-        <div class="stat-value text-accent">4</div>
-        <div class="stat-desc text-base-content/85">Express · Fastify · Hono · Koa</div>
+        <div class="stat-value text-accent">5</div>
+        <div class="stat-desc text-base-content/85">Express · Fastify · Hono · Koa · H3</div>
       </div>
       <div class="stat">
         <div class="stat-title text-base-content">Type safety</div>
@@ -411,11 +427,14 @@ export const renderPage = (): string => `
 <section id="contact" class="py-20 bg-base-200/60 border-y border-base-300/60 scroll-mt-16">
   <div class="max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
-      <span class="badge badge-ghost badge-lg mb-4">Multipart demo</span>
+      <span class="mb-4">
+        Multipart <span class="badge badge-success badge-lg">demo</span>
+      </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Questions? Ideas? Bugs?</h2>
       <p class="mt-4 text-base-content/80 text-pretty">
-        This form is a live <code class="font-mono" translate="no">@thednp/rpc</code> call: the server
-        function is declared with <code class="font-mono" translate="no">contentType: "multipart/form-data"</code>
+        This form is a live <code class="font-mono code-hl-inline" translate="no">@thednp/rpc</code> call: the server
+        function is declared with <code class="font-mono code-hl-inline" translate="no">contentType: "multipart/form-data"</code>
+        (or <code class="font-mono code-hl-inline" translate="no">application/x-www-form-urlencoded</code> with JavaScript disabled)
         and every field is validated server-side with valibot.
       </p>
     </div>
@@ -449,47 +468,57 @@ export const renderPage = (): string => `
             validated server-side with valibot. Errors below are field-level validation responses over the wire.
           </span>
         </div>
+
+        <div class="alert alert-warning nojs-note" role="note">
+          ${iconBolt}
+          <span>
+            <strong>JavaScript is off.</strong> This form still works — it submits natively as
+            <code class="font-mono">application/x-www-form-urlencoded</code> to
+            <code class="font-mono">POST /@demo/submit-contact</code>, the server validates the fields,
+            then redirects you to the GitHub issue on success (or back here with the errors).
+          </span>
+        </div>
       </div>
 
-      <form id="contact-form" class="card bg-base-100 border border-base-300 shadow-sm lg:col-span-3" novalidate>
+      <form id="contact-form" class="card bg-base-100 border border-base-300 shadow-sm lg:col-span-3" novalidate action="/@demo/submit-contact" method="post">
         <div class="card-body gap-2">
           <h3 class="card-title text-lg">Send a message</h3>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Name</legend>
-            <input name="name" id="contact-name" type="text" class="input input-bordered w-full" placeholder="Ada Lovelace" autocomplete="name" aria-label="Name" aria-required="true" aria-describedby="error-name" />
-            <p id="error-name" data-error="name" class="text-error text-xs mt-1" aria-live="polite"></p>
+            <input name="name" id="contact-name" type="text" class="input input-bordered w-full" placeholder="Ada Lovelace" autocomplete="name" aria-label="Name" aria-required="true" aria-describedby="error-name" value="${contactValue(state, "name")}" />
+            <p id="error-name" data-error="name" class="text-error text-xs mt-1" aria-live="polite">${contactError(state, "name")}</p>
           </fieldset>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Email</legend>
-            <input name="email" id="contact-email" type="email" class="input input-bordered w-full" placeholder="ada@example.com" autocomplete="email" spellcheck="false" aria-label="Email" aria-required="true" aria-describedby="error-email" />
-            <p id="error-email" data-error="email" class="text-error text-xs mt-1" aria-live="polite"></p>
+            <input name="email" id="contact-email" type="email" class="input input-bordered w-full" placeholder="ada@example.com" autocomplete="email" spellcheck="false" aria-label="Email" aria-required="true" aria-describedby="error-email" value="${contactValue(state, "email")}" />
+            <p id="error-email" data-error="email" class="text-error text-xs mt-1" aria-live="polite">${contactError(state, "email")}</p>
           </fieldset>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Topic</legend>
             <select name="topic" id="contact-topic" class="select select-bordered w-full" aria-label="Topic" aria-required="true" aria-describedby="error-topic">
-              <option value="" disabled selected>Choose a topic…</option>
-              <option>Feedback</option>
-              <option>Bug report</option>
-              <option>Integration help</option>
-              <option>Partnership</option>
-              <option>Something else</option>
+              <option value="" disabled ${state?.values.topic ? "" : "selected"}>Choose a topic…</option>
+              <option ${state?.values.topic === "Feedback" ? "selected" : ""}>Feedback</option>
+              <option ${state?.values.topic === "Bug report" ? "selected" : ""}>Bug report</option>
+              <option ${state?.values.topic === "Integration help" ? "selected" : ""}>Integration help</option>
+              <option ${state?.values.topic === "Partnership" ? "selected" : ""}>Partnership</option>
+              <option ${state?.values.topic === "Something else" ? "selected" : ""}>Something else</option>
             </select>
-            <p id="error-topic" data-error="topic" class="text-error text-xs mt-1" aria-live="polite"></p>
+            <p id="error-topic" data-error="topic" class="text-error text-xs mt-1" aria-live="polite">${contactError(state, "topic")}</p>
           </fieldset>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Title</legend>
-            <input name="title" id="title" type="title" class="input input-bordered w-full" placeholder="Server crashed because..." autocomplete="off" spellcheck="true" aria-label="Issue Title" aria-required="true" aria-describedby="error-title" />
-            <p id="error-title" data-error="title" class="text-error text-xs mt-1" aria-live="polite"></p>
+            <input name="title" id="contact-title" type="text" class="input input-bordered w-full" placeholder="Server crashed because..." autocomplete="off" spellcheck="true" aria-label="Issue Title" aria-required="true" aria-describedby="error-title" value="${contactValue(state, "title")}" />
+            <p id="error-title" data-error="title" class="text-error text-xs mt-1" aria-live="polite">${contactError(state, "title")}</p>
           </fieldset>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Message</legend>
-            <textarea name="message" id="contact-message" class="textarea textarea-bordered w-full h-32" placeholder="Tell us everything…" aria-label="Message" aria-required="true" aria-describedby="error-message"></textarea>
-            <p id="error-message" data-error="message" class="text-error text-xs mt-1" aria-live="polite"></p>
+            <textarea name="message" id="contact-message" class="textarea textarea-bordered w-full h-32" placeholder="Tell us everything…" aria-label="Message" aria-required="true" aria-describedby="error-message">${contactValue(state, "message")}</textarea>
+            <p id="error-message" data-error="message" class="text-error text-xs mt-1" aria-live="polite">${contactError(state, "message")}</p>
           </fieldset>
 
           <div id="contact-success" class="alert alert-success hidden" role="status">

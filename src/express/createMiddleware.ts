@@ -11,17 +11,29 @@ import type {
 } from "./types.d.ts";
 import type { Connect } from "vite";
 import type { JsonValue } from "../types.d.ts";
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import type { RequestEvent } from "@thednp/rpc/server";
+import {
+  escapeRegExp,
+  formatError,
+  hasContentTypeMismatch,
+  provideRequestContext,
+  scanForServerFiles,
+  serverFunctionsMap,
+} from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
-import { getRequestDetails, getResponseDetails, readBody } from "./helpers.ts";
-import { escapeRegExp } from "../tools.ts";
-import { formatError } from "../server-helpers.ts";
+import {
+  getRequestDetails,
+  getResponseDetails,
+  readBody,
+  redirect as expressRedirect,
+} from "./helpers.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
+  UNSUPPORTED_MEDIA_TYPE,
 } from "../constants.ts";
 
 let middlewareCount = 0;
@@ -174,20 +186,56 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
           // istanbul ignore else
           if (raw) args = JSON.parse(raw);
         } else {
+          // Content-type enforcement: strict for json/text, lenient between forms.
+          // Requests without a Content-Type header are exempt (curl/GET compat).
+          // Checked BEFORE readBody so mismatched bodies are never buffered.
+          if (
+            hasContentTypeMismatch(
+              serverFunction.options?.contentType ?? "application/json",
+              req.headers["content-type"],
+            )
+          ) {
+            sendResponse(415, { error: UNSUPPORTED_MEDIA_TYPE });
+            return;
+          }
           const body = await readBody(req);
           args = Array.isArray(body.data)
             ? body.data as JsonValue[]
             : [body.data as JsonValue];
         }
-        const { data, cancel } = serverFunction.handler(...args);
-        const onClose = () => cancel(CLIENT_DISCONNECTED);
+        // ─── Dispatch ────────────────────────────────────────────────────
+        // Establish the per-request context around the *entire* dispatch so
+        // server functions (and async continuations spawned by their work)
+        // read `getRequestContext()` and can call the framework-level
+        // `redirect(location)`. The adapter-specific redirect is bound into the
+        // context here; `serverFunction.handler` must be invoked inside the
+        // context callback so its async increments run with the context live.
+        const requestEvent: RequestEvent = {
+          request: req,
+          response: res,
+          nativeEvent: { req, res },
+          locals: (res as ExpressResponse).locals ?? {},
+          redirect: (location, status = 303) => {
+            requestEvent.redirected = { location, status };
+            expressRedirect(res, location, status);
+          },
+        };
 
+        const { data, cancel } = provideRequestContext(
+          requestEvent,
+          () => serverFunction.handler(...args),
+        );
+        const onClose = () => cancel(CLIENT_DISCONNECTED);
         req.on("close", onClose);
         const result = await data;
         req.off("close", onClose);
 
+        // Skip the JSON send when the server function issued a redirect; the
+        // bound adapter redirect already wrote the response.
         // istanbul ignore else
-        if (!res.headersSent) sendResponse(200, { data: result });
+        if (!requestEvent.redirected && !res.headersSent) {
+          sendResponse(200, { data: result });
+        }
       } catch (err) {
         console.error(String(err));
         const isProduction = process.env.NODE_ENV === "production";

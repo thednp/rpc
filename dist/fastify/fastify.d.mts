@@ -5,8 +5,10 @@ import { ViteDevServer } from "vite";
 import "express";
 import "hono";
 import "@hono/node-server";
+import "hono/utils/http-status";
 import "hono/factory";
 import "koa";
+import "h3";
 //#region src/fastify/types.d.ts
 /**
  * Fastify RPC plugin signature: registers the middleware as a preHandler hook.
@@ -124,6 +126,16 @@ declare function attachVite(app: FastifyInstance, vite: ViteDevServer): void;
  * @returns A promise resolving to the parsed body with its content type
  */
 declare const readBody: (req: FastifyRequest) => Promise<BodyResult>;
+/**
+ * Issues an HTTP redirect on a Fastify reply using the native
+ * `reply.redirect(location, status)` API (Fastify v5 signature: destination
+ * URL first, status code optional). Defaults to `303 See Other` for
+ * convention (Post/Redirect/Get).
+ * @param reply - Fastify reply object
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ */
+declare const redirect: (reply: FastifyReply, location: string, status?: number) => void;
 //#endregion
-export { type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type FastifyPlugin, type FastifyRPCPlugin, type RegisteredFastifyRPCPlugin, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody };
+export { type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type FastifyPlugin, type FastifyRPCPlugin, type RegisteredFastifyRPCPlugin, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
 //# sourceMappingURL=fastify.d.mts.map

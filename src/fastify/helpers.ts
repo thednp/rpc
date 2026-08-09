@@ -1,5 +1,5 @@
 // @thednp/rpc/src/fastify/helpers.ts
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ViteDevServer } from "vite";
 import type { FastifyInstance } from "fastify";
 import type { Buffer } from "node:buffer";
@@ -117,4 +117,21 @@ export const readBody = (
 
     toggleListeners(true);
   });
+};
+
+/**
+ * Issues an HTTP redirect on a Fastify reply using the native
+ * `reply.redirect(location, status)` API (Fastify v5 signature: destination
+ * URL first, status code optional). Defaults to `303 See Other` for
+ * convention (Post/Redirect/Get).
+ * @param reply - Fastify reply object
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ */
+export const redirect = (
+  reply: FastifyReply,
+  location: string,
+  status = 303,
+): void => {
+  reply.redirect(location, status);
 };

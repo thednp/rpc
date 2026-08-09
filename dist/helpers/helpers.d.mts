@@ -3,10 +3,12 @@ import "@thednp/rpc";
 import "express";
 import "hono";
 import "@hono/node-server";
+import "hono/utils/http-status";
 import "hono/factory";
 import "fastify";
 import "fastify-plugin";
 import "koa";
+import "h3";
 //#region src/types.d.ts
 /**
  * Fetch `credentials` policy used by the generated client modules.

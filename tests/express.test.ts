@@ -3,6 +3,10 @@ import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
+import {
+  getRequestContext,
+  redirect as serverRedirect,
+} from "../src/context.ts";
 import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import {
   attachRPC,
@@ -10,6 +14,7 @@ import {
   getRequestDetails,
   getResponseDetails,
   readBody,
+  redirect,
 } from "../src/express/helpers.ts";
 import {
   createMiddleware,
@@ -220,6 +225,45 @@ describe("Express helpers extended", () => {
     });
   });
 
+  describe("redirect", () => {
+    it("should use Express res.redirect(status, url) on an Express response", () => {
+      const res = makeRes();
+      (res as any).redirect = vi.fn();
+      redirect(res, "/issue/123", 303);
+      expect(res.redirect).toHaveBeenCalledWith(303, "/issue/123");
+    });
+
+    it("should default to 303 See Other", () => {
+      const res = makeRes();
+      (res as any).redirect = vi.fn();
+      redirect(res, "/target");
+      expect(res.redirect).toHaveBeenCalledWith(303, "/target");
+    });
+
+    it("should write raw statusCode + Location on a bare ServerResponse", () => {
+      const res = makeRes();
+      delete (res as any).json;
+      delete (res as any).send;
+      delete (res as any).header;
+      delete (res as any).status;
+      redirect(res, "/back", 301);
+      expect(res.statusCode).toBe(301);
+      expect(res.setHeader).toHaveBeenCalledWith("Location", "/back");
+      expect(res.end).toHaveBeenCalled();
+    });
+
+    it("should set statusCode to 303 by default on a bare ServerResponse", () => {
+      const res = makeRes();
+      delete (res as any).json;
+      delete (res as any).send;
+      delete (res as any).header;
+      delete (res as any).status;
+      redirect(res, "/back");
+      expect(res.statusCode).toBe(303);
+      expect(res.setHeader).toHaveBeenCalledWith("Location", "/back");
+    });
+  });
+
   describe("getResponseDetails setHeader", () => {
     it("should use Express .header() on Express response", async () => {
       const res = makeRes();
@@ -407,6 +451,79 @@ describe("Express createRPCMiddleware handler", () => {
     expect(sentData).toEqual({ data: "hello" });
   });
 
+  it("should expose request context to server functions", async () => {
+    let seenLocals: unknown;
+    createServerFunction(
+      "ctx-fn",
+      vi.fn().mockImplementation(async (_signal: AbortSignal) => {
+        seenLocals = getRequestContext().locals;
+        getRequestContext().locals.user = "alice";
+        return (getRequestContext().locals as { user: string }).user;
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/ctx-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    res.locals = {};
+    const next = makeNext();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ data: "alice" });
+    expect(seenLocals).toBe(res.locals);
+  });
+
+  it("should skip the JSON send when the function redirects", async () => {
+    createServerFunction(
+      "redirect-fn",
+      vi.fn().mockImplementation(async () => {
+        serverRedirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/redirect-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    res.redirect = vi.fn();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, next);
+    expect(res.redirect).toHaveBeenCalledWith(303, "/login");
+    expect(res.send).not.toHaveBeenCalled();
+  });
+
+  it("should use default 303 when redirect is called without a status", async () => {
+    createServerFunction(
+      "redirect-default-fn",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().redirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/redirect-default-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    res.redirect = vi.fn();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, next);
+    expect(res.redirect).toHaveBeenCalledWith(303, "/login");
+    expect(res.send).not.toHaveBeenCalled();
+  });
+
   it("should pass args from JSON body", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
     createServerFunction("echo-fn", fn);
@@ -425,7 +542,11 @@ describe("Express createRPCMiddleware handler", () => {
 
   it("should pass parsed urlencoded body as single object arg", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
-    createServerFunction("form-fn", fn);
+    createServerFunction(
+      "form-fn",
+      fn,
+      { contentType: "application/x-www-form-urlencoded" },
+    );
     const mw = createRPCMiddleware();
     const req = makeReq({
       originalUrl: "/__rpc/form-fn",
@@ -440,6 +561,108 @@ describe("Express createRPCMiddleware handler", () => {
       name: "artae",
       job: "developer",
     });
+  });
+
+  // ─── content-type enforcement ──────────────────────────────────────
+
+  it("should return 415 when json-declared function gets urlencoded body", async () => {
+    createServerFunction("json-fn", vi.fn().mockResolvedValue("ok"));
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/json-fn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, "name=artae");
+    await mw(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(415);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Unsupported Media Type" });
+  });
+
+  it("should return 415 when text-declared function gets json body", async () => {
+    createServerFunction(
+      "text-fn",
+      vi.fn().mockResolvedValue("ok"),
+      { contentType: "text/plain" },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/text-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify(["hello"]));
+    await mw(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(415);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Unsupported Media Type" });
+  });
+
+  it("should accept urlencoded body for multipart-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "mp-fn",
+      fn,
+      { contentType: "multipart/form-data" },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/mp-fn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, "name=artae");
+    await mw(req, res, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      name: "artae",
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should accept multipart body for urlencoded-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "form-fn2",
+      fn,
+      { contentType: "application/x-www-form-urlencoded" },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/form-fn2",
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=xyz" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(
+      req,
+      '--xyz\r\nContent-Disposition: form-data; name="a"\r\n\r\n1\r\n--xyz--\r\n',
+    );
+    await mw(req, res, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      raw: expect.stringContaining('name="a"'),
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should exempt requests without a Content-Type header (curl compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("noheader-fn", fn);
+    const mw = createRPCMiddleware();
+    const req = makeReq({ originalUrl: "/__rpc/noheader-fn", method: "POST" });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
   it("should cancel on request close", async () => {

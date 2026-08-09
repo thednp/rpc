@@ -146,6 +146,31 @@ export const isExpressResponse = (
 };
 
 /**
+ * Issues an HTTP redirect on an Express or raw Node ServerResponse.
+ * Uses Express's native `res.redirect(status, location)` when an Express
+ * Response is provided, otherwise writes the status code and `Location`
+ * header directly on the raw `ServerResponse` (safe for Connect-compatible
+ * middlewares and serverless adapters whose mock responses lack `.redirect`).
+ * Defaults to `303 See Other` for convention (Post/Redirect/Get).
+ * @param res - Express Response or raw Node ServerResponse
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ */
+export const redirect = (
+  res: ServerResponse | ExpressResponse,
+  location: string,
+  status = 303,
+): void => {
+  if (isExpressResponse(res)) {
+    res.redirect(status, location);
+    return;
+  }
+  res.statusCode = status;
+  res.setHeader("Location", location);
+  res.end();
+};
+
+/**
  * Type guard that checks whether a request has a pre-parsed body (`body` property).
  * Used to detect if a body-parser middleware already consumed the stream.
  * @param req - A Node IncomingMessage or Express Request

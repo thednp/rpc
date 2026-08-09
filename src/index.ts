@@ -13,6 +13,7 @@ import {
 } from "./constants.ts";
 
 import { getClientModules } from "./getClientModules.ts";
+// DEV server only
 import {
   scanForServerFiles,
   scannedServerFiles,

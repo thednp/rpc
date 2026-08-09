@@ -108,6 +108,18 @@ declare const isExpressRequest: (req: IncomingMessage | Request) => req is Reque
  */
 declare const isExpressResponse: (res: ServerResponse | Response) => res is Response;
 /**
+ * Issues an HTTP redirect on an Express or raw Node ServerResponse.
+ * Uses Express's native `res.redirect(status, location)` when an Express
+ * Response is provided, otherwise writes the status code and `Location`
+ * header directly on the raw `ServerResponse` (safe for Connect-compatible
+ * middlewares and serverless adapters whose mock responses lack `.redirect`).
+ * Defaults to `303 See Other` for convention (Post/Redirect/Get).
+ * @param res - Express Response or raw Node ServerResponse
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ */
+declare const redirect: (res: ServerResponse | Response, location: string, status?: number) => void;
+/**
  * Type guard that checks whether a request has a pre-parsed body (`body` property).
  * Used to detect if a body-parser middleware already consumed the stream.
  * @param req - A Node IncomingMessage or Express Request
@@ -129,5 +141,5 @@ declare const getRequestDetails: (request: Request | IncomingMessage) => Request
  */
 declare const getResponseDetails: (response: Response | ServerResponse) => ResponseDetails;
 //#endregion
-export { type ExpressMiddlewareFn, type ExpressMiddlewareHooks, type ExpressMiddlewareOptions, type RequestDetails, type ResponseDetails, attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody };
+export { type ExpressMiddlewareFn, type ExpressMiddlewareHooks, type ExpressMiddlewareOptions, type RequestDetails, type ResponseDetails, attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody, redirect };
 //# sourceMappingURL=express.d.mts.map

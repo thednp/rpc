@@ -1,4 +1,4 @@
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import fp from "fastify-plugin";
 //#region src/options.ts
 const defaultRPCOptions = {
@@ -13,65 +13,14 @@ const defaultMiddlewareOptions = {
 	origin: void 0
 };
 //#endregion
-//#region src/tools.ts
-/**
-* Escapes special regex metacharacters in a string.
-* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
-* preventing ReDoS and regex injection attacks.
-* @param s - The raw string to escape
-* @returns The escaped string safe for use in new RegExp()
-*/
-function escapeRegExp(s) {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-//#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
-const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
-//#endregion
-//#region src/server-helpers.ts
-/**
-* A typed error thrown from server functions.
-* The middleware serializes the `message` and `code` in the response,
-* allowing clients to recognise and handle specific error conditions.
-*/
-var RPCError = class extends Error {
-	/** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
-	code;
-	/** Optional diagnostic payload */
-	data;
-	constructor(message, code = "INTERNAL", data) {
-		super(message);
-		this.name = "RPCError";
-		this.code = code;
-		this.data = data;
-	}
-};
-/**
-* Formats an error for the RPC middleware response.
-* In development the full `RPCError` payload is included so developers
-* can quickly identify issues. Unexpected exceptions never expose their
-* message — only the generic "Internal Server Error" is sent, preventing
-* information disclosure; server-side diagnostics are preserved via the
-* middleware's `console.error` logging.
-*/
-const formatError = (err, isProduction) => {
-	if (isProduction) return { error: INTERNAL_SERVER_ERROR };
-	if (err instanceof RPCError) {
-		const payload = {
-			error: err.message || "Internal Server Error",
-			code: err.code
-		};
-		if (err.data !== void 0) payload.data = err.data;
-		return payload;
-	}
-	return { error: INTERNAL_SERVER_ERROR };
-};
 //#endregion
 //#region src/fastify/plugin.ts
 /** @module Fastify plugin. Exports the RPC plugin wrapped with `fastify-plugin` for lifecycle-compatible registration. */
@@ -167,6 +116,18 @@ const readBody = (req) => {
 		toggleListeners(true);
 	});
 };
+/**
+* Issues an HTTP redirect on a Fastify reply using the native
+* `reply.redirect(location, status)` API (Fastify v5 signature: destination
+* URL first, status code optional). Defaults to `303 See Other` for
+* convention (Post/Redirect/Get).
+* @param reply - Fastify reply object
+* @param location - The URL to redirect to
+* @param status - HTTP status code, defaults to 303
+*/
+const redirect = (reply, location, status = 303) => {
+	reply.redirect(location, status);
+};
 //#endregion
 //#region src/fastify/createMiddleware.ts
 let middlewareCount = 0;
@@ -253,15 +214,32 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					const raw = reqUrl.searchParams.get("args");
 					if (raw) args = JSON.parse(raw);
 				} else {
+					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", req.headers["content-type"])) {
+						reply.status(415).send({ error: UNSUPPORTED_MEDIA_TYPE });
+						return;
+					}
 					const body = await readBody(req);
 					args = Array.isArray(body.data) ? body.data : [body.data];
 				}
-				const { data: dataResult, cancel } = serverFunction.handler(...args);
+				const requestEvent = {
+					request: req,
+					response: reply,
+					nativeEvent: req,
+					locals: {},
+					redirect: (location, status = 303) => {
+						requestEvent.redirected = {
+							location,
+							status
+						};
+						redirect(reply, location, status);
+					}
+				};
+				const { data: dataResult, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.raw.on("close", onClose);
 				const data = await dataResult;
 				req.raw.off("close", onClose);
-				if (!reply.raw.headersSent) reply.status(200).send({ data });
+				if (!requestEvent.redirected && !reply.raw.headersSent) reply.status(200).send({ data });
 			} catch (err) {
 				console.error(String(err));
 				const isProduction = process.env.NODE_ENV === "production";
@@ -271,6 +249,6 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	});
 };
 //#endregion
-export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody };
+export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
 
 //# sourceMappingURL=fastify.mjs.map

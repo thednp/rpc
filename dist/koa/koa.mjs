@@ -1,63 +1,12 @@
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
-//#region src/tools.ts
-/**
-* Escapes special regex metacharacters in a string.
-* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
-* preventing ReDoS and regex injection attacks.
-* @param s - The raw string to escape
-* @returns The escaped string safe for use in new RegExp()
-*/
-function escapeRegExp(s) {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-//#endregion
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
-const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
-//#endregion
-//#region src/server-helpers.ts
-/**
-* A typed error thrown from server functions.
-* The middleware serializes the `message` and `code` in the response,
-* allowing clients to recognise and handle specific error conditions.
-*/
-var RPCError = class extends Error {
-	/** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
-	code;
-	/** Optional diagnostic payload */
-	data;
-	constructor(message, code = "INTERNAL", data) {
-		super(message);
-		this.name = "RPCError";
-		this.code = code;
-		this.data = data;
-	}
-};
-/**
-* Formats an error for the RPC middleware response.
-* In development the full `RPCError` payload is included so developers
-* can quickly identify issues. Unexpected exceptions never expose their
-* message — only the generic "Internal Server Error" is sent, preventing
-* information disclosure; server-side diagnostics are preserved via the
-* middleware's `console.error` logging.
-*/
-const formatError = (err, isProduction) => {
-	if (isProduction) return { error: INTERNAL_SERVER_ERROR };
-	if (err instanceof RPCError) {
-		const payload = {
-			error: err.message || "Internal Server Error",
-			code: err.code
-		};
-		if (err.data !== void 0) payload.data = err.data;
-		return payload;
-	}
-	return { error: INTERNAL_SERVER_ERROR };
-};
 //#endregion
 //#region src/options.ts
 const defaultRPCOptions = {
@@ -165,6 +114,20 @@ const readBody = (ctx) => {
 		toggleListeners(true);
 	});
 };
+/**
+* Issues an HTTP redirect on a Koa context. Koa's `ctx.redirect(location)`
+* defaults to `302` and sets the `Location` header; the status code must be
+* overridden *after* the call (setting it before is ignored, see
+* koajs/koa#857). Defaults to `303 See Other` for convention
+* (Post/Redirect/Get).
+* @param ctx - Koa context
+* @param location - The URL to redirect to
+* @param status - HTTP status code, defaults to 303
+*/
+const redirect = (ctx, location, status = 303) => {
+	ctx.redirect(location);
+	ctx.status = status;
+};
 //#endregion
 //#region src/koa/createMiddleware.ts
 let middlewareCount = 0;
@@ -246,16 +209,36 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					const raw = reqUrl.searchParams.get("args");
 					if (raw) args = JSON.parse(raw);
 				} else {
+					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", ctx.headers["content-type"])) {
+						ctx.status = 415;
+						ctx.body = { error: UNSUPPORTED_MEDIA_TYPE };
+						return;
+					}
 					const body = await readBody(ctx);
 					args = Array.isArray(body.data) ? body.data : [body.data];
 				}
-				const { data: resultData, cancel } = serverFunction.handler(...args);
+				const requestEvent = {
+					request: ctx.req,
+					response: ctx,
+					nativeEvent: ctx,
+					locals: ctx.state,
+					redirect: (location, status = 303) => {
+						requestEvent.redirected = {
+							location,
+							status
+						};
+						redirect(ctx, location, status);
+					}
+				};
+				const { data: resultData, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				ctx.req.on("close", onClose);
 				const result = await resultData;
 				ctx.req.off("close", onClose);
-				ctx.status = 200;
-				ctx.body = { data: result };
+				if (!requestEvent.redirected) {
+					ctx.status = 200;
+					ctx.body = { data: result };
+				}
 			} catch (err) {
 				console.error(String(err));
 				const isProduction = process.env.NODE_ENV === "production";
@@ -266,6 +249,6 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	});
 };
 //#endregion
-export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody };
+export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
 
 //# sourceMappingURL=koa.mjs.map

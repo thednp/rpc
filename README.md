@@ -35,7 +35,7 @@ You define them in a file, import and call them where you need them. The plugin 
 * `createFunction.ts` — server-side definition (wrapped handler with `AbortController`)
 * `getClientModules.ts` — build-time code generation (string template with validation)
 * `client-helpers.ts` — client-side runtime (thin `fetch` based modules)
-* `server-helpers.ts` — server-only utilities (`RPCError`, error formatting, glob file walking)
+* `server-helpers.ts` — server-only utilities (`RPCError`, error formatting, `redirect`, glob file walking)
 * `scanForServerFiles.ts` — file discovery
 * **Adapters** — thin middleware wrappers
 </details>
@@ -90,7 +90,7 @@ Scan `src/api/` for classic `server.ts|js|mjs|mts` files, or switch to glob mode
 <details>
 <summary><b>Typed errors, safe by default</b></summary>
 
-Server errors return a generic `Internal Server Error` — no messages, codes, or stacks leak to clients, in any environment. Only `RPCError` payloads (developer-authored `message`/`code`/`data`) reach the client, and only in development, so you can debug instantly. `multipart/form-data` content type is supported for file uploads via your framework's multipart parser.
+Server errors return a generic `Internal Server Error` — no messages, codes, or stacks leak to clients, in any environment. Only `RPCError` payloads (developer-authored `message`/`code`/`data`) reach the client, and only in development, so you can debug instantly. `multipart/form-data` content type is supported for file uploads via your framework's multipart parser, and json/text/urlencoded requests are validated against the function's declared content type (`415 Unsupported Media Type` on mismatch; form encodings are interchangeable for nojs form fallbacks).
 </details>
 
 <details>
@@ -107,6 +107,7 @@ Generic type inference flows from your server function's arguments and return ty
 | [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)         | `pnpm dlx degit thednp/rpc/examples/ssr my-app`         |
 | [examples/express](https://github.com/thednp/rpc/tree/master/examples/express)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express)     | `pnpm dlx degit thednp/rpc/examples/express my-app`     |
 | [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify)     | `pnpm dlx degit thednp/rpc/examples/fastify my-app`     |
+| [examples/h3](https://github.com/thednp/rpc/tree/master/examples/h3)                   | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/h3)          | `pnpm dlx degit thednp/rpc/examples/h3 my-app`          |
 | [examples/hono](https://github.com/thednp/rpc/tree/master/examples/hono)               | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/hono)        | `pnpm dlx degit thednp/rpc/examples/hono my-app`        |
 | [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)         | `pnpm dlx degit thednp/rpc/examples/koa my-app`         |
 | [examples/react-query](https://github.com/thednp/rpc/tree/master/examples/react-query) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/react-query) | `pnpm dlx degit thednp/rpc/examples/react-query my-app` |
@@ -316,6 +317,12 @@ The `readBody` utility of each adapter doesn't cap raw request bodies by default
 <summary><b>Method restriction (GET/POST only)</b></summary>
 
 Server functions only support `GET` and `POST` (default `POST`). RPC dispatch is not REST — `PUT`/`PATCH`/`DELETE` carry resource semantics that don't apply to function calls, and `OPTIONS` must stay reserved for CORS preflight. Every accepted method is another dispatch path to validate; keeping the surface minimal (and defaulting to `POST`) reduces CSRF and parsing attack surface. See [Server Functions Guide](./wiki/server-functions.md) for details.
+</details>
+
+<details>
+<summary><b>Content-type enforcement</b></summary>
+
+Request bodies are validated against the function's declared `contentType` before parsing — mismatches get a `415 Unsupported Media Type`. JSON and text functions require an exact match (after stripping `charset`/`boundary` parameters); the two form encodings are interchangeable so native urlencoded `<form>` submissions keep working on multipart-declared endpoints (nojs progressive enhancement). Requests without a `Content-Type` header are exempt, so curl and `GET` keep working unchanged. See [Wire Protocol](./wiki/wire-protocol.md) for details.
 </details>
 
 ---

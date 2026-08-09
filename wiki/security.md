@@ -65,6 +65,16 @@ POST /__rpc/do-stuff  →  200
 
 This blocks the simplest CSRF vector: an attacker page embedding `<img src="/__rpc/do-stuff">` or a form `GET` that would otherwise trigger side effects. Functions that opt into `method: "GET"` (via `createServerFunction(name, handler, { method: 'GET' })`) receive their arguments as an `?args=` JSON query parameter. Reserve `GET` for side-effect-free functions only. See [Server Functions Guide](./server-functions.md) for details, and [Wire Protocol](./wire-protocol.md) for the exact request/response encodings.
 
+## Content-Type Enforcement
+
+The middleware checks the request's `Content-Type` against the function's declared `contentType` **before** reading the body, rejecting mismatches with `415 Unsupported Media Type` (see [Wire Protocol — Content-Type Enforcement](./wire-protocol.md#content-type-enforcement)):
+
+- **JSON and text functions are strict**: the header must match the declared type (case-insensitive, after stripping `charset`/`boundary`). This keeps a body from being parsed with the wrong encoding — e.g. a urlencoded body fed to a JSON-declared function fails loudly instead of mis-parsing.
+- **Form functions are lenient between the two encodings**: `multipart/form-data` and `application/x-www-form-urlencoded` are interchangeable, so native urlencoded `<form>` submissions work on multipart-declared functions (the nojs progressive-enhancement flow).
+- **Requests without a `Content-Type` header are exempt** (url bar, `GET`, legacy clients) — the check only applies when the header is present, preserving curl/native compatibility.
+
+The comparison normalizes the header (lowercased, parameters stripped) before matching, so `multipart/form-data; boundary=----xyz` matches `multipart/form-data`, and casing is ignored. See [Server Functions Guide](./server-functions.md) for the strict/lenient rules per content type.
+
 ## Origin Validation
 
 `@thednp/rpc` performs no origin validation by default, but `createRPCMiddleware()` accepts an `origin` option:
@@ -91,7 +101,7 @@ app.use(createRPCMiddleware());      // RPC second
 
 JSON/multipart body size limits come from your framework's parser — `express.json({ limit })`, Fastify's `bodyLimit`, `koa-body`, or Hono's `hono/body-limit` — registered **before** `createRPCMiddleware()`. See [Adapters — Body Size Limits](./adapters.md) for the per-framework setup and [Best Practices — Body Limits](./best-practices.md#body-limits) for custom limit handlers.
 
-The `readBody` utility of each adapter reads the raw request stream and does **not** impose a built-in size limit — always register your framework's body-parser middleware (or a custom limit handler) before `createRPCMiddleware()`.
+The `readBody` utility of each adapter reads the raw request stream and does **not** impose a built-in size limit — always register your framework's body-parser middleware (or a custom limit handler) before `createRPCMiddleware()`. Custom handlers should enforce the cap **while the stream is read** (see the streaming example in [Best Practices — Body Limits](./best-practices.md#body-limits), used by the demo's `body-limit.ts`): reading the whole body first and then rejecting the oversized one still lets the attacker force you to buffer it, defeating the limit.
 
 ## Input Validation
 
@@ -107,6 +117,7 @@ Server functions receive raw, untrusted client data. Always validate before use.
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters

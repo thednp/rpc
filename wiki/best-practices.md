@@ -166,10 +166,47 @@ const app = new Koa();
 app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1MB
 ```
 
-In other cases, your custom [server app](../examples/ssr/http-express.ts) can use something like this:
+```ts
+// h3
+import { H3 } from "h3";
+
+const app = new H3();
+
+// Option A: Content-Length fast path + streaming cap (recommended)
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+
+app.use(async (event, next) => {
+  const contentLength = event.req.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
+    event.res.status = 413;
+    return { error: "Payload Too Large" };
+  }
+  let size = 0;
+  let capped = false;
+  const chunks: Buffer[] = [];
+  for await (const chunk of event.req.body) {
+    if (capped) return;
+    size += chunk.length;
+    if (size > MAX_BODY_SIZE) {
+      capped = true;
+      chunks.length = 0;
+      event.res.status = 413;
+      return { error: "Payload Too Large" };
+    }
+    chunks.push(chunk);
+  }
+  // Note: h3's readBody reads the whole stream — this middleware
+  // caps the stream *before* the RPC middleware invokes readBody.
+  return next();
+});
+
+app.use(createRPCMiddleware(options));
+```
+
+In other cases, your custom [server app](../examples/ssr/http-express.ts) can use something like this. Enforce the cap **while the stream is being read** — reading the whole body with `readBody` first and then checking the size still buffers an oversized body in memory, which is exactly what a body limit should prevent:
 ```ts
 // SSR (custom node:http server with Vite middleware mode)
-import { createMiddleware, readBody } from "@thednp/rpc/express";
+import { createMiddleware } from "@thednp/rpc/express";
 import { loadRPCConfig } from "@thednp/rpc";
 
 const config = await loadRPCConfig();
@@ -177,15 +214,40 @@ const MAX_BODY_SIZE = 1024 * 1024;
 
 app.use(createMiddleware({
   rpcPrefix: config.rpcPrefix,
-  handler: async (req, res, next) => {
-    const { data } = await readBody(req);
-    if (Buffer.byteLength(typeof data === "string" ? data : JSON.stringify(data)) > MAX_BODY_SIZE) {
+  handler: (req, res, next) => {
+    const contentLength = Number(req.headers["content-length"]);
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
       res.statusCode = 413;
       res.end("Payload Too Large");
       return;
     }
-    req.body = data;
-    next();
+    let size = 0;
+    let capped = false;
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => {
+      if (capped) return;
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        capped = true;
+        chunks.length = 0;
+        req.removeAllListeners("data");
+        res.statusCode = 413;
+        res.end("Payload Too Large");
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (capped) return;
+      const body = Buffer.concat(chunks).toString();
+      const contentType = req.headers["content-type"]?.toLowerCase() || "";
+      const isUrlEncoded = contentType.includes("urlencoded");
+      req.body = isUrlEncoded
+        ? Object.fromEntries(new URLSearchParams(body))
+        : body;
+      next();
+    });
   },
 }));
 ```
@@ -193,19 +255,42 @@ app.use(createMiddleware({
 For SPA you can make use of the vite runtime [proxy](../examples/spa/vite.config.ts)
 ```ts
 // SPA (dedicated RPC proxy server)
-import { readBody } from "@thednp/rpc/express";
-
 const MAX_BODY_SIZE = 1024 * 1024;
 
-const bodyLimit = async (req, res, next) => {
-  const { data } = await readBody(req);
-  if (Buffer.byteLength(typeof data === "string" ? data : JSON.stringify(data)) > MAX_BODY_SIZE) {
+const bodyLimit = (req, res, next) => {
+  const contentLength = Number(req.headers["content-length"]);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
     res.statusCode = 413;
     res.end("Payload Too Large");
     return;
   }
-  req.body = data;
-  next();
+  let size = 0;
+  let capped = false;
+  const chunks: Buffer[] = [];
+  req.on("data", (chunk) => {
+    if (capped) return;
+    size += chunk.length;
+    if (size > MAX_BODY_SIZE) {
+      capped = true;
+      chunks.length = 0;
+      req.removeAllListeners("data");
+      res.statusCode = 413;
+      res.end("Payload Too Large");
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on("end", () => {
+    if (capped) return;
+    const body = Buffer.concat(chunks).toString();
+    const contentType = req.headers["content-type"]?.toLowerCase() || "";
+    const isUrlEncoded = contentType.includes("urlencoded");
+    req.body = isUrlEncoded
+      ? Object.fromEntries(new URLSearchParams(body))
+      : body;
+    next();
+  });
 };
 ```
 
@@ -311,6 +396,7 @@ export default { sayHi, add };
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters

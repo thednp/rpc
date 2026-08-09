@@ -3,9 +3,14 @@ import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
+  getRequestContext,
+  redirect as serverRedirect,
+} from "../src/context.ts";
+import {
   attachRPC,
   attachVite,
   readBody,
+  redirect,
   viteMiddleware,
 } from "../src/hono/helpers.ts";
 import {
@@ -137,6 +142,24 @@ describe("Hono helpers", () => {
         contentType: "application/x-www-form-urlencoded",
         data: { name: "artae", job: "developer" },
       });
+    });
+  });
+
+  describe("redirect", () => {
+    it("should return c.redirect(location, status)", () => {
+      const c = makeHonoContext();
+      c.redirect = vi.fn(() => new Response(null, { status: 303 }));
+      const result = redirect(c, "/target", 303);
+      expect(c.redirect).toHaveBeenCalledWith("/target", 303);
+      expect(result).toBeInstanceOf(Response);
+    });
+
+    it("should return the response and default to 303", () => {
+      const c = makeHonoContext();
+      c.redirect = vi.fn(() => new Response(null, { status: 303 }));
+      const result = redirect(c, "/target");
+      expect(c.redirect).toHaveBeenCalledWith("/target", 303);
+      expect(result).toBeInstanceOf(Response);
     });
   });
 
@@ -331,6 +354,77 @@ describe("Hono createRPCMiddleware", () => {
     expect(c.json).toHaveBeenCalledWith({ data: "hello hono" }, 200);
   });
 
+  it("should expose request context to server functions", async () => {
+    let seenC: unknown;
+    createServerFunction(
+      "hono-context",
+      vi.fn().mockImplementation(async (_signal: AbortSignal) => {
+        seenC = getRequestContext().nativeEvent;
+        return "ok";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-context",
+      method: "POST",
+      body: JSON.stringify([]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(seenC).toBe(c);
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should return c.redirect when the function redirects", async () => {
+    createServerFunction(
+      "hono-redirect",
+      vi.fn().mockImplementation(async () => {
+        serverRedirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-redirect",
+      method: "POST",
+      body: JSON.stringify([]),
+    });
+    c.redirect = vi.fn((location: string, status: number) => ({
+      location,
+      status,
+    }));
+    const next = makeHonoNext();
+    const result = await mw(c, next);
+    expect(c.redirect).toHaveBeenCalledWith("/login", 303);
+    expect(result).toEqual({ location: "/login", status: 303 });
+    expect(c.json).not.toHaveBeenCalled();
+  });
+
+  it("should use default 303 when redirect is called without a status", async () => {
+    createServerFunction(
+      "hono-redirect-default",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().redirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-redirect-default",
+      method: "POST",
+      body: JSON.stringify([]),
+    });
+    c.redirect = vi.fn((location: string, status: number) => ({
+      location,
+      status,
+    }));
+    const next = makeHonoNext();
+    const result = await mw(c, next);
+    expect(c.redirect).toHaveBeenCalledWith("/login", 303);
+    expect(result).toEqual({ location: "/login", status: 303 });
+    expect(c.json).not.toHaveBeenCalled();
+  });
+
   it("should pass args from JSON body to function", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
     createServerFunction("echoFn", fn);
@@ -344,6 +438,106 @@ describe("Hono createRPCMiddleware", () => {
     const next = makeHonoNext();
     await mw(c, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+  });
+
+  // ─── content-type enforcement ──────────────────────────────────────
+
+  it("should return 415 when json-declared function gets urlencoded body", async () => {
+    createServerFunction("jsonFn", vi.fn().mockResolvedValue("ok"));
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/jsonFn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "name=artae",
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith(
+      { error: "Unsupported Media Type" },
+      415,
+    );
+  });
+
+  it("should return 415 when text-declared function gets json body", async () => {
+    createServerFunction(
+      "textFn",
+      vi.fn().mockResolvedValue("ok"),
+      { contentType: "text/plain" },
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      method: "POST",
+      path: "/__rpc/textFn",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["hello"]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith(
+      { error: "Unsupported Media Type" },
+      415,
+    );
+  });
+
+  it("should accept urlencoded body for multipart-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "mpFn",
+      fn,
+      { contentType: "multipart/form-data" },
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      method: "POST",
+      path: "/__rpc/mpFn",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "name=artae",
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      name: "artae",
+    });
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should accept multipart body for urlencoded-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "urlFn",
+      fn,
+      { contentType: "application/x-www-form-urlencoded" },
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      method: "POST",
+      path: "/__rpc/urlFn",
+      headers: { "content-type": "multipart/form-data; boundary=xyz" },
+      body:
+        '--xyz\r\nContent-Disposition: form-data; name="a"\r\n\r\n1\r\n--xyz--\r\n',
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      raw: expect.stringContaining('name="a"'),
+    });
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should exempt requests without a Content-Type header (curl compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("noHeaderFn", fn);
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      method: "POST",
+      path: "/__rpc/noHeaderFn",
+      body: "plain",
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "plain");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
   });
 
   it("should cancel on incoming close", async () => {

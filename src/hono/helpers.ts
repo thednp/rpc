@@ -3,8 +3,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import type { ViteDevServer } from "vite";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { BodyResult } from "../types.d.ts";
+import type {
+  ContentfulStatusCode,
+  RedirectStatusCode,
+} from "hono/utils/http-status";
+import type { BodyResult } from "@thednp/rpc";
 import type { IncomingWithBody } from "./types.d.ts";
 import { createMiddleware } from "hono/factory";
 import { createRPCMiddleware } from "./createMiddleware.ts";
@@ -142,4 +145,22 @@ export const readBody = async (
       ? Object.fromEntries(new URLSearchParams(text))
       : String(text),
   } as BodyResult;
+};
+
+/**
+ * Issues an HTTP redirect on a Hono context. Hono's `c.redirect(location,
+ * status)` returns a `Response` object that the handler must return (it never
+ * writes directly). Defaults to `303 See Other` for convention
+ * (Post/Redirect/Get).
+ * @param c - Hono context
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ * @returns A Hono `Response` to return from the handler
+ */
+export const redirect = (
+  c: Context,
+  location: string,
+  status: RedirectStatusCode = 303,
+): Response => {
+  return c.redirect(location, status);
 };

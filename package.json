@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -13,7 +13,8 @@
     "express",
     "fastify",
     "hono",
-    "koa"
+    "koa",
+    "h3"
   ],
   "bugs": {
     "url": "https://github.com/thednp/rpc/issues"
@@ -40,6 +41,7 @@
     "./express": "./dist/express/express.mjs",
     "./fastify": "./dist/fastify/fastify.mjs",
     "./fastify/plugin": "./dist/fastify/plugin/fastify/plugin.mjs",
+    "./h3": "./dist/h3/h3.mjs",
     "./helpers": "./dist/helpers/helpers.mjs",
     "./hono": "./dist/hono/hono.mjs",
     "./koa": "./dist/koa/koa.mjs",
@@ -60,6 +62,7 @@
     "dev:solid-query": "cd examples/solid-query && pnpm up && pnpm dev",
     "dev:fastify": "cd examples/fastify && pnpm up && pnpm dev",
     "dev:hono": "cd examples/hono && pnpm up && pnpm dev",
+    "dev:h3": "cd examples/h3 && pnpm up && pnpm dev",
     "dev:ssr": "cd examples/ssr && pnpm up && pnpm dev",
     "lint": "pnpm lint:ts && pnpm check:ts",
     "lint:ts": "deno lint src",
@@ -80,6 +83,7 @@
     "express": "^5.2.1",
     "fastify": "^5.11.3",
     "fastify-plugin": "^6.0.0",
+    "h3": "2.0.1-rc.26",
     "hono": "^4.13.1",
     "koa": "^3.2.1",
     "vite": "^8.2.1"

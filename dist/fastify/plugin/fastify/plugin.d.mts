@@ -2,12 +2,14 @@ import fp from "fastify-plugin";
 import { Connect } from "vite";
 import "@thednp/rpc";
 import { IncomingMessage, ServerResponse } from "node:http";
-import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, Response as Response$1 } from "express";
 import { MiddlewareHandler } from "hono";
 import "@hono/node-server";
+import "hono/utils/http-status";
 import "hono/factory";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import { Context, Next } from "koa";
+import { Middleware } from "h3";
 //#region src/express/types.d.ts
 /**
  * Express/Connect middleware handler signature used by the RPC middleware.
@@ -19,7 +21,7 @@ interface ExpressMiddlewareHooks {
    * @param res - Node or Express response object
    * @param next - Connect or Express next function
    */
-  handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
+  handler: (req: IncomingMessage | Request, res: ServerResponse | Response$1, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
 //#endregion
 //#region src/hono/types.d.ts
@@ -66,6 +68,19 @@ interface KoaMiddlewareHooks {
   handler: (ctx: Context, next: Next) => Promise<void>;
 }
 //#endregion
+//#region src/h3/types.d.ts
+/**
+ * h3 middleware handler signature used by the RPC middleware.
+ */
+interface H3MiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param event - h3 event object
+   * @param next - h3 next function
+   */
+  handler: Middleware;
+}
+//#endregion
 //#region src/types.d.ts
 /**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
@@ -80,6 +95,8 @@ interface FrameworkHooks {
   fastify: FastifyMiddlewareHooks;
   /** Koa middleware handler signature */
   koa: KoaMiddlewareHooks;
+  /** h3 middleware handler signature */
+  h3: H3MiddlewareHooks;
 }
 /**
  * ### @thednp/rpc
@@ -105,7 +122,7 @@ interface RpcPluginOptions {
    * also compatible with the vite's Connect development server.
    * @default express
    */
-  adapter: "express" | "hono" | "fastify" | "koa";
+  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
   /**
    * Root directory from which the plugin scans for server files.
    * Defaults to `<root>/src/api`. Use this in monorepos where server files

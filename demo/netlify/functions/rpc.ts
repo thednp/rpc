@@ -6,17 +6,24 @@
 import serverless from "serverless-http";
 import { createRPCMiddleware } from "@thednp/rpc/express";
 import { bodyLimit } from "../../body-limit.ts";
+import { createFormFallback } from "../../src/lib/form-fallback.ts";
 
 import "../../src/api/server.ts";
 
 const rpc = createRPCMiddleware({ rpcPrefix: "@demo" });
-const stack = [bodyLimit, rpc];
+const formFallback = createFormFallback({
+  rpcPrefix: "@demo",
+  functionName: "submit-contact",
+});
+const stack = [bodyLimit, formFallback, rpc];
 
 const app = (req: any, res: any, next: any) => {
   const marker = "/.netlify/functions/rpc/";
-  const index = req.url.indexOf(marker);
-  if (index !== -1) {
-    req.url = "/@demo/" + req.url.slice(index + marker.length);
+  const url = new URL(req.url, "http://localhost");
+  if (url.pathname.startsWith(marker)) {
+    const search = url.search || "";
+    req.url =
+      "/@demo/" + url.pathname.slice(marker.length) + search;
   }
   // serverless-http sets req.body to the raw event body string, which
   // readBody would mistake for a pre-parsed body — force the stream path.

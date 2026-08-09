@@ -73,6 +73,26 @@ curl -s -X POST http://localhost:5173/__rpc/create-user \
 
 > Use `multipart/form-data` for anything beyond flat string fields (file uploads, nested values); urlencoded is the lightweight option for simple text forms.
 
+#### Content-Type enforcement
+
+The middleware validates the request's `Content-Type` against the function's declared `contentType` **before** parsing the body. Mismatches are rejected with `415 Unsupported Media Type` so a body is never parsed with the wrong encoding:
+
+- **JSON and text functions are enforced strictly** — the declared type must match exactly (case-insensitive, after stripping `charset`/`boundary` parameters). A `curl` call with a wrong header is rejected instead of silently mis-parsing.
+- **Form functions are lenient**: `multipart/form-data` and `application/x-www-form-urlencoded` are interchangeable, so a native urlencoded `<form>` submission reaches a multipart-declared endpoint (progressive-enhancement nojs flow) without a 415.
+- **Requests without a `Content-Type` header are exempt** (url bar, `GET`, legacy clients) — enforcement only kicks in when the header is actually present.
+
+```bash
+# json-declared function → 415
+curl -s -X POST http://localhost:5173/__rpc/say-hi \
+  -H 'Content-Type: text/plain' -d 'World'
+# {"error":"Unsupported Media Type"}
+
+# multipart-declared function accepts a native urlencoded form submission
+curl -s -X POST http://localhost:5173/__rpc/submit-contact \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'name=artae&message=Hello'
+```
+
 ### POST + `multipart/form-data`
 
 Used for file uploads. The generated client sends the first argument — a `FormData` instance — as the request body; the browser sets the boundary, so the client never sets `Content-Type`:
@@ -144,6 +164,7 @@ The generated client unwraps it — `await data` resolves to `<result>`.
 | `200`   | Success (with `{ data }`), **or** a function that returned `{ error: ... }` as its result. | `{ data: ... }` / `{ data: { error: ... } }` |
 | `404`   | Function not registered.                    | `{ error: "Function not found" }` |
 | `405`   | Method doesn't match (`POST` vs `GET`).     | `{ error: "Method not allowed" }` |
+| `415`   | Request `Content-Type` doesn't match the function's declared `contentType` (json/text functions). | `{ error: "Unsupported Media Type" }` |
 | `500`   | Handler threw.                              | `{ error: "Internal Server Error" }` — always, even in development, for unexpected exceptions; in development `RPCError` payloads include `code`/`data` |
 
 ### Validation errors are data, not status codes
@@ -158,7 +179,7 @@ curl -s -X POST http://localhost:5173/__rpc/add-numbers \
 # {"data":{"error":{"a":["Invalid type: Expected number but received \"x\""]}}}
 ```
 
-The client's `handleResponse` returns this as the resolved `data` — you inspect `result.error` in your code. Only **transport failures** (404/405/500, network errors) reject the `data` promise.
+The client's `handleResponse` returns this as the resolved `data` — you inspect `result.error` in your code. Only **transport failures** (404/405/415/500, network errors) reject the `data` promise.
 
 ## Cancellation
 
@@ -209,6 +230,7 @@ To build the `?args=` value: `encodeURIComponent(JSON.stringify(["en-US"]))` →
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters

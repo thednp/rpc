@@ -1,13 +1,15 @@
 import { Connect, Plugin, ResolvedConfig } from "vite";
 import { MiddlewareOptions as MiddlewareOptions$1, RpcPluginOptions as RpcPluginOptions$1 } from "@thednp/rpc";
 import { IncomingMessage, ServerResponse } from "node:http";
-import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, Response as Response$1 } from "express";
 import { MiddlewareHandler } from "hono";
 import "@hono/node-server";
+import "hono/utils/http-status";
 import "hono/factory";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import "fastify-plugin";
 import { Context, Next } from "koa";
+import { Middleware } from "h3";
 //#region src/express/types.d.ts
 /**
  * Express-specific middleware options, constrained to the `"express"` adapter.
@@ -28,7 +30,7 @@ interface ExpressMiddlewareHooks {
    * @param res - Node or Express response object
    * @param next - Connect or Express next function
    */
-  handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
+  handler: (req: IncomingMessage | Request, res: ServerResponse | Response$1, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
 //#endregion
 //#region src/hono/types.d.ts
@@ -90,6 +92,28 @@ interface KoaMiddlewareHooks {
  */
 type KoaMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "koa">(initialOptions?: Partial<KoaMiddlewareOptions>) => KoaMiddlewareHooks["handler"];
 //#endregion
+//#region src/h3/types.d.ts
+/**
+ * h3-specific middleware options, constrained to the `"h3"` adapter.
+ */
+type H3MiddlewareOptions = MiddlewareOptions$1<"h3">;
+/**
+ * h3 middleware handler signature used by the RPC middleware.
+ */
+interface H3MiddlewareHooks {
+  /**
+   * The handler invoked for each matched request.
+   * @param event - h3 event object
+   * @param next - h3 next function
+   */
+  handler: Middleware;
+}
+/**
+ * h3 middleware factory: takes optional initial options and returns
+ * the h3-compatible handler.
+ */
+type H3MiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "h3">(initialOptions?: Partial<H3MiddlewareOptions>) => H3MiddlewareHooks["handler"];
+//#endregion
 //#region src/types.d.ts
 /**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
@@ -104,6 +128,8 @@ interface FrameworkHooks {
   fastify: FastifyMiddlewareHooks;
   /** Koa middleware handler signature */
   koa: KoaMiddlewareHooks;
+  /** h3 middleware handler signature */
+  h3: H3MiddlewareHooks;
 }
 /**
  * Maps each supported framework adapter to its middleware factory function type.
@@ -117,12 +143,14 @@ interface FrameworkMiddlewareFn {
   fastify: FastifyMiddlewareFn;
   /** Koa middleware factory */
   koa: KoaMiddlewareFn;
+  /** h3 middleware factory */
+  h3: H3MiddlewareFn;
 }
 /**
  * Content types the RPC middleware accepts when reading request bodies.
  * Only `application/json` and `text/plain` are currently supported.
  */
-type SupportableContentType = "multipart/form-data" | "application/json" | "text/plain" | "application/octet-stream";
+type SupportableContentType = "application/x-www-form-urlencoded" | "multipart/form-data" | "application/json" | "text/plain" | "application/octet-stream";
 /**
  * Content types the RPC client modules send with each request.
  */
@@ -295,7 +323,7 @@ interface RpcPluginOptions {
    * also compatible with the vite's Connect development server.
    * @default express
    */
-  adapter: "express" | "hono" | "fastify" | "koa";
+  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
   /**
    * Root directory from which the plugin scans for server files.
    * Defaults to `<root>/src/api`. Use this in monorepos where server files

@@ -1,4 +1,10 @@
 import { getLibraryInfo, getServerTime, sayHi, submitContact } from "./api";
+import {
+  buildIssueUrl,
+  CONTACT_ERROR_MESSAGES,
+  CONTACT_FIELDS,
+  parseFormState,
+} from "./lib/contact-form";
 
 export const setupReveal = () => {
   const elements = document.querySelectorAll(".reveal");
@@ -119,40 +125,8 @@ const showToast = (text: string, colorClass: string, duration = 4000) => {
   toastTimer = window.setTimeout(() => toast.classList.add("hidden"), duration);
 };
 
-const buildIssueUrl = (formData: FormData, ghLogin = "") => {
-  const topic = String(formData.get("topic") ?? "");
-  const issueTitle = String(formData.get("title") ?? "");
-  const message = String(formData.get("message") ?? "");
-
-  if (topic === "Bug report") {
-    const params = new URLSearchParams({
-      template: "bug_report.yml",
-      title: issueTitle,
-      description: [
-        message,
-        "",
-        ghLogin ? `Reported by ${ghLogin} via the [@thednp/rpc demo](https://thednp.github.io/rpc/).` : "*Submitted from the [@thednp/rpc demo](https://thednp.github.io/rpc/).*",
-      ].join("\n"),
-    });
-    return `https://github.com/thednp/rpc/issues/new?${params.toString()}`;
-  }
-
-  const title = `[${topic}] ${issueTitle}`;
-  const body = [
-    "*Submitted from the [@thednp/rpc demo](https://thednp.github.io/rpc/).*",
-    ghLogin ? `Reported by ${ghLogin}.` : "",
-    "",
-    "**Message:**",
-    message,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const params = new URLSearchParams({ title, body });
-  return `https://github.com/thednp/rpc/issues/new?${params.toString()}`;
-};
-
 export const setupContact = (form: HTMLFormElement) => {
-  const fields = ["name", "email", "topic", "title", "message"] as const;
+  const fields = [...CONTACT_FIELDS];
   const successBox = document.getElementById("contact-success")!;
   const successText = successBox.querySelector("span")!;
   const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
@@ -196,7 +170,13 @@ export const setupContact = (form: HTMLFormElement) => {
           githubBox.classList.add("hidden");
         }
 
-        const issueUrl = buildIssueUrl(formData, ghLogin);
+        const fields = Object.fromEntries(
+          Array.from(formData.entries()).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        );
+        const issueUrl = buildIssueUrl(fields, ghLogin);
 
         successText.textContent = `Message received — ticket ${res.ticket}. We'll get back to you at ${new Date(
           res.receivedAt!,
@@ -226,4 +206,35 @@ export const setupContact = (form: HTMLFormElement) => {
       button.classList.remove("btn-disabled");
     }
   });
+};
+
+/**
+ * Recovers a nojs form submission. When the server PRG-redirects back with
+ * `?name=..&errors=..` we re-fill the fields and surface the same field-level
+ * error messages the RPC path would have returned. Works whether the page was
+ * server-rendered with state or hydrated from the URL.
+ */
+export const setupContactRecovery = (form: HTMLFormElement) => {
+  const state = parseFormState(location.search);
+  if (!state.values && state.errors.length === 0) return;
+
+  for (const field of CONTACT_FIELDS) {
+    const input = form.querySelector<HTMLElement>(`[name="${field}"]`);
+    if (input && state.values[field as never]) {
+      if (input instanceof HTMLTextAreaElement) {
+        input.value = state.values[field as never];
+      } else if (input instanceof HTMLSelectElement) {
+        const option = Array.from(input.options).find(
+          (opt) => opt.text === state.values[field as never],
+        );
+        if (option) option.selected = true;
+      } else {
+        input.setAttribute("value", state.values[field as never]);
+      }
+    }
+    const error = form.querySelector<HTMLElement>(`[data-error="${field}"]`);
+    if (error && state.errors.includes(field as never)) {
+      error.textContent = CONTACT_ERROR_MESSAGES[field];
+    }
+  }
 };

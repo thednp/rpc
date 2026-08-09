@@ -1,4 +1,4 @@
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/options.ts
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -104,6 +104,26 @@ const isExpressResponse = (res) => {
 	return "json" in res && "send" in res;
 };
 /**
+* Issues an HTTP redirect on an Express or raw Node ServerResponse.
+* Uses Express's native `res.redirect(status, location)` when an Express
+* Response is provided, otherwise writes the status code and `Location`
+* header directly on the raw `ServerResponse` (safe for Connect-compatible
+* middlewares and serverless adapters whose mock responses lack `.redirect`).
+* Defaults to `303 See Other` for convention (Post/Redirect/Get).
+* @param res - Express Response or raw Node ServerResponse
+* @param location - The URL to redirect to
+* @param status - HTTP status code, defaults to 303
+*/
+const redirect = (res, location, status = 303) => {
+	if (isExpressResponse(res)) {
+		res.redirect(status, location);
+		return;
+	}
+	res.statusCode = status;
+	res.setHeader("Location", location);
+	res.end();
+};
+/**
 * Type guard that checks whether a request has a pre-parsed body (`body` property).
 * Used to detect if a body-parser middleware already consumed the stream.
 * @param req - A Node IncomingMessage or Express Request
@@ -160,65 +180,14 @@ const getResponseDetails = (response) => {
 	};
 };
 //#endregion
-//#region src/tools.ts
-/**
-* Escapes special regex metacharacters in a string.
-* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
-* preventing ReDoS and regex injection attacks.
-* @param s - The raw string to escape
-* @returns The escaped string safe for use in new RegExp()
-*/
-function escapeRegExp(s) {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-//#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
-const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
-//#endregion
-//#region src/server-helpers.ts
-/**
-* A typed error thrown from server functions.
-* The middleware serializes the `message` and `code` in the response,
-* allowing clients to recognise and handle specific error conditions.
-*/
-var RPCError = class extends Error {
-	/** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
-	code;
-	/** Optional diagnostic payload */
-	data;
-	constructor(message, code = "INTERNAL", data) {
-		super(message);
-		this.name = "RPCError";
-		this.code = code;
-		this.data = data;
-	}
-};
-/**
-* Formats an error for the RPC middleware response.
-* In development the full `RPCError` payload is included so developers
-* can quickly identify issues. Unexpected exceptions never expose their
-* message — only the generic "Internal Server Error" is sent, preventing
-* information disclosure; server-side diagnostics are preserved via the
-* middleware's `console.error` logging.
-*/
-const formatError = (err, isProduction) => {
-	if (isProduction) return { error: INTERNAL_SERVER_ERROR };
-	if (err instanceof RPCError) {
-		const payload = {
-			error: err.message || "Internal Server Error",
-			code: err.code
-		};
-		if (err.data !== void 0) payload.data = err.data;
-		return payload;
-	}
-	return { error: INTERNAL_SERVER_ERROR };
-};
 //#endregion
 //#region src/express/createMiddleware.ts
 let middlewareCount = 0;
@@ -297,15 +266,35 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					const raw = searchParams.get("args");
 					if (raw) args = JSON.parse(raw);
 				} else {
+					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", req.headers["content-type"])) {
+						sendResponse(415, { error: UNSUPPORTED_MEDIA_TYPE });
+						return;
+					}
 					const body = await readBody(req);
 					args = Array.isArray(body.data) ? body.data : [body.data];
 				}
-				const { data, cancel } = serverFunction.handler(...args);
+				const requestEvent = {
+					request: req,
+					response: res,
+					nativeEvent: {
+						req,
+						res
+					},
+					locals: res.locals ?? {},
+					redirect: (location, status = 303) => {
+						requestEvent.redirected = {
+							location,
+							status
+						};
+						redirect(res, location, status);
+					}
+				};
+				const { data, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.on("close", onClose);
 				const result = await data;
 				req.off("close", onClose);
-				if (!res.headersSent) sendResponse(200, { data: result });
+				if (!requestEvent.redirected && !res.headersSent) sendResponse(200, { data: result });
 			} catch (err) {
 				console.error(String(err));
 				const isProduction = process.env.NODE_ENV === "production";
@@ -315,6 +304,6 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	});
 };
 //#endregion
-export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody };
+export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody, redirect };
 
 //# sourceMappingURL=express.mjs.map

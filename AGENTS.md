@@ -33,12 +33,19 @@ pnpm release # Publish npm + jsr (scripts/release.js)
 
 ## Examples
 
-The `examples/` directory contains 7 example apps:
+The `examples/` directory contains 8 example apps:
 
-| Example       | Adapter                                                           | Type | Run Command            | Config                                  |
+| Example       | Adapter                                                           | Type | Run Command             | Config                                  |
 | ----------------| -------------------------------------------------------------------| ------| -------------------------| -----------------------------------------|
 | `spa`          | Vite dev server (no adapter)                                      | SPA  | `pnpm dev`              | `examples/spa/rpc.config.ts`            |
 | `express`      | Express                                                           | SSR  | `pnpm dev:express`      | `examples/express/rpc.config.ts`        |
+| `fastify`      | Fastify                                                           | SSR  | `pnpm dev:fastify`      | `examples/fastify/rpc.config.ts`        |
+| `h3`           | h3                                                                | SSR  | `pnpm dev:h3`           | `examples/h3/rpc.config.ts`             |
+| `hono`         | Hono                                                              | SSR  | `pnpm dev:hono`         | `examples/hono/rpc.config.ts`           |
+| `koa`          | Koa                                                               | SSR  | `pnpm dev:koa`          | `examples/koa/rpc.config.ts`            |
+| `react-query`  | Express (React + @tanstack/react-query SSR)                       | SSR  | `pnpm dev:react-query`  | `examples/react-query/rpc.config.ts`    |
+| `solid-query`  | Express (Solid + @tanstack/solid-query SSR)                       | SSR  | `pnpm dev:solid-query`  | `examples/solid-query/rpc.config.ts`    |
+| `ssr`          | Custom `http-express.ts` (Express-compatible `node:http` server ) | SSR  | `pnpm dev:ssr`          | `examples/ssr/rpc.config.ts`            | `examples/express/rpc.config.ts`        |
 | `fastify`      | Fastify                                                           | SSR  | `pnpm dev:fastify`      | `examples/fastify/rpc.config.ts`        |
 | `hono`         | Hono                                                              | SSR  | `pnpm dev:hono`         | `examples/hono/rpc.config.ts`           |
 | `koa`          | Koa                                                               | SSR  | `pnpm dev:koa`          | `examples/koa/rpc.config.ts`            |
@@ -143,9 +150,10 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 - `wiki/quickstart.md` — Rebuild the Express SSR example from `create-vite` in under a minute (copy-paste)
 - `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
 - `wiki/configuration.md` — Configuration reference (`rpc.config.ts`, `vite.config.ts`, options)
-- `wiki/server-functions.md` — `createServerFunction` API, methods, validation
+- `wiki/server-functions.md` — `createServerFunction` API, methods, validation, **request context (`getRequestContext`/`provideRequestContext`)** for per-request data access across async call stacks
+- `wiki/nojs-fallback.md` — native (no-JS) `<form>` fallback / progressive enhancement pattern
 - `wiki/client-usage.md` — Client-side usage, type safety, react-query integration
 - `wiki/wire-protocol.md` — HTTP contract, request/response bodies, curl debugging
-- `wiki/adapters.md` — Framework adapters (Express, Fastify, Hono, Koa)
+- `wiki/adapters.md` — Framework adapters (Express, Fastify, Hono, Koa, h3)
 - `wiki/security.md` — Security hardening
 - `wiki/best-practices.md` — Production patterns (auth, rate limiting, body limits, CSRF)

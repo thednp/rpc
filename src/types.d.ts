@@ -15,6 +15,8 @@ import type {
 
 import type { KoaMiddlewareFn, KoaMiddlewareHooks } from "./koa/index.ts";
 
+import type { H3MiddlewareFn, H3MiddlewareHooks } from "./h3/index.ts";
+
 /**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
  * Used to keep the middleware options type-safe per adapter.
@@ -28,6 +30,8 @@ export interface FrameworkHooks {
   fastify: FastifyMiddlewareHooks;
   /** Koa middleware handler signature */
   koa: KoaMiddlewareHooks;
+  /** h3 middleware handler signature */
+  h3: H3MiddlewareHooks;
 }
 
 /**
@@ -42,6 +46,8 @@ export interface FrameworkMiddlewareFn {
   fastify: FastifyMiddlewareFn;
   /** Koa middleware factory */
   koa: KoaMiddlewareFn;
+  /** h3 middleware factory */
+  h3: H3MiddlewareFn;
 }
 
 /**
@@ -49,6 +55,7 @@ export interface FrameworkMiddlewareFn {
  * Only `application/json` and `text/plain` are currently supported.
  */
 export type SupportableContentType =
+  | "application/x-www-form-urlencoded"
   | "multipart/form-data"
   | "application/json"
   | "text/plain"
@@ -249,7 +256,7 @@ export interface RpcPluginOptions {
    * also compatible with the vite's Connect development server.
    * @default express
    */
-  adapter: "express" | "hono" | "fastify" | "koa";
+  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
 
   /**
    * Root directory from which the plugin scans for server files.

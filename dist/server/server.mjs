@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
+import { AsyncLocalStorage } from "node:async_hooks";
 //#region src/functionsMap.ts
 const serverFunctionsMap = /* @__PURE__ */ new Map();
 //#endregion
@@ -78,6 +79,39 @@ const formatError = (err, isProduction) => {
 	}
 	return { error: INTERNAL_SERVER_ERROR };
 };
+/**
+* Checks whether a content type maps to a form encoding
+* (`multipart/form-data` or `application/x-www-form-urlencoded`).
+* Form-declared functions accept either encoding so native browser
+* submissions (urlencoded) keep working without JavaScript.
+*/
+const isFormContentType = (contentType) => contentType === "multipart/form-data" || contentType === "application/x-www-form-urlencoded";
+/**
+* Detects whether an incoming request's `Content-Type` header conflicts
+* with the function's declared content type. JSON and text functions are
+* enforced strictly (exact match wins), while form functions accept both
+* form encodings because the nojs fallback submits urlencoded forms to
+* multipart-declared endpoints. Requests without a `Content-Type` header
+* (curl, GET, legacy clients) are exempt from enforcement.
+* @param declared - The declared `contentType` from the server function options
+* @param rawHeader - The raw `Content-Type` request header, if present
+*/
+const hasContentTypeMismatch = (declared, rawHeader) => {
+	if (!rawHeader) return false;
+	const incomingType = rawHeader.trim().toLowerCase().split(";")[0].trim();
+	if (isFormContentType(declared)) return !isFormContentType(incomingType);
+	return incomingType !== declared;
+};
+/**
+* Escapes special regex metacharacters in a string.
+* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
+* preventing ReDoS and regex injection attacks.
+* @param s - The raw string to escape
+* @returns The escaped string safe for use in new RegExp()
+*/
+function escapeRegExp(s) {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 //#endregion
 //#region src/scanForServerFiles.ts
 let isScanned = false;
@@ -355,6 +389,46 @@ ${Array.from(serverFunctionsMap.entries()).filter(([, entry]) => entry.exportNam
 	})).join("\n")}`.trim();
 };
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, formatError, getClientModules, scanForServerFiles, scannedServerFiles, serverFunctionsMap, walkGlobFiles };
+//#region src/context.ts
+/** @module Server-side request context. Exports the `RequestEvent` shape, `provideRequestContext` to establish it around a dispatch, `getRequestContext` to read it from anywhere inside the async tree, and `redirect` for framework-level redirects. Never import this module in client code — it is server-only. */
+/**
+* Global symbol under which the shared `AsyncLocalStorage` instance is stored
+* on `globalThis`. Keeping it on a `Symbol.for` key makes it instance-stable
+* across module copies and dev-server hot reloads, mirroring
+* `solid-js/web`'s own request-context storage.
+*/
+const requestContextSymbol = Symbol.for("thednp.rpc.requestContext");
+const requestContextStorage = globalThis[requestContextSymbol] ??= new AsyncLocalStorage();
+/**
+* Runs `cb` with `init` as the current request context. Use inside the
+* adapters around server-function dispatch (the async tree under `cb` can then
+* read the context via {@link getRequestContext}).
+* @param init - The request context for the duration of `cb`
+* @param cb - The work that needs access to the request context
+*/
+const provideRequestContext = (init, cb) => requestContextStorage.run(init, cb);
+/**
+* Returns the current request context, or throws when called outside of a
+* request (e.g. module scope or a background task).
+* @throws When no request context is established
+*/
+const getRequestContext = () => {
+	const ctx = requestContextStorage.getStore();
+	if (!ctx) throw new Error("RequestEvent is not available outside of a request");
+	return ctx;
+};
+/**
+* Redirects the current request to `location`. Reads the adapter-bound
+* `redirect` from the current request context — callable from anywhere inside
+* a server-function tree (no `res` threading needed).
+* @param location - The URL to redirect to
+* @param status - HTTP status code, defaults to `303 See Other`
+* @throws When called outside of a request
+*/
+const redirect = (location, status = 303) => {
+	getRequestContext().redirect(location, status);
+};
+//#endregion
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, scanForServerFiles, scannedServerFiles, serverFunctionsMap, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

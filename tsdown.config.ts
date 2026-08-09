@@ -9,6 +9,7 @@ const sharedCfg: UserConfig = {
       "node",
       "vite",
       "hono",
+      "h3",
       "@hono/node-server",
       "koa",
       "fastify",
@@ -80,6 +81,13 @@ export default defineConfig([
       koa: "src/koa/index.ts",
     },
     outDir: "dist/koa",
+  },
+  {
+    ...sharedCfg,
+    entry: {
+      h3: "src/h3/index.ts",
+    },
+    outDir: "dist/h3",
   },
   // client helpers
   {

@@ -1,13 +1,10 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
 import { Context, Hono, MiddlewareHandler } from "hono";
 import { IncomingMessage } from "node:http";
-import { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { HttpBindings } from "@hono/node-server";
 import { ViteDevServer } from "vite";
-import "express";
-import "fastify";
-import "fastify-plugin";
-import "koa";
+import { RedirectStatusCode } from "hono/utils/http-status";
 //#region src/hono/types.d.ts
 /**
  * Node incoming message with an optional pre-parsed body.
@@ -50,43 +47,6 @@ declare const createMiddleware: HonoMiddlewareFn;
  */
 declare const createRPCMiddleware: HonoMiddlewareFn;
 //#endregion
-//#region src/types.d.ts
-/**
- * Parsed request body result discriminated by content type.
- */
-type BodyResult = {
-  contentType: "application/json";
-  data: JsonValue;
-} | {
-  contentType: "text/plain";
-  data: string;
-} | {
-  contentType: "application/x-www-form-urlencoded";
-  data: Record<string, unknown>;
-} | {
-  contentType: "multipart/form-data";
-  data: Record<string, unknown>;
-};
-// primitives and their compositions
-/**
- * Primitive JSON values, including `undefined` for optional parameters.
- */
-type JsonPrimitive = string | number | boolean | null | undefined;
-/**
- * A JSON object whose values are JSON values or arrays.
- */
-type JsonObject = {
-  [key: string]: JsonValue | JsonArray;
-};
-/**
- * A JSON array of JSON values.
- */
-type JsonArray = (FormData | JsonValue)[];
-/**
- * Any JSON-serializable value: primitive, array, or object.
- */
-type JsonValue = JsonPrimitive | JsonArray | JsonObject;
-//#endregion
 //#region src/hono/helpers.d.ts
 /**
  * Convenience function to load RPC config and attach the RPC middleware to a Hono app.
@@ -119,6 +79,17 @@ declare const viteMiddleware: (vite: ViteDevServer) => ReturnType<typeof createM
  * @returns A promise resolving to the parsed body with its content type
  */
 declare const readBody: (c: Context) => Promise<BodyResult>;
+/**
+ * Issues an HTTP redirect on a Hono context. Hono's `c.redirect(location,
+ * status)` returns a `Response` object that the handler must return (it never
+ * writes directly). Defaults to `303 See Other` for convention
+ * (Post/Redirect/Get).
+ * @param c - Hono context
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ * @returns A Hono `Response` to return from the handler
+ */
+declare const redirect: (c: Context, location: string, status?: RedirectStatusCode) => Response;
 //#endregion
-export { type HonoMiddlewareFn, type HonoMiddlewareHooks, type HonoMiddlewareOptions, type IncomingWithBody, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, viteMiddleware };
+export { type HonoMiddlewareFn, type HonoMiddlewareHooks, type HonoMiddlewareOptions, type IncomingWithBody, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
 //# sourceMappingURL=hono.d.mts.map

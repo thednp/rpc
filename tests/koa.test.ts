@@ -3,7 +3,16 @@ import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
-import { attachRPC, attachVite, readBody } from "../src/koa/helpers.ts";
+import {
+  getRequestContext,
+  redirect as serverRedirect,
+} from "../src/context.ts";
+import {
+  attachRPC,
+  attachVite,
+  readBody,
+  redirect,
+} from "../src/koa/helpers.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
@@ -181,6 +190,21 @@ describe("Koa helpers", () => {
         contentType: "application/json",
         data: { from: "stream" },
       });
+    });
+  });
+
+  describe("redirect", () => {
+    it("should call ctx.redirect and set status AFTER (koajs/koa#857)", () => {
+      const ctx: any = { redirect: vi.fn(), status: 200 };
+      redirect(ctx, "/target", 303);
+      expect(ctx.redirect).toHaveBeenCalledWith("/target");
+      expect(ctx.status).toBe(303);
+    });
+
+    it("should default to 303 See Other", () => {
+      const ctx: any = { redirect: vi.fn(), status: 200 };
+      redirect(ctx, "/target");
+      expect(ctx.status).toBe(303);
     });
   });
 
@@ -456,6 +480,66 @@ describe("Koa createRPCMiddleware", () => {
     expect(ctx.body).toEqual({ data: "hello koa" });
   });
 
+  it("should expose request context to server functions", async () => {
+    let seenLocals: unknown;
+    createServerFunction(
+      "koa-context",
+      vi.fn().mockImplementation(async (_signal: AbortSignal) => {
+        seenLocals = getRequestContext().locals;
+        getRequestContext().locals.user = "alice";
+        return (getRequestContext().locals as { user: string }).user;
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-context", method: "POST" });
+    simulateKoaBody(ctx, JSON.stringify([]));
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(200);
+    expect(ctx.body).toEqual({ data: "alice" });
+    expect(seenLocals).toBe(ctx.state);
+  });
+
+  it("should skip the JSON send when the function redirects", async () => {
+    createServerFunction(
+      "koa-redirect",
+      vi.fn().mockImplementation(async () => {
+        serverRedirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-redirect", method: "POST" });
+    ctx.redirect = vi.fn();
+    simulateKoaBody(ctx, JSON.stringify([]));
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.redirect).toHaveBeenCalledWith("/login");
+    expect(ctx.status).toBe(303);
+    expect(ctx.body).toBeUndefined();
+  });
+
+  it("should use default 303 when redirect is called without a status", async () => {
+    createServerFunction(
+      "koa-redirect-default",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().redirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-redirect-default",
+      method: "POST",
+    });
+    ctx.redirect = vi.fn();
+    simulateKoaBody(ctx, JSON.stringify([]));
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.redirect).toHaveBeenCalledWith("/login");
+    expect(ctx.status).toBe(303);
+  });
+
   it("should wrap non-array JSON body in array for the handler", async () => {
     serverFunctionsMap.set("testFn", {
       name: "testFn",
@@ -489,6 +573,101 @@ describe("Koa createRPCMiddleware", () => {
     const next = makeKoaNext();
     await mw(ctx, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+  });
+
+  // ─── content-type enforcement ──────────────────────────────────────
+
+  it("should return 415 when json-declared function gets urlencoded body", async () => {
+    createServerFunction("jsonFn", vi.fn().mockResolvedValue("ok"));
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/jsonFn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    simulateKoaBody(ctx, "name=artae");
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(415);
+    expect(ctx.body).toEqual({ error: "Unsupported Media Type" });
+  });
+
+  it("should return 415 when text-declared function gets json body", async () => {
+    createServerFunction(
+      "textFn",
+      vi.fn().mockResolvedValue("ok"),
+      { contentType: "text/plain" },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/textFn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, JSON.stringify(["hello"]));
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(415);
+    expect(ctx.body).toEqual({ error: "Unsupported Media Type" });
+  });
+
+  it("should accept urlencoded body for multipart-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "mpFn",
+      fn,
+      { contentType: "multipart/form-data" },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/mpFn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    simulateKoaBody(ctx, "name=artae");
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      name: "artae",
+    });
+    expect(ctx.status).toBe(200);
+  });
+
+  it("should accept multipart body for urlencoded-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "urlFn",
+      fn,
+      { contentType: "application/x-www-form-urlencoded" },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/urlFn",
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=xyz" },
+    });
+    simulateKoaBody(
+      ctx,
+      '--xyz\r\nContent-Disposition: form-data; name="a"\r\n\r\n1\r\n--xyz--\r\n',
+    );
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      raw: expect.stringContaining('name="a"'),
+    });
+    expect(ctx.status).toBe(200);
+  });
+
+  it("should exempt requests without a Content-Type header (curl compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("noHeaderFn", fn);
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/noHeaderFn", method: "POST" });
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
   });
 
   it("should cancel on request close", async () => {

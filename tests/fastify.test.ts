@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
-import { attachRPC, attachVite, readBody } from "../src/fastify/helpers.ts";
+import {
+  getRequestContext,
+  redirect as serverRedirect,
+} from "../src/context.ts";
+import {
+  attachRPC,
+  attachVite,
+  readBody,
+  redirect,
+} from "../src/fastify/helpers.ts";
 import {
   createMiddleware,
   createRPCMiddleware,
@@ -229,6 +238,22 @@ describe("Fastify helpers", () => {
       );
     });
   });
+
+  describe("redirect", () => {
+    it("should call reply.redirect with location first (v5 signature)", () => {
+      const reply = makeFastifyReply();
+      reply.redirect = vi.fn();
+      redirect(reply as never, "/target", 303);
+      expect(reply.redirect).toHaveBeenCalledWith("/target", 303);
+    });
+
+    it("should default to 303 See Other", () => {
+      const reply = makeFastifyReply();
+      reply.redirect = vi.fn();
+      redirect(reply as never, "/target");
+      expect(reply.redirect).toHaveBeenCalledWith("/target", 303);
+    });
+  });
 });
 
 // ─── Fastify plugin ───────────────────────────────────────────────────
@@ -444,6 +469,79 @@ describe("Fastify createRPCMiddleware", () => {
     expect(reply.send).toHaveBeenCalledWith({ data: "hello fastify" });
   });
 
+  it("should expose request context to server functions", async () => {
+    let seenRequest: unknown;
+    createServerFunction(
+      "fastify-context",
+      vi.fn().mockImplementation(async (_signal: AbortSignal) => {
+        const event = getRequestContext();
+        seenRequest = event.request;
+        event.locals.traceId = "abc-123";
+        return (event.locals as { traceId: string }).traceId;
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-context",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(reply.send).toHaveBeenCalledWith({ data: "abc-123" });
+    expect(seenRequest).toBe(req);
+  });
+
+  it("should skip the JSON send when the function redirects", async () => {
+    createServerFunction(
+      "fastify-redirect",
+      vi.fn().mockImplementation(async () => {
+        serverRedirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-redirect",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    reply.redirect = vi.fn();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.redirect).toHaveBeenCalledWith("/login", 303);
+    expect(reply.status).not.toHaveBeenCalledWith(200);
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
+  it("should use default 303 when redirect is called without a status", async () => {
+    createServerFunction(
+      "fastify-redirect-default",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().redirect("/login");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-redirect-default",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    reply.redirect = vi.fn();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.redirect).toHaveBeenCalledWith("/login", 303);
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
   it("should wrap non-array JSON body in array for the handler", async () => {
     serverFunctionsMap.set("testFn", {
       name: "testFn",
@@ -480,6 +578,106 @@ describe("Fastify createRPCMiddleware", () => {
     const done = makeFastifyDone();
     await mw(req as never, reply as never, done);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+  });
+
+  // ─── content-type enforcement ──────────────────────────────────────
+
+  it("should return 415 when json-declared function gets urlencoded body", async () => {
+    createServerFunction("jsonFn", vi.fn().mockResolvedValue("ok"));
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/jsonFn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({ name: "artae" }),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(415);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Unsupported Media Type",
+    });
+  });
+
+  it("should return 415 when text-declared function gets json body", async () => {
+    createServerFunction(
+      "textFn",
+      vi.fn().mockResolvedValue("ok"),
+      { contentType: "text/plain" },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/textFn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["hello"]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(415);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Unsupported Media Type",
+    });
+  });
+
+  it("should accept urlencoded body for multipart-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "mpFn",
+      fn,
+      { contentType: "multipart/form-data" },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/mpFn",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({ name: "artae" }),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), { name: "artae" });
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should accept multipart body for urlencoded-declared function (lenient forms)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction(
+      "urlFn",
+      fn,
+      { contentType: "application/x-www-form-urlencoded" },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/urlFn",
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=xyz" },
+      body: JSON.stringify({ a: "1" }),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), { a: "1" });
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should exempt requests without a Content-Type header (curl compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("noHeaderFn", fn);
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/noHeaderFn",
+      method: "POST",
+      body: JSON.stringify(["x"]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(reply.status).toHaveBeenCalledWith(200);
   });
 
   it("should cancel on request close", async () => {

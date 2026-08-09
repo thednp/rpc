@@ -1,20 +1,27 @@
 // src/koa/createMiddleware.ts
 import type { Context, Next } from "koa";
 import type { KoaMiddlewareFn, KoaMiddlewareOptions } from "./types.d.ts";
-import type { JsonValue } from "../types.d.ts";
-import { escapeRegExp } from "../tools.ts";
-import { formatError } from "../server-helpers.ts";
+import type { JsonValue } from "@thednp/rpc";
+import type { RequestEvent } from "@thednp/rpc/server";
+import {
+  escapeRegExp,
+  formatError,
+  hasContentTypeMismatch,
+  provideRequestContext,
+  scanForServerFiles,
+  serverFunctionsMap,
+} from "@thednp/rpc/server";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
+  UNSUPPORTED_MEDIA_TYPE,
 } from "../constants.ts";
 
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
-import { readBody } from "./helpers.ts";
+import { readBody, redirect as koaRedirect } from "./helpers.ts";
 
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
@@ -157,18 +164,50 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
           const raw = reqUrl.searchParams.get("args");
           if (raw) args = JSON.parse(raw);
         } else {
+          // Content-type enforcement: strict for json/text, lenient between forms.
+          // Requests without a Content-Type header are exempt (curl/GET compat).
+          // Checked BEFORE readBody so mismatched bodies are never buffered.
+          if (
+            hasContentTypeMismatch(
+              serverFunction.options?.contentType ?? "application/json",
+              ctx.headers["content-type"],
+            )
+          ) {
+            ctx.status = 415;
+            ctx.body = { error: UNSUPPORTED_MEDIA_TYPE };
+            return;
+          }
           const body = await readBody(ctx);
           args = Array.isArray(body.data)
             ? body.data as JsonValue[]
             : [body.data as JsonValue];
         }
-        const { data: resultData, cancel } = serverFunction.handler(...args);
+        const requestEvent: RequestEvent = {
+          request: ctx.req,
+          response: ctx,
+          nativeEvent: ctx,
+          locals: ctx.state,
+          redirect: (location, status = 303) => {
+            requestEvent.redirected = { location, status };
+            koaRedirect(ctx, location, status);
+          },
+        };
+        const { data: resultData, cancel } = provideRequestContext(
+          requestEvent,
+          () => serverFunction.handler(...args),
+        );
         const onClose = () => cancel(CLIENT_DISCONNECTED);
         ctx.req.on("close", onClose);
         const result = await resultData;
         ctx.req.off("close", onClose);
-        ctx.status = 200;
-        ctx.body = { data: result };
+
+        // Skip the JSON send when the server function issued a redirect;
+        // the bound Koa redirect already set ctx.status/ctx.body.
+        // istanbul ignore else
+        if (!requestEvent.redirected) {
+          ctx.status = 200;
+          ctx.body = { data: result };
+        }
       } catch (err) {
         console.error(String(err));
         const isProduction = process.env.NODE_ENV === "production";

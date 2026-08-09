@@ -52,6 +52,8 @@ function createServerFunction<T>(
 - `'application/x-www-form-urlencoded'` — designed for native HTML forms: the generated client serializes the single object argument with `new URLSearchParams(args[0]).toString()`, so a `<form>` can POST straight to your RPC endpoint without client-side serialization. Server-side, the adapters parse `key=value&key2=value2` into an object with `URLSearchParams`; if you register your framework's urlencoded parser (`express.urlencoded()`, `@fastify/formbody`, `koa-body`) **before** the RPC middleware, the pre-parsed object is used directly. Each value is a string (repeated keys collapse — see [Wire Protocol — urlencoded](./wire-protocol.md#post--applicationx-www-form-urlencoded)).
 - `'multipart/form-data'` — designed for file uploads. The generated client sends the `FormData` you pass as the first argument (the browser sets the boundary — never set `Content-Type` yourself). Server-side, Node has no built-in multipart parser: register your framework's parser middleware (`multer`/`express-fileupload`, `@fastify/multipart`, `koa-body`, or Hono's `hono/body-limit` + `formData` helpers) **before** the RPC middleware, and the adapter forwards the parsed fields object as the function's argument. Without a parser, the raw multipart body arrives as `{ raw: <string> }` — parse it inside the handler with `busboy` or `formidable` (see [Wire Protocol — Multipart](./wire-protocol.md#post--multipartform-data)).
 
+> **Content-type enforcement:** the adapters validate the incoming `Content-Type` against the declared `contentType` before parsing, returning `415 Unsupported Media Type` on a mismatch. JSON and text functions are strict (exact match after stripping `charset`/`boundary`); the two form encodings are interchangeable, so native urlencoded submissions keep working on multipart-declared functions — this is what lets server functions double as the `action` of a nojs `<form>`. Requests with no `Content-Type` header are exempt. The check is available programmatically via `hasContentTypeMismatch`/`isFormContentType` from `@thednp/rpc/server`.
+
 ### Generated client module
 
 The plugin generates a fetch-based stub for every server function — `body` and `headers` follow the `contentType`/`method` options:
@@ -259,7 +261,134 @@ When to use which:
 
 See [Client Usage](./client-usage.md#error-handling) and [Security](./security.md) for the full picture.
 
-> **Next:** [Client Usage](./client-usage.md) — calling the functions from your client code.
+## Redirects (`redirect`)
+
+For **Post/Redirect/Get** (PRG) flows — a native form POST that should bounce the browser to a new URL — use the `redirect` helper instead of hand-writing `statusCode`/`Location`/`end`:
+
+- **Core**: `redirect(res, location, status?)` from `@thednp/rpc/server` — accepts an Express `Response` **or** a raw Node `ServerResponse`. When the response exposes a native `.redirect()`, it delegates to it; otherwise it falls back to writing the status code and `Location` header directly. The raw-node path works on Connect-compatible middlewares and serverless adapters (e.g. Netlify's `serverless-http` mock) whose responses lack `.redirect()`.
+- **Per adapter**: `redirect(reply, location, status?)`, `redirect(ctx, location, status?)`, `redirect(c, location, status?)` on the Fastify, Koa, and Hono adapters respectively, typed for each framework's native response object.
+
+All variants default to **`303 See Other`** — the semantically correct code for "the POST succeeded, now GET this page". Fastify's native API takes the URL first (`reply.redirect(url, status)`), Koa requires setting `ctx.status` *after* `ctx.redirect()` (Koa ignores a status set before it, see [koajs/koa#857](https://github.com/koajs/koa/issues/857)), and Hono's must be **returned** from the handler (`return redirect(c, url)`).
+
+```ts
+import { redirect } from '@thednp/rpc/server';       // Express/Node
+import { redirect } from '@thednp/rpc/express';      // Express adapter
+import { redirect } from '@thednp/rpc/fastify';      // FastifyReply
+import { redirect } from '@thednp/rpc/koa';          // Koa Context (set ctx.status = 303 after)
+import { redirect } from '@thednp/rpc/hono';         // Hono Context → return it from the handler
+```
+
+The demo's native form fallback uses this helper for its PRG redirects.
+
+## Request Context (`provideRequestContext`, `getRequestContext`)
+
+Every RPC dispatch establishes a **per-request context** that is available to any code running inside the async tree of that server function. This eliminates the need to thread `req`/`res` (or framework `Context` objects) through every nested call.
+
+The system uses `AsyncLocalStorage` (Node's built-in, stable across module copies and HMR) under a global symbol — mirroring Solid Start's request-event pattern.
+
+### The `RequestEvent` Shape
+
+```ts
+interface RequestEvent {
+  /** Adapter-specific native event for deep framework access */
+  nativeEvent?: unknown;
+  /** Adapter request object */
+  request: unknown;
+  /** Adapter response object */
+  response: unknown;
+  /** Adapter-bound redirect — sets `redirected` so middleware skips JSON `{ data }` send */
+  redirect: (location: string, status?: number) => void;
+  /** Set by `redirect` once issued; middleware checks this after `await`ing the handler */
+  redirected?: { location: string; status: number };
+  /** Per-request app data shared across the async tree of the dispatch */
+  locals: Record<string, unknown>;
+  [prop: string]: unknown;
+}
+```
+
+Each adapter populates `request`, `response`, and `nativeEvent` with its own types:
+
+| Adapter | `request` | `response` | `nativeEvent` |
+|---------|-----------|------------|---------------|
+| Express | `Request` | `Response` | `{ req, res }` |
+| Fastify | `FastifyRequest` | `FastifyReply` | `request` |
+| Hono | `HonoRequest` | `Context` | `c` (the Hono `Context`) |
+| Koa | `KoaRequest` | `Context` | `ctx` |
+| h3 | `H3Event` | `H3Event` (via `event.res`) | `event` |
+
+### Using the Context in Your Server Functions
+
+```ts
+import { createServerFunction, getRequestContext } from '@thednp/rpc/server';
+
+export const getProfile = createServerFunction('get-profile', async (signal, userId) => {
+  // Access framework-native objects anywhere in the async call stack
+  const { request, response, nativeEvent, locals } = getRequestContext();
+
+  // Example: read a cookie from the Hono context (type via nativeEvent)
+  const honoCtx = nativeEvent as import('hono').Context;
+  const cookie = honoCtx.req.header('cookie');
+
+  // Example: share data across nested calls via `locals`
+  locals.requestId = crypto.randomUUID();
+
+  const user = await db.users.find(userId);
+  if (!user) throw new RPCError('Not found', 'NOT_FOUND');
+  return user;
+});
+```
+
+### Deep Async Tree Example
+
+The real power is sharing data through nested service layers without threading context:
+
+```ts
+// services/user.ts
+import { getRequestContext } from '@thednp/rpc/server';
+
+export async function fetchUserWithPosts(userId: string) {
+  const { locals } = getRequestContext();
+
+  // Attach request-scoped data once
+  if (!locals.userCache) locals.userCache = new Map();
+
+  if (locals.userCache.has(userId)) return locals.userCache.get(userId);
+
+  const user = await db.users.find(userId);
+  if (!user) throw new RPCError('User not found', 'NOT_FOUND');
+
+  // Nested call also has access to the same `locals`
+  const posts = await fetchUserPosts(user.id);
+  const result = { ...user, posts };
+  locals.userCache.set(userId, result);
+  return result;
+}
+
+async function fetchUserPosts(userId: string) {
+  const { locals } = getRequestContext(); // same context, same `locals`
+  // logger can read locals.requestId without it being passed down
+  logger.info('Fetching posts', { requestId: locals.requestId });
+  return db.posts.findByUser(userId);
+}
+```
+
+### How It Works
+
+1. The adapter's RPC middleware calls `provideRequestContext(init, handler)` around your server function.
+2. Inside the handler (or any async descendant), call `getRequestContext()` to read the current `RequestEvent`.
+3. The `locals` object is empty at the start of each request — use it to pass data through the async tree (e.g. user identity, request IDs, feature flags).
+4. The `redirect` function on `RequestEvent` is bound to the adapter's native redirect; calling it sets `redirected` so the middleware skips the JSON `{ data }` response.
+
+> The `redirect` helper from `@thednp/rpc/server` (and each adapter) is just a thin wrapper around `getRequestContext().redirect(location, status)`.
+
+### Why Not Pass `req`/`res` Directly?
+
+- **Ergonomics**: Deep call chains (services → repositories → utilities) don't need to accept `req`/`res` parameters.
+- **Type safety**: The context is strongly typed per adapter; you get autocomplete for `nativeEvent`.
+- **HMR stability**: The `AsyncLocalStorage` lives on a `Symbol.for` global key, surviving Vite HMR module reloads.
+- **Framework agnostic**: Same API works across Express, Fastify, Hono, Koa, h3, and the plain Vite dev server.
+
+> **Next:** [Native Form Fallback](./nojs-fallback.md) — making an RPC endpoint work as a no-JS `<form>` action (progressive enhancement).
 
 ---
 
@@ -269,6 +398,7 @@ See [Client Usage](./client-usage.md#error-handling) and [Security](./security.m
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters

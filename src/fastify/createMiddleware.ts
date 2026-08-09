@@ -8,19 +8,26 @@ import type {
   FastifyMiddlewareFn,
   FastifyMiddlewareOptions,
 } from "./types.d.ts";
-import type { JsonValue } from "../types.d.ts";
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import type { JsonValue } from "@thednp/rpc";
+import type { RequestEvent } from "@thednp/rpc/server";
+import {
+  escapeRegExp,
+  formatError,
+  hasContentTypeMismatch,
+  provideRequestContext,
+  scanForServerFiles,
+  serverFunctionsMap,
+} from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
-import { escapeRegExp } from "../tools.ts";
-import { formatError } from "../server-helpers.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
+  UNSUPPORTED_MEDIA_TYPE,
 } from "../constants.ts";
-import { readBody } from "./helpers.ts";
+import { readBody, redirect as fastifyRedirect } from "./helpers.ts";
 
 let middlewareCount = 0;
 const middlewareStack = new Set<string>();
@@ -179,12 +186,37 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
           // istanbul ignore else
           if (raw) args = JSON.parse(raw);
         } else {
+          // Content-type enforcement: strict for json/text, lenient between forms.
+          // Requests without a Content-Type header are exempt (curl/GET compat).
+          // Checked BEFORE readBody so mismatched bodies are never buffered.
+          if (
+            hasContentTypeMismatch(
+              serverFunction.options?.contentType ?? "application/json",
+              req.headers["content-type"],
+            )
+          ) {
+            reply.status(415).send({ error: UNSUPPORTED_MEDIA_TYPE });
+            return;
+          }
           const body = await readBody(req);
           args = Array.isArray(body.data)
             ? body.data as JsonValue[]
             : [body.data as JsonValue];
         }
-        const { data: dataResult, cancel } = serverFunction.handler(...args);
+        const requestEvent: RequestEvent = {
+          request: req,
+          response: reply,
+          nativeEvent: req,
+          locals: {},
+          redirect: (location, status = 303) => {
+            requestEvent.redirected = { location, status };
+            fastifyRedirect(reply, location, status);
+          },
+        };
+        const { data: dataResult, cancel } = provideRequestContext(
+          requestEvent,
+          () => serverFunction.handler(...args),
+        );
         const onClose = () => cancel(CLIENT_DISCONNECTED);
 
         req.raw.on("close", onClose);
@@ -192,7 +224,9 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         req.raw.off("close", onClose);
 
         // istanbul ignore else
-        if (!reply.raw.headersSent) reply.status(200).send({ data });
+        if (!requestEvent.redirected && !reply.raw.headersSent) {
+          reply.status(200).send({ data });
+        }
       } catch (err) {
         console.error(String(err));
         const isProduction = process.env.NODE_ENV === "production";

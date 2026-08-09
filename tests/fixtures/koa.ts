@@ -21,6 +21,7 @@ function makeKoaCtx(opts: {
     url: opts.url ?? "/",
     method: opts.method ?? "GET",
     headers: opts.headers ?? {},
+    state: {},
     req: Object.assign(ee, {
       url: opts.url ?? "/",
       method: opts.method ?? "GET",

@@ -1,7 +1,11 @@
 import { createServerFunction } from "@thednp/rpc/server";
 import pkg from "../../package.json" with { type: "json" };
 import rootPkg from "../../../package.json" with { type: "json" };
-import * as v from "valibot";
+import {
+  CONTACT_FIELDS,
+  parseMultipartFormData,
+  validateContactForm,
+} from "../lib/contact-form";
 
 export const sayHi = createServerFunction(
   "say-hi",
@@ -36,6 +40,7 @@ export const getLibraryInfo = createServerFunction(
   "get-library-info",
   async () => {
     let version = pkg.dependencies["@thednp/rpc"] || rootPkg.version;
+    const tagline = rootPkg.description;
     if (version.startsWith("link:") || version.startsWith("file:")) {
       version = rootPkg.version;
     } else if (version.startsWith("^") || version.startsWith("~")) {
@@ -44,43 +49,13 @@ export const getLibraryInfo = createServerFunction(
     return {
       name: "@thednp/rpc",
       version,
-      tagline: "Server functions for Vite — without the boilerplate.",
+      tagline,
       adapters: ["express", "fastify", "hono", "koa"],
       prefix: "/@demo",
     };
   },
   { method: "GET" },
 );
-
-const ContactSchema = v.object({
-  name: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(2, "Please tell us your name."),
-    v.maxLength(60, "Keep it under 60 characters."),
-  ),
-  email: v.pipe(
-    v.string(),
-    v.trim(),
-    v.email("That email doesn't look right."),
-  ),
-  topic: v.pipe(
-    v.optional(v.string(), ""),
-    v.trim(),
-    v.minLength(1, "Pick a topic."),
-  ),
-  title: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(1, "Please add a title."),
-  ),
-  message: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(10, "Give us a bit more detail (10+ characters)."),
-    v.maxLength(2000, "Keep it under 2000 characters."),
-  ),
-});
 
 type ContactErrors = Partial<Record<string, [string, ...string[]]>>;
 
@@ -135,36 +110,35 @@ const fetchGitHubUserByEmail = async (
   }
 };
 
-const parseMultipartFormData = (raw: string): Record<string, string> => {
-  const boundary = raw.match(/^--([^\r\n]+)/)?.[1];
-  if (!boundary) return {};
-  const result: Record<string, string> = {};
-  for (const part of raw.split(`--${boundary}`).slice(1)) {
-    const trimmed = part.replace(/^--/, "").replace(/^\r?\n/, "");
-    const separator = trimmed.indexOf("\r\n\r\n");
-    if (separator === -1) continue;
-    const headers = trimmed.slice(0, separator);
-    const nameMatch = headers.match(/name="([^"]+)"/);
-    if (!nameMatch || headers.includes("filename=")) continue;
-    result[nameMatch[1]] = trimmed.slice(separator + 4).replace(/\r?\n$/, "");
-  }
-  return result;
-};
-
 export const submitContact = createServerFunction(
   "submit-contact",
   async (signal, payload: FormData): Promise<ContactResult> => {
     await new Promise((res) => setTimeout(res, 600));
-    const raw = (payload as FormData & { raw: string }).raw;
-    const parsed = parseMultipartFormData(raw);
-    const valid = v.safeParse(ContactSchema, parsed);
+    const candidate = payload as FormData & {
+      raw?: string;
+      name?: string;
+    };
+    // Multipart (JS client) carries { raw }; urlencoded (curl/nojs with
+    // forced JSON) carries the fields directly. Normalize to flat fields.
+    // Multipart (JS client) carries { raw }; urlencoded (curl/nojs direct
+    // posts) carries the fields as a plain object. Normalize to flat fields.
+    const fieldsSource = candidate.raw
+      ? parseMultipartFormData(candidate.raw)
+      : (payload as unknown as Record<string, unknown>);
+    const parsed = Object.fromEntries(
+      CONTACT_FIELDS.map((field) => [
+        field,
+        String(fieldsSource[field] ?? ""),
+      ]),
+    );
+    const valid = validateContactForm(parsed);
     signal?.throwIfAborted();
-    if (valid.issues) {
-      return { status: "error", errors: v.flatten(valid.issues).nested ?? {} };
+    if (!valid.ok) {
+      return { status: "error", errors: valid.errors } as ContactResult;
     }
     signal?.throwIfAborted();
 
-    const githubUser = await fetchGitHubUserByEmail(parsed.email, signal);
+    const githubUser = await fetchGitHubUserByEmail(valid.output.email, signal);
 
     return {
       status: "ok",

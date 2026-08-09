@@ -73,6 +73,17 @@ declare function attachVite(app: Koa, vite: ViteDevServer): void;
  * @returns A promise resolving to the parsed body with its content type
  */
 declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
+/**
+ * Issues an HTTP redirect on a Koa context. Koa's `ctx.redirect(location)`
+ * defaults to `302` and sets the `Location` header; the status code must be
+ * overridden *after* the call (setting it before is ignored, see
+ * koajs/koa#857). Defaults to `303 See Other` for convention
+ * (Post/Redirect/Get).
+ * @param ctx - Koa context
+ * @param location - The URL to redirect to
+ * @param status - HTTP status code, defaults to 303
+ */
+declare const redirect: (ctx: KoaContext, location: string, status?: number) => void;
 //#endregion
-export { type Koa, type KoaContext, type KoaMiddlewareFn, type KoaMiddlewareHooks, type KoaMiddlewareOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody };
+export { type Koa, type KoaContext, type KoaMiddlewareFn, type KoaMiddlewareHooks, type KoaMiddlewareOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
 //# sourceMappingURL=koa.d.mts.map

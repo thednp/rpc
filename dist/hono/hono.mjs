@@ -1,5 +1,5 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/options.ts
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -13,65 +13,14 @@ const defaultMiddlewareOptions = {
 	origin: void 0
 };
 //#endregion
-//#region src/tools.ts
-/**
-* Escapes special regex metacharacters in a string.
-* Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
-* preventing ReDoS and regex injection attacks.
-* @param s - The raw string to escape
-* @returns The escaped string safe for use in new RegExp()
-*/
-function escapeRegExp(s) {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-//#endregion
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
-const INTERNAL_SERVER_ERROR = "Internal Server Error";
+const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
-//#endregion
-//#region src/server-helpers.ts
-/**
-* A typed error thrown from server functions.
-* The middleware serializes the `message` and `code` in the response,
-* allowing clients to recognise and handle specific error conditions.
-*/
-var RPCError = class extends Error {
-	/** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
-	code;
-	/** Optional diagnostic payload */
-	data;
-	constructor(message, code = "INTERNAL", data) {
-		super(message);
-		this.name = "RPCError";
-		this.code = code;
-		this.data = data;
-	}
-};
-/**
-* Formats an error for the RPC middleware response.
-* In development the full `RPCError` payload is included so developers
-* can quickly identify issues. Unexpected exceptions never expose their
-* message — only the generic "Internal Server Error" is sent, preventing
-* information disclosure; server-side diagnostics are preserved via the
-* middleware's `console.error` logging.
-*/
-const formatError = (err, isProduction) => {
-	if (isProduction) return { error: INTERNAL_SERVER_ERROR };
-	if (err instanceof RPCError) {
-		const payload = {
-			error: err.message || "Internal Server Error",
-			code: err.code
-		};
-		if (err.data !== void 0) payload.data = err.data;
-		return payload;
-	}
-	return { error: INTERNAL_SERVER_ERROR };
-};
 //#endregion
 //#region src/hono/helpers.ts
 /**
@@ -158,6 +107,19 @@ const readBody = async (c) => {
 		data: isMultipart ? { raw: text } : isUrlEncoded ? Object.fromEntries(new URLSearchParams(text)) : String(text)
 	};
 };
+/**
+* Issues an HTTP redirect on a Hono context. Hono's `c.redirect(location,
+* status)` returns a `Response` object that the handler must return (it never
+* writes directly). Defaults to `303 See Other` for convention
+* (Post/Redirect/Get).
+* @param c - Hono context
+* @param location - The URL to redirect to
+* @param status - HTTP status code, defaults to 303
+* @returns A Hono `Response` to return from the handler
+*/
+const redirect = (c, location, status = 303) => {
+	return c.redirect(location, status);
+};
 //#endregion
 //#region src/hono/createMiddleware.ts
 let middlewareCount = 0;
@@ -187,18 +149,9 @@ const createMiddleware = (initialOptions = {}) => {
 	const middlewareHandler = createMiddleware$1(async (c, next) => {
 		const url = new URL(c.req.path, "http://localhost").pathname;
 		if (serverFunctionsMap.size === 0) await scanForServerFiles();
-		if (!handler) {
-			await next();
-			return;
-		}
-		if (pathMatcher && !pathMatcher.test(url)) {
-			await next();
-			return;
-		}
-		if (prefixRegex && !prefixRegex.test(url)) {
-			await next();
-			return;
-		}
+		if (!handler) return next();
+		if (pathMatcher && !pathMatcher.test(url)) return next();
+		if (prefixRegex && !prefixRegex.test(url)) return next();
 		return await handler(c, next);
 	});
 	Object.defineProperty(middlewareHandler, "name", { value: name });
@@ -235,14 +188,28 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					const raw = c.req.query("args");
 					if (raw) args = JSON.parse(raw);
 				} else {
+					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", c.req.header("content-type"))) return c.json({ error: UNSUPPORTED_MEDIA_TYPE }, 415);
 					const body = await readBody(c);
 					args = Array.isArray(body.data) ? body.data : [body.data];
 				}
-				const fnResult = serverFunction.handler(...args);
+				const requestEvent = {
+					request: c.req,
+					response: c.res,
+					nativeEvent: c,
+					locals: {},
+					redirect: (location, status = 303) => {
+						requestEvent.redirected = {
+							location,
+							status
+						};
+					}
+				};
+				const fnResult = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
 				const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);
 				c.env.incoming?.on("close", onAbort);
 				const result = await fnResult.data;
 				c.env.incoming?.off("close", onAbort);
+				if (requestEvent.redirected) return c.redirect(requestEvent.redirected.location, requestEvent.redirected.status);
 				return c.json({ data: result }, 200);
 			} catch (err) {
 				console.error(String(err));
@@ -253,6 +220,6 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	});
 };
 //#endregion
-export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, viteMiddleware };
+export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
 
 //# sourceMappingURL=hono.mjs.map

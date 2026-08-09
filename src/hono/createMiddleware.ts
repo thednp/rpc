@@ -1,18 +1,26 @@
 // src/hono/createMiddleware.ts
 import type { Context, Next } from "hono";
+import type { RedirectStatusCode } from "hono/utils/http-status";
 import type { HonoMiddlewareFn, HonoMiddlewareOptions } from "./types.d.ts";
-import type { JsonValue } from "../types.d.ts";
+import type { JsonValue } from "@thednp/rpc";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
-import { scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import type { RequestEvent } from "@thednp/rpc/server";
+import {
+  escapeRegExp,
+  formatError,
+  hasContentTypeMismatch,
+  provideRequestContext,
+  scanForServerFiles,
+  serverFunctionsMap,
+} from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
-import { escapeRegExp } from "../tools.ts";
-import { formatError } from "../server-helpers.ts";
 import {
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
   MIDDLEWARE_NAME_USED,
   REQUEST_FORBIDDEN,
+  UNSUPPORTED_MEDIA_TYPE,
 } from "../constants.ts";
 import { readBody } from "./helpers.ts";
 
@@ -68,21 +76,18 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
 
       // No need to continue when no handler provided
       if (!handler) {
-        await next();
-        return;
+        return next();
       }
 
       if (pathMatcher && !pathMatcher.test(url)) {
-        await next();
-        return;
+        return next();
       }
 
       if (prefixRegex && !prefixRegex.test(url)) {
-        await next();
-        return;
+        return next();
       }
 
-      return await handler(c, next);
+      return (await handler(c, next)) as Response;
     },
   );
 
@@ -158,18 +163,51 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
           // istanbul ignore else
           if (raw) args = JSON.parse(raw);
         } else {
+          // Content-type enforcement: strict for json/text, lenient between forms.
+          // Requests without a Content-Type header are exempt (curl/GET compat).
+          // Checked BEFORE readBody so mismatched bodies are never buffered.
+          if (
+            hasContentTypeMismatch(
+              serverFunction.options?.contentType ?? "application/json",
+              c.req.header("content-type"),
+            )
+          ) {
+            return c.json({ error: UNSUPPORTED_MEDIA_TYPE }, 415);
+          }
           const body = await readBody(c);
           args = Array.isArray(body.data)
             ? body.data as JsonValue[]
             : [body.data as JsonValue];
         }
-        const fnResult = serverFunction.handler(...args);
+        const requestEvent: RequestEvent = {
+          request: c.req,
+          response: c.res,
+          nativeEvent: c,
+          locals: {},
+          // Hono's `c.redirect` returns a `Response` (never writes directly),
+          // so the bound redirect only records the intent; the middleware uses
+          // it after the dispatch to `return c.redirect(location, status)`.
+          redirect: (location, status = 303) => {
+            requestEvent.redirected = { location, status };
+          },
+        };
+        const fnResult = provideRequestContext(
+          requestEvent,
+          () => serverFunction.handler(...args),
+        );
         const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);
         // The runtime adapter may be absent in some Hono environments
         // (e.g. standalone serverless adapters), so guard the close hook.
         c.env.incoming?.on("close", onAbort);
         const result = await fnResult.data;
         c.env.incoming?.off("close", onAbort);
+
+        if (requestEvent.redirected) {
+          return c.redirect(
+            requestEvent.redirected.location,
+            requestEvent.redirected.status as RedirectStatusCode,
+          ) as Response;
+        }
 
         return c.json({ data: result }, 200);
       } catch (err) {
