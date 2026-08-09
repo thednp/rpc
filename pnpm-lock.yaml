@@ -34,7 +34,7 @@ importers:
         version: 8.2.1(@types/node@26.2.0)
     devDependencies:
       '@hono/node-server':
-        specifier: ^2.1.0
+        specifier: '>=2.0.5'
         version: 2.1.0(hono@4.13.1)
       '@types/express':
         specifier: ^5.0.6
@@ -67,8 +67,8 @@ importers:
   examples/express:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
@@ -104,8 +104,8 @@ importers:
         specifier: ^10.1.3
         version: 10.1.3
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       fastify:
         specifier: ^5.11.3
         version: 5.11.3
@@ -129,8 +129,8 @@ importers:
   examples/h3:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       h3:
         specifier: 2.0.1-rc.26
         version: 2.0.1-rc.26
@@ -154,8 +154,8 @@ importers:
         specifier: '>=2.0.5'
         version: 2.1.0(hono@4.13.1)
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       hono:
         specifier: ^4.13.1
         version: 4.13.1
@@ -179,8 +179,8 @@ importers:
   examples/koa:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
@@ -225,8 +225,8 @@ importers:
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.8)
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
@@ -274,8 +274,8 @@ importers:
         specifier: ^5.101.4
         version: 5.101.4(solid-js@1.9.14)
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
@@ -311,8 +311,8 @@ importers:
   examples/spa:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       vite:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)
@@ -330,8 +330,8 @@ importers:
   examples/ssr:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^0.2.0
+        version: 0.2.0(@types/node@26.2.0)(supports-color@7.2.0)
       vite:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)
@@ -633,8 +633,8 @@ packages:
     peerDependencies:
       solid-js: ^1.6.0
 
-  '@thednp/rpc@0.1.1':
-    resolution: {integrity: sha512-dXNA8XrdxAw8fPQid0teMsnLu2qFuk61L2dctE55jtzfwRCKA6VkuVC2cSkGk0cm7ACuXABpZ/gPrAaCJFwR6w==}
+  '@thednp/rpc@0.2.0':
+    resolution: {integrity: sha512-fC75ZyrzX65b7ZfBK+yX/TVsSBXoYRi4lmpeLuSSHD5sl5oEJpNmfa6FhwJTQcedIXjQB7j53uXzOakgDwwbIw==}
 
   '@types/accepts@1.3.7':
     resolution: {integrity: sha512-Pay9fq2lM2wXPWbteBsRAGiWH2hig4ZE2asK+mm7kUzlxRTfL961rj89I6zV/E3PcIkDqyuBEcMxFT7rccugeQ==}
@@ -2584,17 +2584,19 @@ snapshots:
       '@tanstack/query-core': 5.101.4
       solid-js: 1.9.14
 
-  '@thednp/rpc@0.1.1(@types/node@26.2.0)(supports-color@7.2.0)':
+  '@thednp/rpc@0.2.0(@types/node@26.2.0)(supports-color@7.2.0)':
     dependencies:
       express: 5.2.1(supports-color@7.2.0)
       fastify: 5.11.3
       fastify-plugin: 6.0.0
+      h3: 2.0.1-rc.26
       hono: 4.13.1
       koa: 3.2.1
       vite: 8.2.1(@types/node@26.2.0)
     transitivePeerDependencies:
       - '@types/node'
       - '@vitejs/devtools'
+      - crossws
       - esbuild
       - jiti
       - less
