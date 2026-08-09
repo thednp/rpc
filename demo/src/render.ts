@@ -2,7 +2,7 @@ import {
   CONTACT_ERROR_MESSAGES,
   escapeHtml,
   type FormState,
-} from "./lib/contact-form";
+} from "./lib/contact-form.ts";
 
 const contactValue = (state: FormState | undefined, field: string) =>
   state?.values[field as never] ? escapeHtml(state.values[field as never]) : "";
