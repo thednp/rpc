@@ -65,15 +65,17 @@ export const bodyLimit = (
     const isMultipart = incomingType.includes("multipart/form-data");
     const isUrlEncoded = incomingType.includes("urlencoded");
     let data: unknown = body;
-    if (!isMultipart) {
-      if (isUrlEncoded) {
-        data = Object.fromEntries(new URLSearchParams(body));
-      } else {
-        try {
-          data = JSON.parse(body);
-        } catch {
-          // leave as text; RPC handling will produce a generic 500
-        }
+    if (isMultipart) {
+      // Mirror @thednp/rpc/express readBody's streaming semantics: multipart
+      // bodies are stashed as { raw: body } for the RPC middleware/server fn.
+      data = { raw: body };
+    } else if (isUrlEncoded) {
+      data = Object.fromEntries(new URLSearchParams(body));
+    } else {
+      try {
+        data = JSON.parse(body);
+      } catch {
+        // leave as text; RPC handling will produce a generic 500
       }
     }
     req.body = data;
