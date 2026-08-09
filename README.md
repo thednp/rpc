@@ -78,7 +78,7 @@ Every server function call returns a handle with a `cancel()` helper. Under the 
 <details>
 <summary><b>Your server framework is your business</b></summary>
 
-The core plugin doesn't care whether you're running Express, Fastify, Hono, or Koa. Adapters for all four are bundled with the package — you import the one you need, register it as middleware, and you're done. If you're building a plain SPA with no server framework at all, the Vite dev server handles RPC requests directly in development. No adapter needed.
+The core plugin doesn't care whether you're running Express, Fastify, Hono, Koa, or h3. Adapters for all five are bundled with the package — you import the one you need, register it as middleware, and you're done. If you're building a plain SPA with no server framework at all, the Vite dev server handles RPC requests directly in development. No adapter needed.
 </details>
 
 <details>
@@ -103,7 +103,7 @@ Generic type inference flows from your server function's arguments and return ty
 
 | Source                                                                                 | Demo                                                                                         | Clone                                                   |
 | ----------------------------------------------------------------------------------------| ----------------------------------------------------------------------------------------------| ---------------------------------------------------------|
-| [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)         | `pmpm dlx degit thednp/rpc/examples/spa my-app`         |
+| [examples/spa](https://github.com/thednp/rpc/tree/master/examples/spa)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/spa)         | `pnpm dlx degit thednp/rpc/examples/spa my-app`         |
 | [examples/ssr](https://github.com/thednp/rpc/tree/master/examples/ssr)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/ssr)         | `pnpm dlx degit thednp/rpc/examples/ssr my-app`         |
 | [examples/express](https://github.com/thednp/rpc/tree/master/examples/express)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/express)     | `pnpm dlx degit thednp/rpc/examples/express my-app`     |
 | [examples/fastify](https://github.com/thednp/rpc/tree/master/examples/fastify)         | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/fastify)     | `pnpm dlx degit thednp/rpc/examples/fastify my-app`     |
@@ -249,7 +249,7 @@ pnpm test-ui      # Run tests with UI
 pnpm test --run   # Single run
 ```
 
-Tests use **Vitest** with **Istanbul** coverage — 8 test files covering the plugin, scanning, client/server helpers, and all four adapters, at 100% coverage.
+Tests use **Vitest** with **Istanbul** coverage — 10 test files covering the plugin, scanning, server/client helpers, request context, and all five adapters, at 100% coverage.
 
 ### Live Testing
 
@@ -335,6 +335,7 @@ The full threat model, including edge cases and configuration options for tighte
 - [Getting Started](./wiki/getting-started.md) — Installation, project structure, and your first function
 - [Configuration](./wiki/configuration.md) — Full configuration reference
 - [Server Functions](./wiki/server-functions.md) — Creating server functions
+- [Native Form Fallback](./wiki/nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action
 - [Client Usage](./wiki/client-usage.md) — Client-side usage
 - [Wire Protocol](./wiki/wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./wiki/adapters.md) — Framework adapters

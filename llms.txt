@@ -22,7 +22,7 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - See `wiki/wire-protocol.md` for full curl examples
 
 ## Config
-- `rpc.config.ts` with `defineConfig({ rpcPrefix: "__rpc", adapter: "express" | "fastify" | "hono" | "koa" })`
+- `rpc.config.ts` with `defineConfig({ rpcPrefix: "__rpc", adapter: "express" | "fastify" | "hono" | "koa" | "h3" })`
 - `serverFiles: "exact" | "glob"` — `"exact"` (default) matches `server.ts|js|mjs|mts`; `"glob"` recursively matches `*.server.{ts,js,mjs,mts}` under the scan root
 - `scanRoot: string` — scan directory (default `<root>/src/api`); point it at a shared package in monorepos
 - `loadRPCConfig()` loads config programmatically
@@ -62,6 +62,6 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `wiki/nojs-fallback.md` — Progressive enhancement: making an RPC endpoint work as a no-JS `<form>` action (detection rule, shared validation, PRG 303 redirects, state recovery)
 - `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration, and an SSR gotcha for disabled queries (solid-query hangs `renderToStringAsync`; use `queryClient.fetchQuery()` on submit instead)
 - `wiki/wire-protocol.md` — HTTP contract: request/response bodies, status codes, curl debugging
-- `wiki/adapters.md` — Express, Fastify, Hono, Koa (`attachRPC`, `attachVite`, body limits)
+- `wiki/adapters.md` — Express, Fastify, Hono, Koa, h3 (`attachRPC`, `attachVite`, body limits)
 - `wiki/security.md` — Prefix guards, method enforcement, origin, CSRF hardening
 - `wiki/best-practices.md` — Auth middleware, rate limiting, per-function authorization, body limits

@@ -50,7 +50,7 @@ export const getLibraryInfo = createServerFunction(
       name: "@thednp/rpc",
       version,
       tagline,
-      adapters: ["express", "fastify", "hono", "koa"],
+      adapters: ["express", "fastify", "hono", "koa", "h3"],
       prefix: "/@demo",
     };
   },
@@ -118,8 +118,6 @@ export const submitContact = createServerFunction(
       raw?: string;
       name?: string;
     };
-    // Multipart (JS client) carries { raw }; urlencoded (curl/nojs with
-    // forced JSON) carries the fields directly. Normalize to flat fields.
     // Multipart (JS client) carries { raw }; urlencoded (curl/nojs direct
     // posts) carries the fields as a plain object. Normalize to flat fields.
     const fieldsSource = candidate.raw

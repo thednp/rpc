@@ -205,7 +205,7 @@ export const renderPage = (state?: FormState): string => `
     <div class="stats stats-vertical sm:stats-horizontal w-full bg-base-100 border border-base-300 shadow-sm">
       <div class="stat">
         <div class="stat-title text-base-content">Examples</div>
-        <div class="stat-value text-primary">8</div>
+        <div class="stat-value text-primary">9</div>
         <div class="stat-desc text-base-content/85">Tanstack, React, Solid and Vanilla</div>
       </div>
       <div class="stat">

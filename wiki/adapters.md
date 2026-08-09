@@ -1,6 +1,6 @@
 # Adapters
 
-`@thednp/rpc` provides adapters for ExpressJS, Fastify, Hono, and Koa. Each adapter exports `attachRPC` for production and `attachVite` for development. Every adapter also exports `redirect` (typed for its native response object) for Post/Redirect/Get flows — see [Redirects](./server-functions.md#redirects-redirect).
+`@thednp/rpc` provides adapters for ExpressJS, Fastify, Hono, Koa, and h3. Each adapter exports `attachRPC` for production and `attachVite` for development. Every adapter also exports `redirect` (typed for its native response object) for Post/Redirect/Get flows — see [Redirects](./server-functions.md#redirects-redirect).
 
 All adapters have an example each, feel free to explore [examples](../examples).
 
@@ -192,8 +192,6 @@ Set `jsonLimit` on `koa-body` (see [examples/koa/server.js](../examples/koa/serv
 ```ts
 app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1 MB
 ```
-
-> **Next:** [Security](./security.md) — the threats the framework handles for you and what it expects you to own.
 
 ---
 
