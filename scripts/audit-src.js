@@ -21,7 +21,7 @@ const PKG_FIELDS = ["dependencies", "devDependencies", "packageManager"];
 const WORKSPACE = `packages:
   - "."
 overrides:
-  '@hono/node-server': '^2.0.5'
+  '@hono/node-server': '^2.1.0'
 `;
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
