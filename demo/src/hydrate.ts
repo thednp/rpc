@@ -1,10 +1,10 @@
-import { getLibraryInfo, getServerTime, sayHi, submitContact } from "./api";
+import { getLibraryInfo, getServerTime, sayHi, submitContact } from "./api/index.ts";
 import {
   buildIssueUrl,
   CONTACT_ERROR_MESSAGES,
   CONTACT_FIELDS,
   parseFormState,
-} from "./lib/contact-form";
+} from "./lib/contact-form.ts";
 
 export const setupReveal = () => {
   const elements = document.querySelectorAll(".reveal");

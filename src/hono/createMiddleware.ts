@@ -1,6 +1,9 @@
 // src/hono/createMiddleware.ts
 import type { Context, Next } from "hono";
-import type { RedirectStatusCode } from "hono/utils/http-status";
+import type {
+  ContentfulStatusCode,
+  RedirectStatusCode,
+} from "hono/utils/http-status";
 import type { HonoMiddlewareFn, HonoMiddlewareOptions } from "./types.d.ts";
 import type { JsonValue } from "@thednp/rpc";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
@@ -10,11 +13,13 @@ import {
   formatError,
   hasContentTypeMismatch,
   provideRequestContext,
+  safeURL,
   scanForServerFiles,
   serverFunctionsMap,
 } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import {
+  BAD_REQUEST,
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
@@ -67,7 +72,7 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
 
   const middlewareHandler = createHonoMiddleware(
     async (c: Context, next: Next) => {
-      const reqUrl = new URL(c.req.path, "http://localhost");
+      const reqUrl = safeURL(c.req.path);
       const url = reqUrl.pathname;
 
       if (serverFunctionsMap.size === 0) {
@@ -160,8 +165,13 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         let args: JsonValue[] = [];
         if (method === "GET") {
           const raw = c.req.query("args");
-          // istanbul ignore else
-          if (raw) args = JSON.parse(raw);
+          if (raw) {
+            const parsed: unknown = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              return c.json({ error: BAD_REQUEST }, 400);
+            }
+            args = parsed as JsonValue[];
+          }
         } else {
           // Content-type enforcement: strict for json/text, lenient between forms.
           // Requests without a Content-Type header are exempt (curl/GET compat).
@@ -184,11 +194,15 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
           response: c.res,
           nativeEvent: c,
           locals: {},
-          // Hono's `c.redirect` returns a `Response` (never writes directly),
-          // so the bound redirect only records the intent; the middleware uses
-          // it after the dispatch to `return c.redirect(location, status)`.
+          functionName,
+          // Hono's `c.redirect`/`c.json` return a `Response` (never write
+          // directly), so the bound redirect/send only record the intent; the
+          // middleware uses them after the dispatch to return the Response.
           redirect: (location, status = 303) => {
             requestEvent.redirected = { location, status };
+          },
+          send: (status, body, headers) => {
+            requestEvent.sent = { status, body, headers };
           },
         };
         const fnResult = provideRequestContext(
@@ -207,6 +221,14 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
             requestEvent.redirected.location,
             requestEvent.redirected.status as RedirectStatusCode,
           ) as Response;
+        }
+
+        if (requestEvent.sent) {
+          const { status, body, headers } = requestEvent.sent;
+          return c.body(JSON.stringify(body), status as ContentfulStatusCode, {
+            "content-type": "application/json",
+            ...headers,
+          });
         }
 
         return c.json({ data: result }, 200);

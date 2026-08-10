@@ -12,6 +12,39 @@ const defaultMiddlewareOptions = {
 	origin: void 0
 };
 //#endregion
+//#region src/constants.ts
+const FUNCTION_NOT_FOUND = "Function not found";
+const METHOD_NOT_ALLOWED = "Method Not Allowed";
+const REQUEST_FORBIDDEN = "Forbidden";
+const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+const BAD_REQUEST = "Bad Request";
+const CLIENT_DISCONNECTED = "client disconnected";
+/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
+const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
+//#endregion
+//#region src/server-helpers.ts
+const SAFE_URL_BASE = "http://localhost";
+/**
+* Parses a raw request URL against a fixed base without ever throwing.
+* Malformed request-targets (e.g. `/\`, `//`, `/\/`) make the WHATWG URL
+* parser throw `TypeError: Invalid URL`; the adapters call this while
+* building the per-request URL **before** their dispatch `try` block, so an
+* unhandled rejection there crashes raw `node:http` hosts (and Express 4).
+* On failure we fall back to the base root: the resulting pathname never
+* matches the RPC prefix, so the request is treated as non-RPC and falls
+* through to `next()` / 404 instead of crashing the process.
+* @param rawUrl - Raw request URL (path + optional query string)
+* @param base - Optional base URL, defaults to a fixed localhost origin
+* @returns A URL object; never throws
+*/
+const safeURL = (rawUrl, base = SAFE_URL_BASE) => {
+	try {
+		return new URL(rawUrl, base);
+	} catch {
+		return new URL("/", base);
+	}
+};
+//#endregion
 //#region src/express/helpers.ts
 /**
 * Convenience function to load RPC config and attach the RPC middleware to an Express app.
@@ -140,7 +173,7 @@ const hasPreParsedBody = (req) => {
 */
 const getRequestDetails = (request) => {
 	const rawUrl = isExpressRequest(request) ? request.originalUrl : request.url;
-	const url = new URL(rawUrl, "http://localhost");
+	const url = safeURL(rawUrl);
 	return {
 		url: url.pathname,
 		search: url.search,
@@ -179,15 +212,6 @@ const getResponseDetails = (response) => {
 		sendResponse
 	};
 };
-//#endregion
-//#region src/constants.ts
-const FUNCTION_NOT_FOUND = "Function not found";
-const METHOD_NOT_ALLOWED = "Method Not Allowed";
-const REQUEST_FORBIDDEN = "Forbidden";
-const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
-const CLIENT_DISCONNECTED = "client disconnected";
-/** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
-const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
 //#endregion
 //#region src/express/createMiddleware.ts
 let middlewareCount = 0;
@@ -264,7 +288,14 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				let args = [];
 				if (method === "GET") {
 					const raw = searchParams.get("args");
-					if (raw) args = JSON.parse(raw);
+					if (raw) {
+						const parsed = JSON.parse(raw);
+						if (!Array.isArray(parsed)) {
+							sendResponse(400, { error: BAD_REQUEST });
+							return;
+						}
+						args = parsed;
+					}
 				} else {
 					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", req.headers["content-type"])) {
 						sendResponse(415, { error: UNSUPPORTED_MEDIA_TYPE });
@@ -281,12 +312,23 @@ const createRPCMiddleware = (initialOptions = {}) => {
 						res
 					},
 					locals: res.locals ?? {},
+					functionName,
 					redirect: (location, status = 303) => {
 						requestEvent.redirected = {
 							location,
 							status
 						};
 						redirect(res, location, status);
+					},
+					send: (status, body, headers) => {
+						requestEvent.sent = {
+							status,
+							body,
+							headers
+						};
+						const details = getResponseDetails(res);
+						if (headers) for (const [name, value] of Object.entries(headers)) details.setHeader(name, value);
+						details.sendResponse(status, body);
 					}
 				};
 				const { data, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
@@ -294,7 +336,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				req.on("close", onClose);
 				const result = await data;
 				req.off("close", onClose);
-				if (!requestEvent.redirected && !res.headersSent) sendResponse(200, { data: result });
+				if (!requestEvent.redirected && !requestEvent.sent && !res.headersSent) sendResponse(200, { data: result });
 			} catch (err) {
 				console.error(String(err));
 				const isProduction = process.env.NODE_ENV === "production";

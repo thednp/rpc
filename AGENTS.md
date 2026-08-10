@@ -120,7 +120,7 @@ The tsdown.config.ts produces multiple entries:
 - **Koa URL normalization**: Koa adapter parses `ctx.url` through `new URL()` to strip query strings and normalize encoding before prefix checking
 - **Code injection prevention in client module generation**: `getClientModules.ts` validates all interpolated identifiers (`fnName`, `fnEntry`, `rpcPrefix`) against `/^[A-Za-z_$][A-Za-z0-9_$]*$/` (and a path-safe variant allowing `/`) before interpolating into the generated client bundle. This prevents code injection via malicious export names or prefixes containing template literal interpolations (`${...}`), backticks, or `</script>` sequences.
 - **Body size limits**: Host frameworks cap parsed JSON bodies — Express (`express.json({ limit })`), Fastify (`bodyLimit`), Koa (`koa-body`), Hono (`hono/body-limit`). Rely on your framework's body parser middleware for size limits (see wiki/best-practices.md). The raw stream path in `readBody` does not impose a built-in limit — use framework middleware or a custom body limit handler for defense-in-depth.
-- **Generic 404 responses**: Error messages no longer echo the requested function name, preventing function enumeration
+- **Generic 404 responses**: Error messages never echo the requested function name (no message-based function enumeration). Note the status code still distinguishes unknown (`404`) from known functions (`405`/`415`/`403`); function names ship in the client bundle so they are not secret — see `wiki/security.md`
 - **Auth is middleware's responsibility**: Authentication should be handled by middleware registered before `createRPCMiddleware()`. The middleware chain naturally composes — no built-in auth hook is needed.
 - **No client-side secrets or stack traces**: Error responses always return `"Internal Server Error"` regardless of the underlying error; `console.error(String(err))` is server-side only for debugging and does not surface internals to the client
 
@@ -144,7 +144,7 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 **Attackers are expected to**:
 - Be free to send as many requests as the host allows (no rate limiting — host's responsibility)
 - Be free to hit any URL (no auth — host's responsibility via prior middleware)
-- Be rejected with generic errors (no enumeration, no stack traces)
+- Be rejected with generic error bodies (no function-name disclosure in messages, no stack traces); status-code differential still reveals existence — see `wiki/security.md`
 
 ## Documentation
 
@@ -152,6 +152,7 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 - `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
 - `wiki/configuration.md` — Configuration reference (`rpc.config.ts`, `vite.config.ts`, options)
 - `wiki/server-functions.md` — `createServerFunction` API, methods, validation, **request context (`getRequestContext`/`provideRequestContext`)** for per-request data access across async call stacks
+- `wiki/middleware.md` — universal adapter-agnostic middleware via the request context (`locals` bridge, `getRequestMeta`, `sendResponse`, `functionName`)
 - `wiki/nojs-fallback.md` — native (no-JS) `<form>` fallback / progressive enhancement pattern
 - `wiki/client-usage.md` — Client-side usage, type safety, react-query integration
 - `wiki/wire-protocol.md` — HTTP contract, request/response bodies, curl debugging

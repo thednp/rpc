@@ -28,6 +28,7 @@ import {
   redirect as expressRedirect,
 } from "./helpers.ts";
 import {
+  BAD_REQUEST,
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
@@ -183,8 +184,14 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
         let args: JsonValue[] = [];
         if (method === "GET") {
           const raw = searchParams.get("args");
-          // istanbul ignore else
-          if (raw) args = JSON.parse(raw);
+          if (raw) {
+            const parsed: unknown = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              sendResponse(400, { error: BAD_REQUEST });
+              return;
+            }
+            args = parsed as JsonValue[];
+          }
         } else {
           // Content-type enforcement: strict for json/text, lenient between forms.
           // Requests without a Content-Type header are exempt (curl/GET compat).
@@ -215,9 +222,20 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
           response: res,
           nativeEvent: { req, res },
           locals: (res as ExpressResponse).locals ?? {},
+          functionName,
           redirect: (location, status = 303) => {
             requestEvent.redirected = { location, status };
             expressRedirect(res, location, status);
+          },
+          send: (status, body, headers) => {
+            requestEvent.sent = { status, body, headers };
+            const details = getResponseDetails(res);
+            if (headers) {
+              for (const [name, value] of Object.entries(headers)) {
+                details.setHeader(name, value);
+              }
+            }
+            details.sendResponse(status, body);
           },
         };
 
@@ -230,10 +248,15 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
         const result = await data;
         req.off("close", onClose);
 
-        // Skip the JSON send when the server function issued a redirect; the
-        // bound adapter redirect already wrote the response.
+        // Skip the JSON send when the server function issued a redirect or
+        // short-circuited with `send`; the bound adapter already wrote the
+        // response. Express may also have ended the response via headersSent.
         // istanbul ignore else
-        if (!requestEvent.redirected && !res.headersSent) {
+        if (
+          !requestEvent.redirected &&
+          !requestEvent.sent &&
+          !res.headersSent
+        ) {
           sendResponse(200, { data: result });
         }
       } catch (err) {

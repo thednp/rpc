@@ -28,7 +28,9 @@ const pathname = url.pathname; // clean, no query string
 
 ## Generic 404 Responses
 
-Error responses do not echo the requested function name. This prevents function enumeration — an attacker cannot discover available RPC functions by probing for non-existent endpoints.
+Error responses do not echo the requested function name. The **response body** never discloses which functions exist — an attacker probing names against a non-existent endpoint gets a generic `{ error: "Function not found" }` with no name echoed back.
+
+Note that this mitigates **message disclosure**, not existence probing: the **status code** still differs by outcome (`404` for an unknown function vs `405`/`415`/`403` for a known one), so a determined attacker can distinguish "exists" from "does not exist". This is an accepted trade-off — function names ship in the generated client bundle to every browser, so they are not secret — and distinct status codes keep legitimate clients debuggable. If you need to hide the API surface entirely, terminate unknown-prefix requests at a reverse proxy or WAF instead of at the middleware.
 
 ## Error Responses: Dev vs Production
 
@@ -117,6 +119,7 @@ Server functions receive raw, untrusted client data. Always validate before use.
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)

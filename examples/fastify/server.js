@@ -44,15 +44,14 @@ if (!isProduction) {
   await app.register(import("@thednp/rpc/fastify/plugin"), options);
 
   // Register other middleware
-  // await app.register(import("@fastify/compress"));
-  // There is a bug in the readable-stream polyfill's interaction with Node 24's native stream pipeline.
-  // @fastify/compress config can't fix it, so we use express.
-  const compression = (await import("compression")).default;
-  app.addHook("onRequest", async (request, reply) => {
-    const next = () => new Promise(resolve => {
-      compression()(request.raw, reply.raw, resolve);
-    });
-    await next();
+  // @fastify/compress attaches its onSend hook to routes registered after it
+  // (via `onRoute`). RPC requests are handled by the plugin's global `preHandler`
+  // hook, so the catch-all POST route below ensures RPC POST responses are also
+  // compressed (the handler only runs for non-RPC paths — the RPC preHandler
+  // short-circuits before it).
+  await app.register(import("@fastify/compress"), { threshold: 1 });
+  app.post("/_server/*", async (req, reply) => {
+    reply.status(404).send({ error: "Not Found" });
   });
 
   await app.register(import("@fastify/static"), {

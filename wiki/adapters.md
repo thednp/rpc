@@ -1,6 +1,6 @@
 # Adapters
 
-`@thednp/rpc` provides adapters for ExpressJS, Fastify, Hono, Koa, and h3. Each adapter exports `attachRPC` for production and `attachVite` for development. Every adapter also exports `redirect` (typed for its native response object) for Post/Redirect/Get flows — see [Redirects](./server-functions.md#redirects-redirect).
+`@thednp/rpc` provides adapters for ExpressJS, Fastify, Hono, Koa, and h3. Each adapter exports `attachRPC` for production and `attachVite` for development. Every adapter also exports `redirect` (typed for its native response object) for Post/Redirect/Get flows — see [Redirects](./server-functions.md#redirects-redirect). To write middleware that runs unchanged on every adapter, see [Middleware](./middleware.md).
 
 All adapters have an example each, feel free to explore [examples](../examples).
 
@@ -255,6 +255,7 @@ The h3 example serves built assets from `dist/client` with an extracted `middlew
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)

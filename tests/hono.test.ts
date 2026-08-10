@@ -5,6 +5,7 @@ import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
+  sendResponse,
 } from "../src/context.ts";
 import {
   attachRPC,
@@ -400,6 +401,55 @@ describe("Hono createRPCMiddleware", () => {
     expect(c.json).not.toHaveBeenCalled();
   });
 
+  it("should return c.body when the function sends a response", async () => {
+    createServerFunction(
+      "hono-send",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(429, { error: "Rate limit exceeded" }, {
+          "retry-after": "30",
+        });
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-send",
+      method: "POST",
+      body: JSON.stringify([]),
+    });
+    c.body = vi.fn(() => new Response());
+    const next = makeHonoNext();
+    const result = await mw(c, next);
+    expect(c.body).toHaveBeenCalledWith(
+      JSON.stringify({ error: "Rate limit exceeded" }),
+      429,
+      { "content-type": "application/json", "retry-after": "30" },
+    );
+    expect(result).toBeInstanceOf(Response);
+    expect(c.json).not.toHaveBeenCalled();
+  });
+
+  it("should expose functionName via the request context", async () => {
+    let seenName: string | undefined;
+    createServerFunction(
+      "hono-context-send",
+      vi.fn().mockImplementation(async () => {
+        seenName = getRequestContext().functionName;
+        return "ok";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-context-send",
+      method: "POST",
+      body: JSON.stringify([]),
+    });
+    c.body = vi.fn(() => new Response());
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(seenName).toBe("hono-context-send");
+  });
+
   it("should use default 303 when redirect is called without a status", async () => {
     createServerFunction(
       "hono-redirect-default",
@@ -632,6 +682,34 @@ describe("Hono createRPCMiddleware", () => {
     await mw(c, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
     expect(c.json).toHaveBeenCalledWith({ data: "hono-public" }, 200);
+  });
+
+  it("should dispatch GET functions without args query param", async () => {
+    const fn = vi.fn().mockResolvedValue("no-args");
+    createServerFunction("hono-public-no-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-public-no-args",
+      method: "GET",
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(c.json).toHaveBeenCalledWith({ data: "no-args" }, 200);
+  });
+
+  it("should return 400 when GET ?args= is not a JSON array", async () => {
+    const fn = vi.fn();
+    createServerFunction("hono-public-bad-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: `/__rpc/hono-public-bad-args?args=${encodeURIComponent('{"a":1}')}`,
+      method: "GET",
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).not.toHaveBeenCalled();
+    expect(c.json).toHaveBeenCalledWith({ error: "Bad Request" }, 400);
   });
 
   it("should dispatch functions registered without options (default POST)", async () => {

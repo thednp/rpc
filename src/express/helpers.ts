@@ -10,6 +10,7 @@ import type { ViteDevServer } from "vite";
 import type { Express } from "express";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { RequestDetails, ResponseDetails } from "./types.d.ts";
+import { safeURL } from "../server-helpers.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to an Express app.
@@ -194,7 +195,7 @@ export const getRequestDetails = (
   const rawUrl = (
     isExpressRequest(request) ? request.originalUrl : request.url
   ) as string;
-  const url = new URL(rawUrl, "http://localhost");
+  const url = safeURL(rawUrl);
 
   return {
     url: url.pathname,
@@ -232,7 +233,7 @@ export const getResponseDetails = (
     }
   };
 
-  const sendResponse = (code: number, output: Record<string, JsonValue>) => {
+  const sendResponse = (code: number, output: JsonValue) => {
     setStatusCode(code);
     setHeader("Content-Type", "application/json");
 

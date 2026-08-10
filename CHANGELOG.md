@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.2.1] - 2026-08-10
+
+### Features
+
+- **`send` on the request context**: `RequestEvent.send(status, body, headers?)` (plus the `sent` flag) lets middleware and server functions short-circuit the RPC dispatch with a full HTTP response instead of the `{ data }` envelope, mirroring the existing `redirect`/`redirected` pair. All five adapters bind it and skip their JSON send when `sent` is set: Express (via `getResponseDetails().sendResponse`), Fastify (`reply.header()` loop + `reply.status().send()`), Koa (`ctx.set()` loop + `ctx.status`/`ctx.body`), Hono (records only — the post-dispatch handler returns `c.body(JSON.stringify(body), status, { "content-type": "application/json", ...headers })`), and h3 (records only — the post-dispatch handler sets `event.res.status` and `event.res.headers` then returns the body)
+- **`functionName` on the request context**: `RequestEvent.functionName` exposes the dispatched function name so universal middleware can branch per function (e.g. rate limits, per-function authorization)
+- **`sendResponse` helper**: a `sendResponse(status, body, headers?)` context helper, the response counterpart to the `redirect` helper, delegating to the same adapter-bound write path
+- **`getRequestMeta(event)`**: a normalized request reader returning `{ method, pathname, search, searchParams, headers, host, ip, protocol }`, duck-typed across all five adapter request shapes — feature-detects fetch-like `Headers` (h3/Hono) vs plain maps (Express/Fastify/Koa), resolves the URL from `originalUrl ?? url ?? path`, and derives `host`/`protocol`/`ip` with safe fallbacks
+
+### Examples
+
+- **h3 example**: extract `middleware/bodyLimit.js` — delegates to h3's native `assertBodySize`, which swaps `event.req` for a bounded stream so the cap is enforced while streaming (never fully buffered) and the RPC `readBody` can still consume it afterwards; oversized bodies reject with `413` JSON. Extract `middleware/serveStatic.js` — aliases h3's `serveStatic` from `h3/node`, adds `Content-Length`, `Last-Modified`, and `Cache-Control: public, max-age=31536000, immutable`, and is registered **after** `createRPCMiddleware()` so asset requests never reach server functions; missing files fall through to the SSR handler
+- **demo**: the prerender plugin now writes the app content between `<!-- app-content -->` markers and gains a `configurePreviewServer` middleware that re-renders just that region from the URL query — nojs form state (values + errors) is recovered in `vite preview`, where the baked `dist/index.html` shell otherwise skips `transformIndexHtml`
+- **demo**: `body-limit.ts` stashes multipart bodies as `{ raw: body }` to mirror `@thednp/rpc/express`'s `readBody` streaming semantics; the render page and `getLibraryInfo` now count 9 examples and list the h3 adapter; the features grid grows to 9 cards (3×3) with request-context, no-JS form-fallback, and boundary-enforcement entries
+- **fastify example**: switch the production server to `@fastify/compress` (gzip) for the RPC endpoint and static HTML. `@fastify/compress` attaches its per-route `onSend` hook via `onRoute`, which never fires for the RPC plugin's global `preHandler` handling, so the example registers a scoped `app.post("/_server/*")` catch-all route — the RPC `preHandler` short-circuits before the handler runs, letting compress's hook attach to RPC POSTs while non-RPC POSTs still get a 404. Verified with curl: HTML and RPC POST responses (200 and 404) compress (gzip) with byte-identical decompression (md5 match), and non-RPC POSTs keep their 404
+- Sync all 9 examples to `@thednp/rpc ^0.2.0`
+
+### Docs
+
+- **New `wiki/middleware.md`** — universal adapter-agnostic middleware via the request context: the `locals` bridge table (Express `res.locals`, Koa `ctx.state`, h3 `event.context`, Fastify/Hono `{}` with `decorateRequest`/`c.set` workarounds), `getRequestMeta`, `functionName`, `sendResponse` per-adapter mapping, and wrap recipes for official framework middleware (Express session, Koa `ctx.state`, h3 `event.context`, Fastify `decorateRequest`, Hono `c.set`/`c.get`)
+- TOC sweep: `- [Middleware](./middleware.md)` entry added to all 11 wiki pages after Server Functions; cross-linked from `server-functions.md` (RequestEvent shape + "Writing Universal Middleware" section), `best-practices.md` (Authentication, Rate Limiting), and `adapters.md`; `wiki/index.md` updated
+- Update `wiki/server-functions.md` RequestEvent reference for `send`/`sent`/`functionName` and re-point its "Next" pointer to `middleware.md`
+- `wiki/nojs-fallback.md`: explain the form markup and detection rule without embedding the whole `createFormFallback` implementation (now links to `demo/src/lib/form-fallback.ts`)
+- `wiki/adapters.md`: replace the h3 body-limit snippet with h3's native `assertBodySize` pattern (bounded stream, never buffered) and add a **Static Assets** section for the extracted `serveStatic` middleware; `wiki/best-practices.md` h3 body limit now recommends `assertBodySize` and warns against iterating `event.req` (which breaks the RPC `readBody` with "Body is unusable")
+- Update `AGENTS.md` (9 examples, h3 adapter, test files table), `llms.txt`, and `README.md` (five adapters, 10 test files, `nojs-fallback` doc link, `pmpm` → `pnpm` typo) for the new adapter, examples, and context API
+- Example READMEs: add the `wiki/middleware.md` resource link to all 9 example READMEs; rewrite `examples/solid-query/README.md` (was a copy-paste of the react-query README — now describes Solid's `createQuery`/`createMutation`, `renderToStringAsync` SSR, and the disabled-query gotcha); expand the h3 example README's production flow for the extracted `bodyLimit`/`serveStatic` middleware
+
+### Tests
+
+- **100% coverage across all adapters**: 1001/1001 statements, 608/608 branches, 155/155 functions, 981/981 lines (412 tests)
+- Add `send` short-circuit tests to the Express, Fastify, and Koa suites — both with headers (asserting the `headers` loop) and without (covering the `if (headers)` false branch that had dropped branch coverage below 100%)
+- Add `tests/context.test.ts` suite: `sendResponse` delegation (with/without headers, outside-request throw), `getRequestMeta` normalization (Express-style, fetch-like `Headers`, `ip`/`protocol` derivation, bare request, plain-map headers, array-valued header, URL protocol fallback), and `functionName` passthrough
+- Adapter suites assert `functionName` exposure via `getRequestContext()` and `send` short-circuits the JSON dispatch on all five adapters
+- Add `?args=` non-array rejection tests (400 Bad Request) and bare-GET (no `?args=`) dispatch tests to all five adapter suites — **100/100% coverage, 412 tests**
+
+### Security
+
+- **`safeURL` defensive URL parsing**: `getRequestDetails()` and every adapter's inline `new URL(rawUrl, ...)` call now parse through `safeURL` (`src/server-helpers.ts`), which never throws — a malformed request-target like `/\` or `//` used to trigger an unhandled `TypeError: Invalid URL` rejection outside the dispatch `try` block and **crash raw `node:http` hosts** (and Express 4). Malformed URLs now fall back to a safe root pathname that never matches the RPC prefix, so the request degrades to `next()`/404 instead of crashing the process (High)
+- **GET `?args=` is now validated as a JSON array**: a non-array value (e.g. `?args={"a":1}`) previously spread into `handler(...args)` and threw a confusing `TypeError: object is not iterable` 500; all five adapters now reject it with `400 { error: "Bad Request" }` before dispatch
+- **`wiki/security.md` enumeration claim corrected**: the "prevents function enumeration" wording was overstated — the status code still distinguishes unknown (`404`) from known (`405`/`415`/`403`) functions. Documented that enumeration is mitigated against *message* disclosure only; function names ship in the client bundle so they are not secret. `AGENTS.md` and `llms.txt` updated to match
+- Full source security audit recorded in `SECURITY-AUDIT.md` (High crash finding fixed; remaining findings are LOW/INFO/design notes)
+
+### Chores
+
+- Bump version to `0.2.1` (package.json + deno.json)
+- Add `@thednp/rpc@0.2.0` to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`
+
 ## [0.2.0] - 2026-08-09
 
 ### Features

@@ -335,6 +335,7 @@ The full threat model, including edge cases and configuration options for tighte
 - [Getting Started](./wiki/getting-started.md) — Installation, project structure, and your first function
 - [Configuration](./wiki/configuration.md) — Full configuration reference
 - [Server Functions](./wiki/server-functions.md) — Creating server functions
+- [Middleware](./wiki/middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./wiki/nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action
 - [Client Usage](./wiki/client-usage.md) — Client-side usage
 - [Wire Protocol](./wiki/wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)

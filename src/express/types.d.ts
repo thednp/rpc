@@ -57,7 +57,7 @@ export type ResponseDetails = {
   /** Sets the response status code */
   setStatusCode: (code: number) => void;
   /** Sends a JSON response with the given status code and output */
-  sendResponse: (code: number, output: Record<string, JsonValue>) => void;
+  sendResponse: (code: number, output: JsonValue) => void;
 };
 
 /**

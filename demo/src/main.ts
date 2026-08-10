@@ -8,7 +8,7 @@ import {
   setupLiveClock,
   setupReveal,
   setupTheme,
-} from "./hydrate";
+} from "./hydrate.ts";
 
 // document.querySelector<HTMLDivElement>("#app")!.innerHTML = renderPage();
 

@@ -6,6 +6,7 @@ import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
+  sendResponse,
 } from "../src/context.ts";
 import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import {
@@ -501,6 +502,77 @@ describe("Express createRPCMiddleware handler", () => {
     expect(res.send).not.toHaveBeenCalled();
   });
 
+  it("should short-circuit with send status, body and headers", async () => {
+    createServerFunction(
+      "send-fn",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(429, { error: "Rate limit exceeded" }, {
+          "retry-after": "30",
+        });
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/send-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.header).toHaveBeenCalledWith("retry-after", "30");
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Rate limit exceeded" });
+  });
+
+  it("should short-circuit with send without headers", async () => {
+    createServerFunction(
+      "send-no-headers",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(204, null);
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/send-no-headers",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.header).not.toHaveBeenCalledWith("retry-after", "30");
+    expect(res.send).toHaveBeenCalledWith("null");
+  });
+
+  it("should expose functionName via the request context", async () => {
+    let seenName: string | undefined;
+    createServerFunction(
+      "send-context-fn",
+      vi.fn().mockImplementation(async () => {
+        seenName = getRequestContext().functionName;
+        return "ok";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/send-context-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, next);
+    expect(seenName).toBe("send-context-fn");
+  });
+
   it("should use default 303 when redirect is called without a status", async () => {
     createServerFunction(
       "redirect-default-fn",
@@ -775,6 +847,38 @@ describe("Express createRPCMiddleware handler", () => {
     await mw(req, res, makeNext());
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should dispatch GET functions without args query param", async () => {
+    const fn = vi.fn().mockResolvedValue("no-args");
+    createServerFunction("public-data-no-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/public-data-no-args",
+      method: "GET",
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should return 400 when GET ?args= is not a JSON array", async () => {
+    const fn = vi.fn();
+    createServerFunction("public-data-bad-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: `/__rpc/public-data-bad-args?args=${
+        encodeURIComponent('{"a":1}')
+      }`,
+      method: "GET",
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Bad Request" });
   });
 
   it("should return 403 when Origin does not match the configured origin", async () => {

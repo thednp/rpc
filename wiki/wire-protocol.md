@@ -165,6 +165,7 @@ The generated client unwraps it — `await data` resolves to `<result>`.
 | `404`   | Function not registered.                    | `{ error: "Function not found" }` |
 | `405`   | Method doesn't match (`POST` vs `GET`).     | `{ error: "Method not allowed" }` |
 | `415`   | Request `Content-Type` doesn't match the function's declared `contentType` (json/text functions). | `{ error: "Unsupported Media Type" }` |
+| `400`   | GET `?args=` query parameter isn't a JSON array (GET functions only). | `{ error: "Bad Request" }` |
 | `500`   | Handler threw.                              | `{ error: "Internal Server Error" }` — always, even in development, for unexpected exceptions; in development `RPCError` payloads include `code`/`data` |
 
 ### Validation errors are data, not status codes
@@ -230,6 +231,7 @@ To build the `?args=` value: `encodeURIComponent(JSON.stringify(["en-US"]))` →
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)

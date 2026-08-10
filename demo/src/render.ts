@@ -26,6 +26,9 @@ export const iconArrow = `<svg class="size-4" viewBox="0 0 24 24" fill="none" st
 export const iconClock = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
 export const iconCode = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>`;
 export const iconSparkle = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m5.6 5.6 2.1 2.1"/><path d="m16.3 16.3 2.1 2.1"/><path d="m18.4 5.6-2.1 2.1"/><path d="m7.7 16.3-2.1 2.1"/></svg>`;
+export const iconLayers = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`;
+export const iconShield = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/></svg>`;
+export const iconForm = `<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>`;
 
 /* ---------- file & folder icons ---------- */
 
@@ -63,7 +66,22 @@ const features = [
   {
     icon: iconCache,
     title: "Cache-friendly",
-    text: "The { data, cancel } shape plugs straight into TanStack Query. Caching stays your tool's job, not the framework's.",
+    text: "The <code class=\"font-mono code-hl-inline\" translate=\"no\">{ data, cancel }</code> shape plugs straight into TanStack Query. Caching stays your tool's job, not the framework's.",
+  },
+  {
+    icon: iconLayers,
+    title: "Request context",
+    text: "<code class=\"font-mono code-hl-inline\" translate=\"no\">getRequestContext()</code> and <code class=\"font-mono code-hl-inline\" translate=\"no\">getRequestMeta()</code> give any function — or middleware — typed access to the current request, without threading req/res through your call stack.",
+  },
+  {
+    icon: iconForm,
+    title: "No-JS form fallback",
+    text: "Native <code class=\"font-mono code-hl-inline\" translate=\"no\">&lt;form&gt;</code> posts are detected and handled server-side with PRG redirects — progressive enhancement works even with JavaScript disabled.",
+  },
+  {
+    icon: iconShield,
+    title: "Enforced at the boundary",
+    text: "HTTP method and Content-Type are checked before dispatch, with anchored prefix matching. Wrong method, wrong media type, or prefix tricks get a clean 405, 415, or 404.",
   },
 ];
 
@@ -87,7 +105,7 @@ const featuresMarkup = features
 export const renderPage = (state?: FormState): string => `
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 btn btn-primary btn-sm">Skip to main content</a>
 <header class="sticky top-0 z-40 bg-base-100/85 backdrop-blur-md border-b border-base-300/60">
-  <div class="navbar max-w-6xl mx-auto px-4 sm:px-8">
+  <div class="navbar max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
   <div class="navbar-start">
     <a href="#top" class="flex items-center gap-2 font-bold text-lg">
       <span class="size-8 rounded-lg bg-primary text-primary-content flex items-center justify-center">${iconBolt}</span>
@@ -201,7 +219,7 @@ export const renderPage = (state?: FormState): string => `
 </section>
 
 <section class="bg-base-200/60 py-10 border-y border-base-300/60">
-  <div class="max-w-6xl mx-auto px-4 sm:px-8">
+  <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="stats stats-vertical sm:stats-horizontal w-full bg-base-100 border border-base-300 shadow-sm">
       <div class="stat">
         <div class="stat-title text-base-content">Examples</div>
@@ -228,7 +246,7 @@ export const renderPage = (state?: FormState): string => `
 </section>
 
 <section id="features" class="py-20 scroll-mt-16">
-  <div class="max-w-6xl mx-auto px-4 sm:px-8">
+  <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
         Why <span class="badge badge-primary">@thednp/rpc</span>
@@ -243,8 +261,8 @@ export const renderPage = (state?: FormState): string => `
   </div>
 </section>
 
-<section id="how" class="py-20 bg-base-200/60 border-y border-base-300/60 scroll-mt-16">
-  <div class="flex flex-col items-center max-w-5xl mx-auto px-4 sm:px-8">
+<section id="how" class="max-w-full py-20 bg-base-200/60 border-y border-base-300/60 scroll-mt-16">
+  <div class="flex flex-col items-center max-w-full lg:max-w-6xl min-w-0 mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
         How it <span class="badge badge-accent">works</span>
@@ -274,7 +292,7 @@ export const renderPage = (state?: FormState): string => `
     </ul>
 
     <div class="reveal grid md:grid-cols-2 gap-5 mt-10 max-w-4xl w-full">
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="min-w-full max-w-full card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
           <h3 class="card-title text-base">The manual way</h3>
           <p class="text-xs text-base-content/80 -mt-1 mb-2">Router · schema · fetch wrapper · hand-kept types</p>
@@ -291,7 +309,7 @@ export const renderPage = (state?: FormState): string => `
         </div>
       </div>
 
-      <div class="card bg-primary/5 border border-primary/30 shadow-sm">
+      <div class="min-w-full max-w-full card bg-primary/5 border border-primary/30 shadow-sm">
         <div class="card-body">
           <h3 class="card-title text-base"><span>With <code class="font-mono" translate="no">@thednp/rpc</code></span></h3>
           <p class="text-xs text-base-content/80 -mt-1 mb-2">One module, zero plumbing</p>
@@ -312,7 +330,7 @@ export const renderPage = (state?: FormState): string => `
 </section>
 
 <section id="demo" class="py-20 scroll-mt-16">
-  <div class="max-w-6xl mx-auto px-4 sm:px-8">
+  <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
         Live <span class="badge badge-warning">demo</span>
@@ -405,7 +423,7 @@ export const renderPage = (state?: FormState): string => `
 </section>
 
 <section class="pb-20">
-  <div class="max-w-6xl mx-auto px-4 sm:px-8">
+  <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal hero bg-linear-to-r from-primary to-accent text-primary-content rounded-3xl shadow-xl">
       <div class="hero-content text-center py-14 flex-col">
         <span class="badge badge-neutral badge-lg">${iconBolt} Free · MIT · npm &amp; jsr</span>
@@ -416,8 +434,8 @@ export const renderPage = (state?: FormState): string => `
         </p>
         <div class="flex flex-wrap justify-center gap-3 mt-2">
           <a href="https://github.com/thednp/rpc/blob/master/wiki/quickstart.md" target="_blank" rel="noreferrer" class="btn btn-accent btn-lg">Start the quickstart</a>
-          <a href="https://www.npmjs.com/package/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-outline btn-lg">Install from npm</a>
-          <a href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-outline btn-lg">Install from jsr</a>
+          <a href="https://www.npmjs.com/package/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-primary btn-lg">Install from npm</a>
+          <a href="https://jsr.io/@thednp/rpc" target="_blank" rel="noreferrer" class="btn btn-error btn-lg">Install from jsr</a>
         </div>
       </div>
     </div>
@@ -425,7 +443,7 @@ export const renderPage = (state?: FormState): string => `
 </section>
 
 <section id="contact" class="py-20 bg-base-200/60 border-y border-base-300/60 scroll-mt-16">
-  <div class="max-w-6xl mx-auto px-4 sm:px-8">
+  <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
         Multipart <span class="badge badge-success badge-lg">demo</span>
@@ -551,7 +569,7 @@ export const renderPage = (state?: FormState): string => `
 
 
 <footer class="bg-base-100 text-base-content p-10 border-t border-base-300/60">
-<div class="max-w-6xl mx-auto px-4 sm:px-8 footer sm:footer-horizontal">
+<div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8 footer sm:footer-horizontal">
   <aside class="max-w-sm">
     <a href="#top" class="flex items-center gap-2 font-bold text-lg">
       <span class="size-8 rounded-lg bg-primary text-primary-content flex items-center justify-center">${iconBolt}</span>

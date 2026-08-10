@@ -16,6 +16,8 @@ export const REQUEST_FORBIDDEN = "Forbidden";
 
 export const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
 
+export const BAD_REQUEST = "Bad Request";
+
 export const INTERNAL_SERVER_ERROR = "Internal Server Error";
 
 export const CLIENT_DISCONNECTED = "client disconnected";

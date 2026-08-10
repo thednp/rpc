@@ -253,9 +253,22 @@ declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: string 
  * @returns The escaped string safe for use in new RegExp()
  */
 declare function escapeRegExp(s: string): string;
+/**
+ * Parses a raw request URL against a fixed base without ever throwing.
+ * Malformed request-targets (e.g. `/\`, `//`, `/\/`) make the WHATWG URL
+ * parser throw `TypeError: Invalid URL`; the adapters call this while
+ * building the per-request URL **before** their dispatch `try` block, so an
+ * unhandled rejection there crashes raw `node:http` hosts (and Express 4).
+ * On failure we fall back to the base root: the resulting pathname never
+ * matches the RPC prefix, so the request is treated as non-RPC and falls
+ * through to `next()` / 404 instead of crashing the process.
+ * @param rawUrl - Raw request URL (path + optional query string)
+ * @param base - Optional base URL, defaults to a fixed localhost origin
+ * @returns A URL object; never throws
+ */
+declare const safeURL: (rawUrl: string, base?: string) => URL;
 //#endregion
 //#region src/context.d.ts
-/** @module Server-side request context. Exports the `RequestEvent` shape, `provideRequestContext` to establish it around a dispatch, `getRequestContext` to read it from anywhere inside the async tree, and `redirect` for framework-level redirects. Never import this module in client code — it is server-only. */
 /**
  * A per-request context established by the framework adapters around
  * server-function dispatch, mirroring Solid Start's `FetchEvent`. Any code
@@ -293,6 +306,30 @@ interface RequestEvent {
     location: string;
     status: number;
   };
+  /**
+   * Bound adapter-native response short-circuit. Writes the given status and
+   * JSON body (plus optional headers) directly, bypassing the standard
+   * `{ data }` response. Setting `sent` makes the middleware skip the JSON
+   * `{ data }` send, mirroring `redirect`/`redirected`.
+   * @param status - HTTP status code (e.g. 401, 413, 429)
+   * @param body - JSON-serializable response body
+   * @param headers - Optional response headers (e.g. `{ "Retry-After": "60" }`)
+   */
+  send: (status: number, body: JsonValue, headers?: Record<string, string>) => void;
+  /**
+   * Set by `send` once a response has been issued. The middleware checks this
+   * after `await`ing the server function to avoid double-responding.
+   */
+  sent?: {
+    status: number;
+    body: JsonValue;
+    headers?: Record<string, string>;
+  };
+  /**
+   * The matched RPC function name for the current request, when available.
+   * Useful for per-function rate limiting or auditing inside middleware.
+   */
+  functionName?: string;
   /** Per-request app data shared across the async tree of the dispatch */
   locals: Record<string, unknown>;
   [prop: string]: unknown;
@@ -320,6 +357,51 @@ declare const getRequestContext: () => RequestEvent;
  * @throws When called outside of a request
  */
 declare const redirect: (location: string, status?: number) => void;
+/**
+ * Sends a raw JSON response for the current request, bypassing the standard
+ * `{ data }` shape. Reads the adapter-bound `send` from the current request
+ * context — callable from anywhere inside a server-function tree. Any code in
+ * the async tree of a dispatch can call this (e.g. custom middleware) to
+ * short-circuit with a specific status code (401, 413, 429, ...).
+ * @param status - HTTP status code
+ * @param body - JSON-serializable response body
+ * @param headers - Optional response headers
+ * @throws When called outside of a request
+ */
+declare const sendResponse: (status: number, body: JsonValue, headers?: Record<string, string>) => void;
+/**
+ * Normalized, adapter-agnostic view of the current request. Reads the request
+ * object off the current request context and normalizes it across the five
+ * adapter request shapes (Express `req`, Fastify `req`, Koa `ctx.req`,
+ * Hono `c.req`, h3 `event.req`) so middleware can be written once.
+ */
+interface RequestMeta {
+  /** HTTP method, upper-cased (e.g. "GET", "POST") */
+  method: string;
+  /** URL pathname (e.g. "/__rpc/greet") */
+  pathname: string;
+  /** Raw search string including the leading "?", or "" when absent */
+  search: string;
+  /** Parsed search params */
+  searchParams: URLSearchParams;
+  /** Request headers, lower-cased */
+  headers: Record<string, string | string[] | undefined>;
+  /** Host header value (e.g. "localhost:5173"), when present */
+  host?: string;
+  /** Client IP when the framework exposes it (e.g. Fastify `req.ip`) */
+  ip?: string;
+  /** Request protocol ("http" or "https"), when determinable */
+  protocol?: string;
+}
+/**
+ * Reads normalized, adapter-agnostic request metadata from the current request
+ * context. Works with Express `req`, Fastify `req`, Koa `ctx.req`,
+ * Hono `c.req` and h3 `event.req` by feature-detecting the request shape
+ * (`originalUrl`/`url`/`path`, raw `headers` map vs `Headers`-like API).
+ * @param event - The request context to read, typically the result of
+ *   {@link getRequestContext}
+ */
+declare const getRequestMeta: (event: RequestEvent) => RequestMeta;
 //#endregion
 //#region src/options.d.ts
 declare const defaultServerFnOptions: {
@@ -334,5 +416,5 @@ declare const defaultMiddlewareOptions: {
   origin: undefined;
 };
 //#endregion
-export { RPCError, RequestEvent, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, scanForServerFiles, scannedServerFiles, serverFunctionsMap, walkGlobFiles };
+export { RPCError, RequestEvent, RequestMeta, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsMap, walkGlobFiles };
 //# sourceMappingURL=server.d.mts.map

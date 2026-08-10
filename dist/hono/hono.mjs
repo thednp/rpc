@@ -1,5 +1,5 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
-import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, safeURL, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/options.ts
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -18,6 +18,7 @@ const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
 const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+const BAD_REQUEST = "Bad Request";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
@@ -147,7 +148,7 @@ const createMiddleware = (initialOptions = {}) => {
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = createMiddleware$1(async (c, next) => {
-		const url = new URL(c.req.path, "http://localhost").pathname;
+		const url = safeURL(c.req.path).pathname;
 		if (serverFunctionsMap.size === 0) await scanForServerFiles();
 		if (!handler) return next();
 		if (pathMatcher && !pathMatcher.test(url)) return next();
@@ -186,7 +187,11 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				let args = [];
 				if (method === "GET") {
 					const raw = c.req.query("args");
-					if (raw) args = JSON.parse(raw);
+					if (raw) {
+						const parsed = JSON.parse(raw);
+						if (!Array.isArray(parsed)) return c.json({ error: BAD_REQUEST }, 400);
+						args = parsed;
+					}
 				} else {
 					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", c.req.header("content-type"))) return c.json({ error: UNSUPPORTED_MEDIA_TYPE }, 415);
 					const body = await readBody(c);
@@ -197,10 +202,18 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					response: c.res,
 					nativeEvent: c,
 					locals: {},
+					functionName,
 					redirect: (location, status = 303) => {
 						requestEvent.redirected = {
 							location,
 							status
+						};
+					},
+					send: (status, body, headers) => {
+						requestEvent.sent = {
+							status,
+							body,
+							headers
 						};
 					}
 				};
@@ -210,6 +223,13 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				const result = await fnResult.data;
 				c.env.incoming?.off("close", onAbort);
 				if (requestEvent.redirected) return c.redirect(requestEvent.redirected.location, requestEvent.redirected.status);
+				if (requestEvent.sent) {
+					const { status, body, headers } = requestEvent.sent;
+					return c.body(JSON.stringify(body), status, {
+						"content-type": "application/json",
+						...headers
+					});
+				}
 				return c.json({ data: result }, 200);
 			} catch (err) {
 				console.error(String(err));

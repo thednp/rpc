@@ -15,11 +15,13 @@ import {
   formatError,
   hasContentTypeMismatch,
   provideRequestContext,
+  safeURL,
   scanForServerFiles,
   serverFunctionsMap,
 } from "@thednp/rpc/server";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import {
+  BAD_REQUEST,
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
@@ -74,7 +76,7 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
     reply: FastifyReply,
     done: HookHandlerDoneFunction,
   ) => {
-    const reqUrl = new URL(req.url, "http://localhost");
+    const reqUrl = safeURL(req.url);
     const url = reqUrl.pathname;
 
     // When serving from production server, scan for server files
@@ -143,7 +145,7 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
       reply: FastifyReply,
       _done: HookHandlerDoneFunction,
     ) => {
-      const reqUrl = new URL(req.url, "http://localhost");
+      const reqUrl = safeURL(req.url);
       const url = reqUrl.pathname;
 
       // Defense-in-depth: validate prefix match via escaped regex even though
@@ -183,8 +185,14 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         let args: JsonValue[] = [];
         if (method === "GET") {
           const raw = reqUrl.searchParams.get("args");
-          // istanbul ignore else
-          if (raw) args = JSON.parse(raw);
+          if (raw) {
+            const parsed: unknown = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              reply.status(400).send({ error: BAD_REQUEST });
+              return;
+            }
+            args = parsed as JsonValue[];
+          }
         } else {
           // Content-type enforcement: strict for json/text, lenient between forms.
           // Requests without a Content-Type header are exempt (curl/GET compat).
@@ -208,9 +216,19 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
           response: reply,
           nativeEvent: req,
           locals: {},
+          functionName,
           redirect: (location, status = 303) => {
             requestEvent.redirected = { location, status };
             fastifyRedirect(reply, location, status);
+          },
+          send: (status, body, headers) => {
+            requestEvent.sent = { status, body, headers };
+            if (headers) {
+              for (const [name, value] of Object.entries(headers)) {
+                reply.header(name, value);
+              }
+            }
+            reply.status(status).send(body);
           },
         };
         const { data: dataResult, cancel } = provideRequestContext(
@@ -224,7 +242,11 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         req.raw.off("close", onClose);
 
         // istanbul ignore else
-        if (!requestEvent.redirected && !reply.raw.headersSent) {
+        if (
+          !requestEvent.redirected &&
+          !requestEvent.sent &&
+          !reply.raw.headersSent
+        ) {
           reply.status(200).send({ data });
         }
       } catch (err) {

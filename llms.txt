@@ -48,7 +48,7 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - Prefix regex: `new RegExp("^/" + escapeRegExp(prefix) + "/")` — not `startsWith` (prevents segment bypass like `/__rpc-evil/foo`)
 - Default POST methods — CSRF-safe (no `<img>`/form GET can trigger mutations)
 - Content-Type enforcement — mismatched content types get 415 (json/text strict; forms interoperable; headerless exempt)
-- 404s are generic — no function enumeration
+- 404s are generic (no function name echoed); status code still distinguishes unknown (404) from known (405/415/403) — names ship in the client bundle so are not secret
 - 500s: always generic (no message/stack leak); dev mode includes `RPCError` payloads (`code`/`data`) only
 - Duplicate function names: throw in dev, warn + keep first in production
 - Auth, rate limiting, origin checks: all middleware-host, registered before `createRPCMiddleware()`
@@ -58,7 +58,8 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `wiki/quickstart.md` — Rebuild the Express SSR example from `create-vite` in under a minute
 - `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
 - `wiki/configuration.md` — `rpc.config.ts`, `vite.config.ts`, `loadRPCConfig`
-- `wiki/server-functions.md` — `createServerFunction` API, methods, content types (JSON/text/urlencoded/multipart), validation (zod + valibot), typed errors (`RPCError`), AbortSignal
+- `wiki/server-functions.md` — `createServerFunction` API, methods, content types (JSON/text/urlencoded/multipart), validation (zod + valibot), typed errors (`RPCError`), AbortSignal, request context (`RequestEvent`, `send`, `functionName`)
+- `wiki/middleware.md` — Universal adapter-agnostic middleware via the request context (`locals` bridge, `getRequestMeta`, `sendResponse` short-circuits, wrapping official framework middleware)
 - `wiki/nojs-fallback.md` — Progressive enhancement: making an RPC endpoint work as a no-JS `<form>` action (detection rule, shared validation, PRG 303 redirects, state recovery)
 - `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration, and an SSR gotcha for disabled queries (solid-query hangs `renderToStringAsync`; use `queryClient.fetchQuery()` on submit instead)
 - `wiki/wire-protocol.md` — HTTP contract: request/response bodies, status codes, curl debugging

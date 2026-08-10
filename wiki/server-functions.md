@@ -300,6 +300,12 @@ interface RequestEvent {
   redirect: (location: string, status?: number) => void;
   /** Set by `redirect` once issued; middleware checks this after `await`ing the handler */
   redirected?: { location: string; status: number };
+  /** Adapter-bound short-circuit — writes `status`/`body`/`headers` directly, sets `sent` so the middleware skips the JSON `{ data }` send */
+  send: (status: number, body: unknown, headers?: Record<string, string>) => void;
+  /** Set by `send` once issued; middleware checks this after `await`ing the handler */
+  sent?: { status: number; body: unknown; headers?: Record<string, string> };
+  /** Matched RPC function name (e.g. "greet") — useful for per-function rate limiting */
+  functionName?: string;
   /** Per-request app data shared across the async tree of the dispatch */
   locals: Record<string, unknown>;
   [prop: string]: unknown;
@@ -378,8 +384,13 @@ async function fetchUserPosts(userId: string) {
 2. Inside the handler (or any async descendant), call `getRequestContext()` to read the current `RequestEvent`.
 3. The `locals` object is empty at the start of each request — use it to pass data through the async tree (e.g. user identity, request IDs, feature flags).
 4. The `redirect` function on `RequestEvent` is bound to the adapter's native redirect; calling it sets `redirected` so the middleware skips the JSON `{ data }` response.
+5. The `send` function on `RequestEvent` writes a raw status/body/headers response (e.g. `401`, `429`), sets `sent`, and makes the middleware skip the JSON `{ data }` response — perfect for short-circuiting from shared middleware.
 
-> The `redirect` helper from `@thednp/rpc/server` (and each adapter) is just a thin wrapper around `getRequestContext().redirect(location, status)`.
+> The `redirect` helper from `@thednp/rpc/server` (and each adapter) is just a thin wrapper around `getRequestContext().redirect(location, status)`. The `sendResponse` helper is the same wrapper around `getRequestContext().send(status, body, headers?)`.
+
+### Writing Universal Middleware
+
+Because `getRequestContext()` works identically across all five adapters, you can write **one** middleware function and use it everywhere — wrap your framework's official middleware (sessions, rate limiting, auth) so it populates `locals` and short-circuits with real status codes via `sendResponse`. See [Middleware](./middleware.md) for the full guide.
 
 ### Why Not Pass `req`/`res` Directly?
 
@@ -388,7 +399,7 @@ async function fetchUserPosts(userId: string) {
 - **HMR stability**: The `AsyncLocalStorage` lives on a `Symbol.for` global key, surviving Vite HMR module reloads.
 - **Framework agnostic**: Same API works across Express, Fastify, Hono, Koa, h3, and the plain Vite dev server.
 
-> **Next:** [Native Form Fallback](./nojs-fallback.md) — making an RPC endpoint work as a no-JS `<form>` action (progressive enhancement).
+> **Next:** [Middleware](./middleware.md) — write universal, adapter-agnostic middleware against the request context.
 
 ---
 
@@ -398,6 +409,7 @@ async function fetchUserPosts(userId: string) {
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)

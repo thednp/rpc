@@ -1,9 +1,10 @@
-import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, safeURL, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
 //#region src/constants.ts
 const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
 const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+const BAD_REQUEST = "Bad Request";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
@@ -155,7 +156,7 @@ const createMiddleware = (initialOptions = {}) => {
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (ctx, next) => {
-		const url = new URL(ctx.url, "http://localhost").pathname;
+		const url = safeURL(ctx.url).pathname;
 		if (serverFunctionsMap.size === 0) await scanForServerFiles();
 		if (!handler) return next();
 		if (pathMatcher && !pathMatcher.test(url)) return next();
@@ -180,7 +181,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	return createMiddleware({
 		...options,
 		handler: async (ctx, _next) => {
-			const reqUrl = new URL(ctx.url, "http://localhost");
+			const reqUrl = safeURL(ctx.url);
 			const url = reqUrl.pathname;
 			if (prefixRegex && !prefixRegex.test(url)) return;
 			const origin = options.origin;
@@ -207,7 +208,15 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				let args = [];
 				if (method === "GET") {
 					const raw = reqUrl.searchParams.get("args");
-					if (raw) args = JSON.parse(raw);
+					if (raw) {
+						const parsed = JSON.parse(raw);
+						if (!Array.isArray(parsed)) {
+							ctx.status = 400;
+							ctx.body = { error: BAD_REQUEST };
+							return;
+						}
+						args = parsed;
+					}
 				} else {
 					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", ctx.headers["content-type"])) {
 						ctx.status = 415;
@@ -222,12 +231,23 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					response: ctx,
 					nativeEvent: ctx,
 					locals: ctx.state,
+					functionName,
 					redirect: (location, status = 303) => {
 						requestEvent.redirected = {
 							location,
 							status
 						};
 						redirect(ctx, location, status);
+					},
+					send: (status, body, headers) => {
+						requestEvent.sent = {
+							status,
+							body,
+							headers
+						};
+						if (headers) for (const [name, value] of Object.entries(headers)) ctx.set(name, value);
+						ctx.status = status;
+						ctx.body = body;
 					}
 				};
 				const { data: resultData, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
@@ -235,7 +255,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				ctx.req.on("close", onClose);
 				const result = await resultData;
 				ctx.req.off("close", onClose);
-				if (!requestEvent.redirected) {
+				if (!requestEvent.redirected && !requestEvent.sent) {
 					ctx.status = 200;
 					ctx.body = { data: result };
 				}

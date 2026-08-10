@@ -519,6 +519,67 @@ describe("Koa createRPCMiddleware", () => {
     expect(ctx.body).toBeUndefined();
   });
 
+  it("should short-circuit with send status, body and headers", async () => {
+    createServerFunction(
+      "koa-send",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(429, { error: "Rate limit exceeded" }, {
+          "retry-after": "30",
+        });
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-send", method: "POST" });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify([]));
+    await mw(ctx, next);
+    expect(ctx.status).toBe(429);
+    expect(ctx.body).toEqual({ error: "Rate limit exceeded" });
+    expect(ctx.set).toHaveBeenCalledWith("retry-after", "30");
+  });
+
+  it("should short-circuit with send without headers", async () => {
+    createServerFunction(
+      "koa-send-no-headers",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(204, null);
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-send-no-headers",
+      method: "POST",
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify([]));
+    await mw(ctx, next);
+    expect(ctx.status).toBe(204);
+    expect(ctx.body).toBeNull();
+    expect(ctx.set).not.toHaveBeenCalled();
+  });
+
+  it("should expose functionName via the request context", async () => {
+    let seenName: string | undefined;
+    createServerFunction(
+      "koa-context-send",
+      vi.fn().mockImplementation(async () => {
+        seenName = getRequestContext().functionName;
+        return "ok";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-context-send",
+      method: "POST",
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify([]));
+    await mw(ctx, next);
+    expect(seenName).toBe("koa-context-send");
+  });
+
   it("should use default 303 when redirect is called without a status", async () => {
     createServerFunction(
       "koa-redirect-default",
@@ -755,6 +816,21 @@ describe("Koa createRPCMiddleware", () => {
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
     expect(ctx.status).toBe(200);
     expect(ctx.body).toEqual({ data: "koa-public" });
+  });
+
+  it("should return 400 when GET ?args= is not a JSON array", async () => {
+    const fn = vi.fn();
+    createServerFunction("koa-public-bad-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: `/__rpc/koa-public-bad-args?args=${encodeURIComponent('{"a":1}')}`,
+      method: "GET",
+    });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(fn).not.toHaveBeenCalled();
+    expect(ctx.status).toBe(400);
+    expect(ctx.body).toEqual({ error: "Bad Request" });
   });
 
   it("should dispatch GET functions without args query param", async () => {

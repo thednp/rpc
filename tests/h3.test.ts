@@ -7,6 +7,7 @@ import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
+  sendResponse,
 } from "../src/context.ts";
 import {
   attachRPC,
@@ -659,6 +660,36 @@ describe("h3 createRPCMiddleware", () => {
     expect(await res.json()).toEqual({ data: "h3-public" });
   });
 
+  it("should dispatch GET functions without args query param", async () => {
+    const fn = vi.fn().mockResolvedValue("no-args");
+    createServerFunction("h3-public-no-args", fn, { method: "GET" });
+    const app = new H3();
+    app.use(createRPCMiddleware());
+    const res = await app.fetch(
+      new Request(`${APP_HOST}/__rpc/h3-public-no-args`),
+    );
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: "no-args" });
+  });
+
+  it("should return 400 when GET ?args= is not a JSON array", async () => {
+    const fn = vi.fn();
+    createServerFunction("h3-public-bad-args", fn, { method: "GET" });
+    const app = new H3();
+    app.use(createRPCMiddleware());
+    const res = await app.fetch(
+      new Request(
+        `${APP_HOST}/__rpc/h3-public-bad-args?args=${
+          encodeURIComponent('{"a":1}')
+        }`,
+      ),
+    );
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
   it("should dispatch functions registered without options (default POST)", async () => {
     serverFunctionsMap.set("h3-plain", {
       name: "h3-plain",
@@ -723,6 +754,46 @@ describe("h3 createRPCMiddleware", () => {
     const res = await app.fetch(postJSON("/__rpc/h3-redirect-default", []));
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/default-target");
+  });
+
+  it("should short-circuit with sendResponse status, body and headers", async () => {
+    createServerFunction(
+      "h3-send",
+      vi.fn().mockImplementation(async () => {
+        sendResponse(429, { error: "Rate limit exceeded" }, {
+          "retry-after": "30",
+        });
+        return "ignored";
+      }),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware());
+    const res = await app.fetch(postJSON("/__rpc/h3-send", []));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("30");
+    await expect(res.json()).resolves.toEqual({ error: "Rate limit exceeded" });
+  });
+
+  it("should expose functionName and send via the request context", async () => {
+    let seenName: string | undefined;
+    let seenSend: boolean = false;
+    createServerFunction(
+      "h3-context-send",
+      vi.fn().mockImplementation(async () => {
+        const ctx = getRequestContext();
+        seenName = ctx.functionName;
+        seenSend = typeof ctx.send === "function";
+        ctx.send(400, { error: "Bad Request" });
+        return "ignored";
+      }),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware());
+    const res = await app.fetch(postJSON("/__rpc/h3-context-send", []));
+    expect(seenName).toBe("h3-context-send");
+    expect(seenSend).toBe(true);
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "Bad Request" });
   });
 
   it("should wrap non-array JSON body in array for the handler", async () => {

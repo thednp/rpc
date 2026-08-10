@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 
-const patterns = ["[v]ite.js preview", "node server", "node --experimental-strip-types ./server\\.ts$"];
+const patterns = ["[v]ite.js preview", "node server", "node server.js", "node --experimental-strip-types ./server\\.ts$"];
 
 try {
   console.log("Killing vite/[node server] processes..");

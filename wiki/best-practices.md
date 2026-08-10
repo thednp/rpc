@@ -44,6 +44,7 @@ app.use(authMiddleware);
 app.use(createRPCMiddleware());
 ```
 
+> To read what auth middleware populated from inside a server function — on **any** adapter — see [Middleware — The `locals` Bridge](./middleware.md#the-locals-bridge). The request context maps framework storage (`res.locals`, `ctx.state`, `event.context`) onto `event.locals` automatically.
 
 ### Basic Authorization
 
@@ -287,6 +288,8 @@ const bodyLimit = (req, res, next) => {
 
 Throttle RPC endpoints like any other route — rate limiting is the host's responsibility:
 
+> For **per-function** rules (e.g. tighter limits on expensive endpoints) that work identically on all adapters, write a universal middleware against the request context — it can read `event.functionName`, `getRequestMeta(event).ip`, and `event.locals.user` to key the bucket. See [Middleware](./middleware.md#universal-middleware-in-action).
+
 ```ts
 // Express
 import { rateLimit } from 'express-rate-limit';
@@ -385,6 +388,7 @@ export default { sayHi, add };
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)

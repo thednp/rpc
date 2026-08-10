@@ -8,10 +8,12 @@ import {
   formatError,
   hasContentTypeMismatch,
   provideRequestContext,
+  safeURL,
   scanForServerFiles,
   serverFunctionsMap,
 } from "@thednp/rpc/server";
 import {
+  BAD_REQUEST,
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
@@ -65,7 +67,7 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
     : null;
 
   const middlewareHandler = async (ctx: Context, next: Next) => {
-    const url = new URL(ctx.url, "http://localhost").pathname;
+    const url = safeURL(ctx.url).pathname;
 
     if (serverFunctionsMap.size === 0) {
       await scanForServerFiles();
@@ -120,7 +122,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   return createMiddleware({
     ...options,
     handler: async (ctx: Context, _next: Next) => {
-      const reqUrl = new URL(ctx.url, "http://localhost");
+      const reqUrl = safeURL(ctx.url);
       const url = reqUrl.pathname;
       // const { rpcPrefix } = options;
 
@@ -162,7 +164,15 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
         let args: JsonValue[] = [];
         if (method === "GET") {
           const raw = reqUrl.searchParams.get("args");
-          if (raw) args = JSON.parse(raw);
+          if (raw) {
+            const parsed: unknown = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              ctx.status = 400;
+              ctx.body = { error: BAD_REQUEST };
+              return;
+            }
+            args = parsed as JsonValue[];
+          }
         } else {
           // Content-type enforcement: strict for json/text, lenient between forms.
           // Requests without a Content-Type header are exempt (curl/GET compat).
@@ -187,9 +197,20 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
           response: ctx,
           nativeEvent: ctx,
           locals: ctx.state,
+          functionName,
           redirect: (location, status = 303) => {
             requestEvent.redirected = { location, status };
             koaRedirect(ctx, location, status);
+          },
+          send: (status, body, headers) => {
+            requestEvent.sent = { status, body, headers };
+            if (headers) {
+              for (const [name, value] of Object.entries(headers)) {
+                ctx.set(name, value);
+              }
+            }
+            ctx.status = status;
+            ctx.body = body;
           },
         };
         const { data: resultData, cancel } = provideRequestContext(
@@ -201,10 +222,11 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
         const result = await resultData;
         ctx.req.off("close", onClose);
 
-        // Skip the JSON send when the server function issued a redirect;
-        // the bound Koa redirect already set ctx.status/ctx.body.
+        // Skip the JSON send when the server function issued a redirect or
+        // short-circuited with `send`; the bound Koa adapter already set
+        // ctx.status/ctx.body.
         // istanbul ignore else
-        if (!requestEvent.redirected) {
+        if (!requestEvent.redirected && !requestEvent.sent) {
           ctx.status = 200;
           ctx.body = { data: result };
         }

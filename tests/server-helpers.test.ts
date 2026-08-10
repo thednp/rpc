@@ -4,6 +4,7 @@ import {
   hasContentTypeMismatch,
   isFormContentType,
   RPCError,
+  safeURL,
   walkGlobFiles,
 } from "../src/server-helpers.ts";
 
@@ -60,6 +61,25 @@ describe("formatError", () => {
       error: "Internal Server Error",
       code: "INTERNAL",
     });
+  });
+});
+
+describe("safeURL", () => {
+  it("should parse a well-formed path", () => {
+    expect(safeURL("/__rpc/foo?x=1").pathname).toBe("/__rpc/foo");
+  });
+
+  it("should fall back to the base root for a malformed request-target instead of throwing", () => {
+    expect(() => safeURL("/\\")).not.toThrow();
+    expect(safeURL("/\\").pathname).toBe("/");
+    expect(() => safeURL("//")).not.toThrow();
+    expect(safeURL("//").pathname).toBe("/");
+    expect(() => safeURL("/\\/")).not.toThrow();
+    expect(safeURL("/\\/").pathname).toBe("/");
+  });
+
+  it("should respect a custom base", () => {
+    expect(safeURL("/\\", "https://example.com").pathname).toBe("/");
   });
 });
 

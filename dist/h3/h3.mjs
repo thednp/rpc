@@ -5,6 +5,7 @@ const FUNCTION_NOT_FOUND = "Function not found";
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
 const REQUEST_FORBIDDEN = "Forbidden";
 const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+const BAD_REQUEST = "Bad Request";
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
@@ -201,7 +202,14 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				let args = [];
 				if (method === "GET") {
 					const raw = event.url.searchParams.get("args");
-					if (raw) args = JSON.parse(raw);
+					if (raw) {
+						const parsed = JSON.parse(raw);
+						if (!Array.isArray(parsed)) {
+							event.res.status = 400;
+							return { error: BAD_REQUEST };
+						}
+						args = parsed;
+					}
 				} else {
 					if (hasContentTypeMismatch(serverFunction.options?.contentType ?? "application/json", event.req.headers.get("content-type") ?? void 0)) {
 						event.res.status = 415;
@@ -215,10 +223,18 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					response: event.res,
 					nativeEvent: event,
 					locals: event.context,
+					functionName,
 					redirect: (location, status = 303) => {
 						requestEvent.redirected = {
 							location,
 							status
+						};
+					},
+					send: (status, body, headers) => {
+						requestEvent.sent = {
+							status,
+							body,
+							headers
 						};
 					}
 				};
@@ -229,6 +245,12 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				const result = await fnResult.data;
 				if (nodeReq) nodeReq.off("close", onClose);
 				if (requestEvent.redirected) return redirect(requestEvent.redirected.location, requestEvent.redirected.status);
+				if (requestEvent.sent) {
+					const { status, body, headers } = requestEvent.sent;
+					event.res.status = status;
+					if (headers) for (const [name, value] of Object.entries(headers)) event.res.headers.set(name, value);
+					return body;
+				}
 				return { data: result };
 			} catch (err) {
 				console.error(String(err));

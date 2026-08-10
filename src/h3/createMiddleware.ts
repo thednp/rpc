@@ -12,6 +12,7 @@ import {
   serverFunctionsMap,
 } from "@thednp/rpc/server";
 import {
+  BAD_REQUEST,
   CLIENT_DISCONNECTED,
   FUNCTION_NOT_FOUND,
   METHOD_NOT_ALLOWED,
@@ -158,8 +159,14 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
         let args: JsonValue[] = [];
         if (method === "GET") {
           const raw = event.url.searchParams.get("args");
-          // istanbul ignore else
-          if (raw) args = JSON.parse(raw);
+          if (raw) {
+            const parsed: unknown = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              event.res.status = 400;
+              return { error: BAD_REQUEST };
+            }
+            args = parsed as JsonValue[];
+          }
         } else {
           // Content-type enforcement: strict for json/text, lenient between forms.
           // Requests without a Content-Type header are exempt (curl/GET compat).
@@ -183,11 +190,15 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
           response: event.res,
           nativeEvent: event,
           locals: event.context,
+          functionName,
           // h3's `redirect()` returns an `HTTPResponse` (never writes directly),
-          // so the bound redirect only records the intent; the middleware uses
-          // it after the dispatch to return `redirect(location, status)`.
+          // so the bound redirect/send only record the intent; the middleware
+          // uses them after the dispatch to return the response body.
           redirect: (location, status = 303) => {
             requestEvent.redirected = { location, status };
+          },
+          send: (status, body, headers) => {
+            requestEvent.sent = { status, body, headers };
           },
         };
         const fnResult = provideRequestContext(
@@ -207,6 +218,17 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
             requestEvent.redirected.location,
             requestEvent.redirected.status,
           );
+        }
+
+        if (requestEvent.sent) {
+          const { status, body, headers } = requestEvent.sent;
+          event.res.status = status;
+          if (headers) {
+            for (const [name, value] of Object.entries(headers)) {
+              event.res.headers.set(name, value);
+            }
+          }
+          return body;
         }
 
         return { data: result };

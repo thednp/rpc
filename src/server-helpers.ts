@@ -123,3 +123,26 @@ export const hasContentTypeMismatch = (
 export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+const SAFE_URL_BASE = "http://localhost";
+
+/**
+ * Parses a raw request URL against a fixed base without ever throwing.
+ * Malformed request-targets (e.g. `/\`, `//`, `/\/`) make the WHATWG URL
+ * parser throw `TypeError: Invalid URL`; the adapters call this while
+ * building the per-request URL **before** their dispatch `try` block, so an
+ * unhandled rejection there crashes raw `node:http` hosts (and Express 4).
+ * On failure we fall back to the base root: the resulting pathname never
+ * matches the RPC prefix, so the request is treated as non-RPC and falls
+ * through to `next()` / 404 instead of crashing the process.
+ * @param rawUrl - Raw request URL (path + optional query string)
+ * @param base - Optional base URL, defaults to a fixed localhost origin
+ * @returns A URL object; never throws
+ */
+export const safeURL = (rawUrl: string, base = SAFE_URL_BASE): URL => {
+  try {
+    return new URL(rawUrl, base);
+  } catch {
+    return new URL("/", base);
+  }
+};

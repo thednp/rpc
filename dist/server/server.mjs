@@ -112,6 +112,27 @@ const hasContentTypeMismatch = (declared, rawHeader) => {
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+const SAFE_URL_BASE = "http://localhost";
+/**
+* Parses a raw request URL against a fixed base without ever throwing.
+* Malformed request-targets (e.g. `/\`, `//`, `/\/`) make the WHATWG URL
+* parser throw `TypeError: Invalid URL`; the adapters call this while
+* building the per-request URL **before** their dispatch `try` block, so an
+* unhandled rejection there crashes raw `node:http` hosts (and Express 4).
+* On failure we fall back to the base root: the resulting pathname never
+* matches the RPC prefix, so the request is treated as non-RPC and falls
+* through to `next()` / 404 instead of crashing the process.
+* @param rawUrl - Raw request URL (path + optional query string)
+* @param base - Optional base URL, defaults to a fixed localhost origin
+* @returns A URL object; never throws
+*/
+const safeURL = (rawUrl, base = SAFE_URL_BASE) => {
+	try {
+		return new URL(rawUrl, base);
+	} catch {
+		return new URL("/", base);
+	}
+};
 //#endregion
 //#region src/scanForServerFiles.ts
 let isScanned = false;
@@ -390,7 +411,7 @@ ${Array.from(serverFunctionsMap.entries()).filter(([, entry]) => entry.exportNam
 };
 //#endregion
 //#region src/context.ts
-/** @module Server-side request context. Exports the `RequestEvent` shape, `provideRequestContext` to establish it around a dispatch, `getRequestContext` to read it from anywhere inside the async tree, and `redirect` for framework-level redirects. Never import this module in client code — it is server-only. */
+/** @module Server-side request context. Exports the `RequestEvent` shape, `provideRequestContext` to establish it around a dispatch, `getRequestContext` to read it from anywhere inside the async tree, `redirect` and `sendResponse` for framework-level short-circuits, and `getRequestMeta` for normalized request access. Never import this module in client code — it is server-only. */
 /**
 * Global symbol under which the shared `AsyncLocalStorage` instance is stored
 * on `globalThis`. Keeping it on a `Symbol.for` key makes it instance-stable
@@ -428,7 +449,64 @@ const getRequestContext = () => {
 const redirect = (location, status = 303) => {
 	getRequestContext().redirect(location, status);
 };
+/**
+* Sends a raw JSON response for the current request, bypassing the standard
+* `{ data }` shape. Reads the adapter-bound `send` from the current request
+* context — callable from anywhere inside a server-function tree. Any code in
+* the async tree of a dispatch can call this (e.g. custom middleware) to
+* short-circuit with a specific status code (401, 413, 429, ...).
+* @param status - HTTP status code
+* @param body - JSON-serializable response body
+* @param headers - Optional response headers
+* @throws When called outside of a request
+*/
+const sendResponse = (status, body, headers) => {
+	getRequestContext().send(status, body, headers);
+};
+const pickHeader = (headers, name) => {
+	const value = headers[name];
+	if (typeof value === "string") return value;
+	if (Array.isArray(value)) return value[0];
+};
+/** Normalizes any headers shape into a plain lower-cased record. */
+const toHeaderRecord = (headers) => {
+	if (!headers) return {};
+	if (typeof headers.forEach === "function") {
+		const record = {};
+		headers.forEach((value, key) => {
+			record[key] = value;
+		});
+		return record;
+	}
+	return headers;
+};
+/**
+* Reads normalized, adapter-agnostic request metadata from the current request
+* context. Works with Express `req`, Fastify `req`, Koa `ctx.req`,
+* Hono `c.req` and h3 `event.req` by feature-detecting the request shape
+* (`originalUrl`/`url`/`path`, raw `headers` map vs `Headers`-like API).
+* @param event - The request context to read, typically the result of
+*   {@link getRequestContext}
+*/
+const getRequestMeta = (event) => {
+	const req = event.request;
+	const method = (req?.method ?? "GET").toUpperCase();
+	const rawUrl = req?.originalUrl ?? req?.url ?? req?.path ?? "";
+	const url = safeURL(rawUrl);
+	const headers = toHeaderRecord(req?.headers);
+	const hostHeader = pickHeader(headers, "host");
+	return {
+		method,
+		pathname: url.pathname,
+		search: url.search,
+		searchParams: url.searchParams,
+		headers,
+		host: hostHeader,
+		ip: req?.ip ?? req?.socket?.remoteAddress,
+		protocol: req?.protocol ?? url.protocol.replace(":", "")
+	};
+};
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, scanForServerFiles, scannedServerFiles, serverFunctionsMap, walkGlobFiles };
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsMap, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

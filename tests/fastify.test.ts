@@ -519,6 +519,76 @@ describe("Fastify createRPCMiddleware", () => {
     expect(reply.send).not.toHaveBeenCalled();
   });
 
+  it("should short-circuit with send status, body and headers", async () => {
+    createServerFunction(
+      "fastify-send",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(429, { error: "Rate limit exceeded" }, {
+          "retry-after": "30",
+        });
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-send",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(429);
+    expect(reply.header).toHaveBeenCalledWith("retry-after", "30");
+    expect(reply.send).toHaveBeenCalledWith({ error: "Rate limit exceeded" });
+  });
+
+  it("should short-circuit with send without headers", async () => {
+    createServerFunction(
+      "fastify-send-no-headers",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(204, null);
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-send-no-headers",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(204);
+    expect(reply.header).not.toHaveBeenCalled();
+    expect(reply.send).toHaveBeenCalledWith(null);
+  });
+
+  it("should expose functionName via the request context", async () => {
+    let seenName: string | undefined;
+    createServerFunction(
+      "fastify-context-send",
+      vi.fn().mockImplementation(async () => {
+        seenName = getRequestContext().functionName;
+        return "ok";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-context-send",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(seenName).toBe("fastify-context-send");
+  });
+
   it("should use default 303 when redirect is called without a status", async () => {
     createServerFunction(
       "fastify-redirect-default",
@@ -780,6 +850,39 @@ describe("Fastify createRPCMiddleware", () => {
     await mw(req as never, reply as never, done);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "news");
     expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should dispatch GET functions without args query param", async () => {
+    const fn = vi.fn().mockResolvedValue("no-args");
+    createServerFunction("fastify-public-no-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-public-no-args",
+      method: "GET",
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should return 400 when GET ?args= is not a JSON array", async () => {
+    const fn = vi.fn();
+    createServerFunction("fastify-public-bad-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: `/__rpc/fastify-public-bad-args?args=${
+        encodeURIComponent('{"a":1}')
+      }`,
+      method: "GET",
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).not.toHaveBeenCalled();
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Bad Request" });
   });
 
   it("should return 403 when Origin does not match the configured origin", async () => {
