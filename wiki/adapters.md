@@ -237,7 +237,11 @@ createServer(toNodeListener(app)).listen(3000);
 
 ### Body Size Limits
 
-Use your reverse proxy or a custom middleware to cap body size. h3's `readBody` reads the stream without a built-in limit — see [Best Practices](./best-practices.md).
+Cap request bodies with h3's native `bodyLimit`/`assertBodySize`, which swap `event.req` for a bounded stream (never consumed up-front), or use a reverse proxy. See [Best Practices — Body Limits](./best-practices.md#body-limits) for the pattern, and the extracted `middleware/bodyLimit.js` in the [h3 example](../examples/h3/middleware/bodyLimit.js).
+
+### Static Assets
+
+The h3 example serves built assets from `dist/client` with an extracted `middleware/serveStatic.js` (aliases h3's `serveStatic` from `h3/node`, adds `Content-Length`, `Last-Modified` and `Cache-Control: public, max-age=31536000, immutable`), registered **after** `createRPCMiddleware()` so asset requests never reach server functions and missing files fall through to the SSR handler.
 
 ---
 

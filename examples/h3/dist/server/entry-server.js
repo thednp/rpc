@@ -1,65 +1,5 @@
-import { AsyncLocalStorage } from "node:async_hooks";
+import { createServerFunction } from "@thednp/rpc/server";
 import * as v from "valibot";
-//#region ../../dist/server/server.mjs
-var serverFunctionsMap = /* @__PURE__ */ new Map();
-var OPERATION_ABORTED = "Operation aborted";
-var defaultServerFnOptions = {
-	contentType: "application/json",
-	credentials: "same-origin",
-	method: "POST"
-};
-/**
-* Creates a server-side RPC function.
-* Registers the function in the server functions map and returns a client-compatible
-* wrapper that exposes `data` (Promise) and `cancel` (function) for request lifecycle control.
-* @param name - Unique identifier used by the RPC router to dispatch requests
-* @param handler - The actual implementation receiving an AbortSignal followed by JSON-serializable arguments
-* @param fnOptions - Optional contentType and credentials settings
-* @returns A client stub with `data` promise and `cancel` method, auto-registered in the server map
-*/
-function createServerFunction(name, handler, fnOptions = {}) {
-	const options = Object.assign({}, defaultServerFnOptions, fnOptions);
-	const wrappedFunction = (...args) => {
-		const controller = new AbortController();
-		const cancel = (reason) => controller.abort(reason);
-		const fetcher = async () => {
-			if (controller.signal.aborted) throw new Error(OPERATION_ABORTED);
-			return await handler(controller.signal, ...args);
-		};
-		return {
-			data: fetcher(),
-			cancel
-		};
-	};
-	Object.defineProperties(wrappedFunction, {
-		name: {
-			value: name,
-			enumerable: true,
-			configurable: false
-		},
-		options: {
-			value: options,
-			enumerable: true,
-			configurable: false
-		}
-	});
-	serverFunctionsMap.set(name, {
-		name,
-		handler: wrappedFunction,
-		options
-	});
-	return wrappedFunction;
-}
-/** @module Server-side request context. Exports the `RequestEvent` shape, `provideRequestContext` to establish it around a dispatch, `getRequestContext` to read it from anywhere inside the async tree, and `redirect` for framework-level redirects. Never import this module in client code — it is server-only. */
-/**
-* Global symbol under which the shared `AsyncLocalStorage` instance is stored
-* on `globalThis`. Keeping it on a `Symbol.for` key makes it instance-stable
-* across module copies and dev-server hot reloads, mirroring
-* `solid-js/web`'s own request-context storage.
-*/
-var requestContextSymbol = Symbol.for("thednp.rpc.requestContext");
-globalThis[requestContextSymbol] ??= new AsyncLocalStorage();
-//#endregion
 //#region src/util/helpers.ts
 /**
 * @see https://github.com/thednp/shorty/blob/master/src/misc/normalizeValue.ts
@@ -119,7 +59,7 @@ async function render(_url) {
     <div>
       <h1>Hello World!</h1>
       <p class="read-the-docs">
-        SSR Example using <code>@thednp/rpc</code> with <code>h3</code>
+        SSR Example using <code>@thednp/rpc</code> with <code>H3</code>
       </p>
       <form id="addForm">
         <h2>Form</h2>

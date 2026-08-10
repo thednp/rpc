@@ -168,40 +168,29 @@ app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1MB
 
 ```ts
 // h3
-import { H3 } from "h3";
+import { H3, assertBodySize } from "h3";
 
 const app = new H3();
 
-// Option A: Content-Length fast path + streaming cap (recommended)
+// Cap the body with h3's native stream limit — it swaps `event.req` for a
+// bounded stream, so the cap is enforced *while* the body streams (never
+// buffered in full) and the RPC `readBody` can still consume it afterwards.
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 app.use(async (event, next) => {
-  const contentLength = event.req.headers.get("content-length");
-  if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
+  try {
+    assertBodySize(event, MAX_BODY_SIZE);
+  } catch {
     event.res.status = 413;
     return { error: "Payload Too Large" };
   }
-  let size = 0;
-  let capped = false;
-  const chunks: Buffer[] = [];
-  for await (const chunk of event.req.body) {
-    if (capped) return;
-    size += chunk.length;
-    if (size > MAX_BODY_SIZE) {
-      capped = true;
-      chunks.length = 0;
-      event.res.status = 413;
-      return { error: "Payload Too Large" };
-    }
-    chunks.push(chunk);
-  }
-  // Note: h3's readBody reads the whole stream — this middleware
-  // caps the stream *before* the RPC middleware invokes readBody.
   return next();
 });
 
 app.use(createRPCMiddleware(options));
 ```
+
+> A complete, extracted implementation lives in the [h3 example](../examples/h3/middleware/bodyLimit.js) (`middleware/bodyLimit.js`). Do **not** iterate `for await over event.req` to count bytes before forwarding — that consumes the request stream and the RPC `readBody` will then fail with `Body is unusable`.
 
 In other cases, your custom [server app](../examples/ssr/http-express.ts) can use something like this. Enforce the cap **while the stream is being read** — reading the whole body with `readBody` first and then checking the size still buffers an oversized body in memory, which is exactly what a body limit should prevent:
 ```ts

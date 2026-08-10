@@ -1,14 +1,9 @@
 // server.js
 import fs from "node:fs/promises";
-import path from "node:path";
 import { createServer } from "node:http";
-import { fileURLToPath } from "node:url";
 import { H3 } from "h3";
-import { toNodeListener, serveStatic } from "h3/node";
+import { toNodeListener } from "h3/node";
 import { loadRPCConfig } from "@thednp/rpc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Constants
 const isProduction = process.env.NODE_ENV === "production";
@@ -43,70 +38,19 @@ if (!isProduction) {
   // RPC middleware the plugin registers via configureServer).
   app.use(viteMiddleware(vite));
 } else {
+  const { bodyLimit } = await import("./middleware/bodyLimit.js");
+  const { serveStatic } = await import("./middleware/serveStatic.js");
   const { createRPCMiddleware } = await import("@thednp/rpc/h3");
   const { adapter: _adapter, ...options } = rpcConfig;
 
   // Body size limit — enforced before RPC middleware (defense-in-depth)
-  app.use(async (event, next) => {
-    const contentLength = event.req.headers.get("content-length");
-    if (contentLength && parseInt(contentLength, 10) > 1024 * 1024) {
-      event.res.status = 413;
-      return { error: "Payload Too Large" };
-    }
-    return next();
-  });
+  app.use(bodyLimit);
 
+  // RPC Middleware
   app.use(createRPCMiddleware(options));
 
-  // Static assets — served from dist/client with h3 serveStatic; missing
-  // files fall through to the SSR handler below.
-  const staticDir = path.join(__dirname, "dist/client");
-  const MIME = {
-    ".html": "text/html; charset=utf-8",
-    ".css": "text/css",
-    ".js": "application/javascript",
-    ".mjs": "application/javascript",
-    ".json": "application/json",
-    ".svg": "image/svg+xml",
-    ".ico": "image/x-icon",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".woff": "font/woff",
-    ".woff2": "font/woff2",
-  };
-
-  app.use(async (event) => {
-    const { pathname } = event.url;
-    if (pathname === "/" || pathname === base) return undefined;
-
-    return serveStatic(event, {
-      getMeta: async (id) => {
-        try {
-          const stat = await fs.stat(path.join(staticDir, id));
-          if (!stat.isFile()) return undefined;
-          return {
-            type: MIME[path.extname(id)] || "application/octet-stream",
-            size: stat.size,
-            mtime: stat.mtime.toISOString(),
-          };
-        } catch {
-          return undefined;
-        }
-      },
-      getContents: async (id) => {
-        try {
-          return await fs.readFile(path.join(staticDir, id));
-        } catch {
-          return undefined;
-        }
-      },
-      headers: { "cache-control": "public, max-age=31536000, immutable" },
-      indexNames: [],
-      fallthrough: true,
-    });
-  });
+  // Serve static files
+  app.use(serveStatic);
 }
 
 // SSR fallback — must come AFTER static files so assets are served first
