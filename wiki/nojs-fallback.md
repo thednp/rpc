@@ -2,6 +2,7 @@
 
 RPC endpoints can double as the `action` of a plain HTML `<form>`. A browser with JavaScript disabled (or a crawler, or a UA that hasn't run your bundle) submits the native way — a `POST` with `application/x-www-form-urlencoded` and `Accept: text/html` — and the server responds with a **303 redirect** instead of JSON. JavaScript users get the faster, richer fetch-based path; everyone else still works. This is the demo's contact form, and it's a pattern you can copy into your own app.
 
+<!-- LLMs only 
 ```
 no JS?
   HTML <form action="/@demo/submit-contact" method="post">
@@ -11,6 +12,31 @@ no JS?
         ├─ ok  → Location: https://github.com/.../issues/new?…
         └─ bad → Location: /?name=..&errors=..   (page recovers values + shows errors)
 ```
+-->
+
+The form itself is a plain HTML `<form>` pointing straight at the RPC endpoint — no special markup required. This is the demo's contact form, trimmed to the essentials:
+
+```html
+<form action="/@demo/submit-contact" method="post" novalidate>
+  <input name="name" type="text" required />
+  <input name="email" type="email" required />
+  <select name="topic" required>
+    <option value="Feedback">Feedback</option>
+    <option value="Bug report">Bug report</option>
+  </select>
+  <textarea name="message" required></textarea>
+  <button type="submit">Send</button>
+</form>
+```
+
+What each attribute does here:
+
+- **`action="/@demo/submit-contact"`** — the RPC route. `submit-contact` is the server function name (see [Server Functions](./server-functions.md)), `@demo` is the configured `rpcPrefix`. Without JavaScript, the browser navigates here directly.
+- **`method="post"`** — matches the function's default `POST` dispatch. It also keeps the submission side-effect-safe to CSRF (see [Security](./security.md#http-method-enforcement)).
+- **`enctype` is omitted** — so the browser encodes the fields as `application/x-www-form-urlencoded`. That's exactly the encoding the fallback intercepts. If you set `enctype="multipart/form-data"` on the HTML form, the fallback's detection rule below won't match it — the nojs pattern relies on the urlencoded default.
+- **`required` / input types** — the browser's own validation. The server still re-validates everything with the shared schema; client-side `required` is just the first line of defense (and the demo adds `novalidate` + JS validation to match the server exactly).
+
+> The generated JS client ignores all of this and sends `multipart/form-data` via `fetch` instead — same route, richer payload. The HTML form only carries the no-JS users.
 
 ## Why it works
 
@@ -33,40 +59,21 @@ The fetch client deliberately sends `multipart/form-data` with its default `Acce
 
 ## Anatomy of `createFormFallback`
 
-From `demo/src/lib/form-fallback.ts` — a factory that returns a Connect-compatible middleware for a given RPC route, mounted **before** the RPC middleware:
+The fallback is an app-layer factory that returns a Connect-compatible middleware for a given RPC route, mounted **before** the RPC middleware. The full implementation lives in [demo/src/lib/form-fallback.ts](../demo/src/lib/form-fallback.ts); this section explains the small surface it exposes and how it fits together, so you can write your own for your app.
 
-```ts
-import { readBody, redirect } from "@thednp/rpc/express";
+What the factory does:
 
-export const createFormFallback = ({ rpcPrefix, functionName }) => {
-  const route = `/${rpcPrefix}/${functionName}`;
+1. **Builds the route** from `{ rpcPrefix, functionName }` — the same `/${prefix}/${name}` path the RPC middleware dispatches on.
+2. **Detects native navigations** with the [rule above](#the-detection-rule): `POST` + matching path + `urlencoded` content type + `Accept: text/html`. Anything else falls through via `next()` untouched.
+3. **Reads the fields** with `readBody` from your adapter — it parses the urlencoded stream (or uses the framework's pre-parsed body if a body parser already ran).
+4. **Validates with the shared schema** — `validateContactForm` from [demo/src/lib/contact-form.ts](../demo/src/lib/contact-form.ts), the same one the server function calls, so errors are identical across both paths.
+5. **PRG-redirects** with the `redirect` helper (defaults to `303 See Other`): to the GitHub issue URL on success, or back to `/?name=..&errors=..` on failure.
 
-  return async (req, res, next) => {
-    const contentType = (req.headers["content-type"] ?? "").toLowerCase();
-    const accept = req.headers.accept ?? "";
-    if (!isFormNavigation(req, contentType, accept, route)) return next?.();
-
-    const { data } = await readBody(req);               // urlencoded → parsed object
-    const fields = /* keep string values only */;
-
-    const result = validateContactForm(fields);          // shared schema
-    if (result.ok) {
-      redirect(res, buildIssueUrl(result.output) + "#contact"); // 303
-      return;
-    }
-
-    const search = new URLSearchParams(fields);
-    search.set("errors", Object.keys(result.errors).join(","));
-    redirect(res, `/?${search.toString()}`);              // 303 back to the form
-  };
-};
-```
-
-`readBody` parses the urlencoded stream (or uses the framework's pre-parsed body when a body parser already ran). `redirect` defaults to `303 See Other`.
+The only library pieces it relies on are `readBody` and `redirect` from your adapter's package — both are public API (see [Redirects](./server-functions.md#redirects-redirect)). Everything else is plain HTTP plumbing you can shape however you like.
 
 ## Recovering the form state
 
-The failure redirect points the browser back at the same page with `?name=..&errors=..`. The server renderer and the client hydration both run `parseFormState(location.search)` — see `demo/src/lib/contact-form.ts`:
+The failure redirect points the browser back at the same page with `?name=..&errors=..`. The server renderer and the client hydration both run `parseFormState(location.search)` — see [demo/src/lib/contact-form.ts](../demo/src/lib/contact-form.ts):
 
 - Only **known field names** are read back from the query string (a whitelist), and
 - error messages come from a **static map** — never from the URL.
@@ -77,9 +84,9 @@ So a crafted query string can't inject markup or arbitrary messages. The server-
 
 The fallback is a plain Connect/Express middleware, so it mounts anywhere the RPC middleware can:
 
-- **Vite dev server** — `server.middlewares.use(formFallback)` in a plugin's `configureServer` (see `demo/vite.config.ts`)
-- **Your own `node:http` server** — in the request handler before the RPC middleware (see `demo/server.ts`)
-- **serverless** — inside the function handler before `createRPCMiddleware` (see `demo/netlify/functions/rpc.ts`)
+- **Vite dev server** — `server.middlewares.use(formFallback)` in a plugin's `configureServer` (see [demo/vite.config.ts](../demo/vite.config.ts))
+- **Your own `node:http` server** — in the request handler before the RPC middleware (see [demo/server.ts](../demo/server.ts))
+- **serverless** — inside the function handler before `createRPCMiddleware` (see [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts))
 
 Order matters: **always mount the fallback before the RPC middleware**, so matched navigations never reach the JSON layer.
 
@@ -106,4 +113,3 @@ Order matters: **always mount the fallback before the RPC middleware**, so match
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
 - [Best Practices](./best-practices.md) — Tips and best practices
-- 
