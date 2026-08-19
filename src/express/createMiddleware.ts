@@ -18,8 +18,8 @@ import {
   hasContentTypeMismatch,
   provideRequestContext,
   scanForServerFiles,
-  serverFunctionsMap,
 } from "@thednp/rpc/server";
+import { getFunctionsForPrefix } from "../functionsMap.ts";
 import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
 import {
   getRequestDetails,
@@ -85,7 +85,8 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
     const { url } = getRequestDetails(req);
 
     // When serving from production server, scan for server files
-    if (serverFunctionsMap.size === 0) {
+    const prefixMap = getFunctionsForPrefix(rpcPrefix || "__rpc");
+    if (prefixMap.size === 0) {
       await scanForServerFiles();
     }
 
@@ -115,9 +116,11 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
 
 /**
  * Creates the Express RPC middleware that routes incoming requests to registered server functions.
- * Reads the request body, dispatches to the matching function via serverFunctionsMap,
+ * Reads the request body, dispatches to the matching function via getFunctionsForPrefix,
  * and sends the JSON-serialized result. Handles client disconnection via abort signals.
- * @param initialOptions - Options including rpcPrefix for URL routing
+ * Supports multi-prefix setups where different middleware instances can route to functions
+ * registered under different prefixes.
+ * @param initialOptions - Options including rpcPrefix for URL routing and prefix-scoped function lookup
  * @returns An Express middleware function
  */
 export const createRPCMiddleware: ExpressMiddlewareFn = (
@@ -167,7 +170,9 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
       }
 
       const functionName = path.replace(prefixReplace, "");
-      const serverFunction = serverFunctionsMap.get(functionName);
+      // Look up function in the prefix-scoped map
+      const serverFunctionsForPrefix = getFunctionsForPrefix(rpcPrefix || "__rpc");
+      const serverFunction = serverFunctionsForPrefix.get(functionName);
 
       if (!serverFunction) {
         sendResponse(404, { error: FUNCTION_NOT_FOUND });
@@ -207,7 +212,7 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
           }
           const body = await readBody(req);
           args = Array.isArray(body.data)
-            ? body.data as JsonValue[]
+            ? (body.data as JsonValue[])
             : [body.data as JsonValue];
         }
         // ─── Dispatch ────────────────────────────────────────────────────

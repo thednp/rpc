@@ -5,7 +5,7 @@ import type {
   RpcPluginOptionsInternal,
   ServerFunctionOptions,
 } from "./types.d.ts";
-import { serverFunctionsMap } from "./functionsMap.ts";
+import { getFunctionsForPrefix } from "./functionsMap.ts";
 import {
   validateCredentials,
   validateIdentifier,
@@ -85,8 +85,8 @@ export const ${safeFnEntry} = (...args) => {
 
 /**
  * Generates the complete client-side module bundle by iterating all registered server functions
- * and producing fetch-based stubs for each. The result is transformed by Vite (or Oxc) during
- * the dev server or production build.
+ * for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
+ * (or Oxc) during the dev server or production build.
  * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
  * @returns A string of JavaScript code with all client RPC modules and their import dependencies
  */
@@ -95,17 +95,21 @@ export const getClientModules = (
 ): string => {
   // Validate prefix once at the top level
   validatePathSegment(initialOptions.rpcPrefix, "rpcPrefix");
-  const entries = Array.from(serverFunctionsMap.entries())
+
+  // Get functions registered for this specific prefix
+  const prefixMap = getFunctionsForPrefix(initialOptions.rpcPrefix);
+  const entries = Array.from(prefixMap.entries())
     .filter(([, entry]) => entry.exportName)
     .map(([registeredName, entry]) =>
       getModule(registeredName, entry.exportName!, {
         ...initialOptions,
         ...((entry.options as ServerFunctionOptions) || {}),
-      })
+      }),
     )
     .join("\n");
+
   const output = `
-// Client-side RPC modules
+// Client-side RPC modules for prefix: ${initialOptions.rpcPrefix}
 import { innerModule } from "@thednp/rpc/helpers";
 ${entries}`;
 
