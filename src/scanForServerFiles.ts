@@ -4,7 +4,7 @@ import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
 
-import { serverFunctionsMap } from "./functionsMap.ts";
+import { getFunctionsForPrefix } from "./functionsMap.ts";
 import { walkGlobFiles } from "./server-helpers.ts";
 import {
   DUPLICATE_FUNCTION_NAME,
@@ -21,7 +21,7 @@ const EXACT_NAMES = ["server.ts", "server.js", "server.mjs", "server.mts"];
 
 /**
  * Scans `src/api/` (or an explicit `scanRoot`) for server function files
- * and populates the global `serverFunctionsMap` with their exported functions.
+ * and populates the server functions map (scoped by rpcPrefix) with their exported functions.
  * Uses Vite's SSR module loading to resolve and execute each file.
  *
  * Supports two matching modes via `config.serverFiles`:
@@ -47,13 +47,13 @@ export const scanForServerFiles = async (
   const { createServer, normalizePath } = await import("vite");
   const config = (!initialCfg && !devServer) || !initialCfg
     ? {
-      root: process.cwd(),
-      base: process.env.BASE || "/",
-      server: { middlewareMode: true },
-    }
+        root: process.cwd(),
+        base: process.env.BASE || "/",
+        server: { middlewareMode: true },
+      }
     : {
-      ...initialCfg,
-    };
+        ...initialCfg,
+      };
 
   let server = devServer;
   if (!server) {
@@ -123,11 +123,10 @@ export const scanForServerFiles = async (
         return;
       }
 
-      // `createServerFunction` auto-registers its name into the map at module
-      // load, so the global map cannot be used for duplicate detection across
-      // scans (dev re-scans the same modules via the same or fresh Vite graphs).
-      // Track names seen in THIS scan run only: a name repeated within one scan
-      // (e.g. two files exporting the same function name) is a genuine conflict.
+      // `createServerFunction` auto-registers its name into the appropriate
+      // prefix-scoped map at module load. Track names seen in THIS scan run only:
+      // a name repeated within one scan (e.g. two files exporting the same function
+      // name with the same prefix) is a genuine conflict.
       for (const [exportName, exportValue] of moduleEntries) {
         const registeredName = exportValue.name;
         if (seenNames.has(registeredName)) {
@@ -138,12 +137,8 @@ export const scanForServerFiles = async (
           continue;
         }
         seenNames.add(registeredName);
-        serverFunctionsMap.set(registeredName, {
-          name: registeredName,
-          handler: exportValue,
-          options: exportValue?.options,
-          exportName,
-        });
+        // Functions already registered in their prefix-scoped map via createServerFunction,
+        // so this is just recording that we've seen the export
       }
     }
   } finally {
