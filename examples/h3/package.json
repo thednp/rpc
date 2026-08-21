@@ -12,8 +12,8 @@
     "start": "NODE_ENV=production node server"
   },
   "dependencies": {
-    "@thednp/rpc": "^0.2.1",
-    "h3": "2.0.1-rc.28",
+    "@thednp/rpc": "^0.3.0",
+    "h3": "2.0.1-rc.29",
     "valibot": "^1.4.2",
     "vite": "^8.2.2"
   },

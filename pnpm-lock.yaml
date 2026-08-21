@@ -21,8 +21,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       h3:
-        specifier: 2.0.1-rc.28
-        version: 2.0.1-rc.28
+        specifier: 2.0.1-rc.29
+        version: 2.0.1-rc.29
       hono:
         specifier: ^4.13.3
         version: 4.13.3
@@ -34,7 +34,7 @@ importers:
         version: 8.2.2(@types/node@26.2.0)
     devDependencies:
       '@hono/node-server':
-        specifier: '>=2.1.1'
+        specifier: ^2.1.1
         version: 2.1.1(hono@4.13.3)
       '@types/express':
         specifier: ^5.0.6
@@ -163,8 +163,8 @@ importers:
         specifier: ^0.2.1
         version: 0.2.1(@types/node@26.2.0)(supports-color@7.2.0)
       h3:
-        specifier: 2.0.1-rc.28
-        version: 2.0.1-rc.28
+        specifier: 2.0.1-rc.29
+        version: 2.0.1-rc.29
       valibot:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.2)
@@ -1479,12 +1479,12 @@ packages:
       crossws:
         optional: true
 
-  h3@2.0.1-rc.28:
-    resolution: {integrity: sha512-WRP8f/X9J4tfmgjungKaeJU+ONcuzRR3Q/JpJ7317haVRZJ/vNc7niVWRbch5m3815zQbSj4Y8Mjr+Tdzng82A==}
+  h3@2.0.1-rc.29:
+    resolution: {integrity: sha512-woEUYLvpUa9SzbBGOYn3GfsK/EU7JhoUeNc49B2an6mcO1aqg7P8VvWVUfa5Vkb8FxBh9ZAkU+/rJ5m5pTULUA==}
     engines: {node: '>=20.11.1'}
     hasBin: true
     peerDependencies:
-      crossws: ^0.4.11
+      crossws: ^0.4.12
       ocache: '>=0.3.0'
     peerDependenciesMeta:
       crossws:
@@ -1803,9 +1803,9 @@ packages:
     resolution: {integrity: sha512-myRT3DiWPHqho5PrJaIRyaMv2kgYf0mUVgBNOYMuCH5Ki1yEiQaf/ZJuQ62nvpc44wL5WDbTX7yGJi1Neevw8w==}
     engines: {node: '>= 0.6'}
 
-  negotiator@1.0.0:
-    resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
-    engines: {node: '>= 0.6'}
+  negotiator@1.1.0:
+    resolution: {integrity: sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg==}
+    engines: {node: '>=18'}
 
   node-releases@2.0.53:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
@@ -3006,7 +3006,7 @@ snapshots:
   accepts@2.0.0:
     dependencies:
       mime-types: 3.0.2
-      negotiator: 1.0.0
+      negotiator: 1.1.0
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
@@ -3398,7 +3398,7 @@ snapshots:
       rou3: 0.9.2
       srvx: 0.12.7
 
-  h3@2.0.1-rc.28:
+  h3@2.0.1-rc.29:
     dependencies:
       rou3: 0.9.2
       srvx: 0.12.7
@@ -3682,7 +3682,9 @@ snapshots:
 
   negotiator@0.6.4: {}
 
-  negotiator@1.0.0: {}
+  negotiator@1.1.0:
+    dependencies:
+      content-type: 2.1.0
 
   node-releases@2.0.53: {}
 
