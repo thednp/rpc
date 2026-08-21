@@ -210,7 +210,7 @@ describe("createServerFunction", () => {
     expect(entries.length).toBeGreaterThanOrEqual(2);
 
     const values = [...serverFunctionsMap.values()];
-    expect(values.every((entry) => typeof entry.handler).toBeTruthy);
+    values.every((entry) => expect(typeof entry.handler).toBeTruthy);
 
     const forEachNames: string[] = [];
     serverFunctionsMap.forEach((entry, key) => {
