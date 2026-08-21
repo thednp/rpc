@@ -34,7 +34,7 @@ importers:
         version: 8.2.2(@types/node@26.2.0)
     devDependencies:
       '@hono/node-server':
-        specifier: ^2.1.1
+        specifier: '>=2.1.1'
         version: 2.1.1(hono@4.13.3)
       '@types/express':
         specifier: ^5.0.6
@@ -67,8 +67,8 @@ importers:
   examples/advanced:
     dependencies:
       '@thednp/rpc':
-        specifier: link:../..
-        version: link:../..
+        specifier: ^0.3.0
+        version: 0.3.0(@types/node@26.2.0)(supports-color@7.2.0)
       compression:
         specifier: ^1.8.1
         version: 1.8.1(supports-color@7.2.0)
