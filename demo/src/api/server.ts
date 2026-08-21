@@ -1,6 +1,7 @@
 import { createServerFunction } from "@thednp/rpc/server";
 import pkg from "../../package.json" with { type: "json" };
 import rootPkg from "../../../package.json" with { type: "json" };
+import cfg from "../../rpc.config.ts";
 
 import {
   CONTACT_FIELDS,
@@ -10,7 +11,7 @@ import {
 
 // Serverless requires explicit handling
 import { setGlobalPrefix } from "@thednp/rpc/server";
-setGlobalPrefix("@demo");
+setGlobalPrefix(cfg.rpcPrefix);
 
 export const sayHi = createServerFunction(
   "say-hi",

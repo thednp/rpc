@@ -10,12 +10,11 @@ import { createFormFallback } from "../../src/lib/form-fallback.ts";
 import "../../src/api/server.ts";
 
 // Serverless requires explicit handling
-// import cfg from "../../rpc.config.ts";
-// console.log(cfg)
+import cfg from "../../rpc.config.ts";
 
-const rpc = createRPCMiddleware({ rpcPrefix: "@demo" });
+const rpc = createRPCMiddleware({ rpcPrefix: cfg.rpcPrefix });
 const formFallback = createFormFallback({
-  rpcPrefix: "@demo",
+  rpcPrefix: cfg.rpcPrefix,
   functionName: "submit-contact",
 });
 
@@ -27,7 +26,7 @@ const app = (req: any, res: any, next: any) => {
   if (url.pathname.startsWith(marker)) {
     const search = url.search || "";
     req.url =
-      "/@demo/" + url.pathname.slice(marker.length) + search;
+      `/${cfg.rpcPrefix}/` + url.pathname.slice(marker.length) + search;
   }
   // serverless-http sets req.body to the raw event body string, which
   // readBody would mistake for a pre-parsed body — force the stream path.

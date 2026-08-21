@@ -1,5 +1,3 @@
-import { defineConfig } from '@thednp/rpc';
-
-export default defineConfig({
+export default {
   rpcPrefix: "@demo",
-});
+};
