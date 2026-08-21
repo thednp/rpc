@@ -10,8 +10,7 @@ import {
 
 // Serverless requires explicit handling
 import { setGlobalPrefix } from "@thednp/rpc/server";
-import cfg from "../../rpc.config.ts";
-setGlobalPrefix(cfg.rpcPrefix);
+setGlobalPrefix("@demo");
 
 export const sayHi = createServerFunction(
   "say-hi",
