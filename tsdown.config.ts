@@ -97,6 +97,14 @@ export default defineConfig([
     },
     outDir: "dist/helpers",
   },
+  // vite-free config helpers
+  {
+    ...sharedCfg,
+    entry: {
+      config: "src/config.ts",
+    },
+    outDir: "dist/config",
+  },
   // vite plugin last
   {
     ...sharedCfg,

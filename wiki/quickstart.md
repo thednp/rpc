@@ -27,7 +27,7 @@ pnpm add @thednp/rpc valibot # or your validator of choice
 Create `rpc.config.ts`:
 
 ```ts
-import { defineConfig } from "@thednp/rpc";
+import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: "__A_server",

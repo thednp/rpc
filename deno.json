@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "keywords": [
@@ -17,6 +17,7 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
+    "./config": "./src/config.ts",
     "./express": "./src/express/index.ts",
     "./fastify": "./src/fastify/index.ts",
     "./fastify/plugin": "./src/fastify/plugin.ts",
@@ -28,6 +29,7 @@
   },
   "imports": {
     "@thednp/rpc": "./src/index.ts",
+    "@thednp/rpc/config": "./src/config.ts",
     "@thednp/rpc/server": "./src/server.ts",
     "@thednp/rpc/express": "./src/express/index.ts",
     "@thednp/rpc/fastify": "./src/fastify/index.ts",

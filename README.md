@@ -169,7 +169,7 @@ npm i @thednp/rpc
 Create `rpc.config.ts` at your project root:
 
 ```ts
-import { defineConfig } from "@thednp/rpc";
+import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   adapter: "express",

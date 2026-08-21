@@ -222,7 +222,13 @@ const EXACT_NAMES = [
 */
 const scanForServerFiles = async (initialCfg, devServer) => {
 	if (isScanned && !devServer) return;
-	const { createServer, normalizePath } = await import("vite");
+	let createServer;
+	let normalizePath;
+	try {
+		({createServer, normalizePath} = await import("vite"));
+	} catch {
+		return;
+	}
 	const config = !initialCfg && !devServer || !initialCfg ? {
 		root: process.cwd(),
 		base: process.env.BASE || "/",
@@ -310,15 +316,6 @@ const loadConfigFile = async (env, file) => {
 			configFile: file
 		}
 	} : null;
-};
-/**
-* Type-safe helper to create an RPC configuration object.
-* Merges the provided partial config with built-in defaults.
-* @param uniConfig - System-wide RPC configuration overrides
-* @returns Complete RPC plugin options with defaults applied
-*/
-const defineConfig = (uniConfig) => {
-	return mergeConfig(defaultRPCOptions, uniConfig);
 };
 let RPCConfig;
 /**
@@ -466,6 +463,6 @@ function rpcPlugin(devOptions = {}) {
 	};
 }
 //#endregion
-export { rpcPlugin as default, defineConfig, loadRPCConfig };
+export { rpcPlugin as default, loadRPCConfig };
 
 //# sourceMappingURL=index.mjs.map

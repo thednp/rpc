@@ -1,4 +1,4 @@
-import { defineConfig } from "../../src/index.ts";
+import { defineConfig } from "../../src/config.ts";
 
 export default defineConfig({
   rpcPrefix: "_sv",

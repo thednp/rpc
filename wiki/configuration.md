@@ -7,7 +7,7 @@ Every option in `rpc.config.ts`, the Vite plugin options (development overrides)
 Create `rpc.config.ts` in your project root for system-wide configuration:
 
 ```ts
-import { defineConfig } from '@thednp/rpc';
+import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: '__rpc',
@@ -57,15 +57,17 @@ The first file found is used. If none is found, defaults are applied.
 
 ### `defineConfig`
 
-Type-safe helper for creating the config object. Provides autocomplete and type checking for all options.
+Type-safe helper for creating the config object. Provides autocomplete and type checking for all options. Imported from **`@thednp/rpc/config`** — a Vite-free subpath so config files never drag the plugin (and Vite) into server-side bundles:
 
 ```ts
-import { defineConfig } from '@thednp/rpc';
+import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: '__rpc',
 });
 ```
+
+> **Why not from the main entry?** `@thednp/rpc` is a Vite plugin and statically imports Vite. Any server-side file that imports it — including a serverless function bundle that merely reads your config — would require `vite` at runtime and crash where Vite isn't installed. The `/config` subpath has zero dependencies.
 
 ### `loadRPCConfig`
 

@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -38,6 +38,7 @@
   ],
   "exports": {
     ".": "./dist/index.mjs",
+    "./config": "./dist/config/config.mjs",
     "./express": "./dist/express/express.mjs",
     "./fastify": "./dist/fastify/fastify.mjs",
     "./fastify/plugin": "./dist/fastify/plugin/fastify/plugin.mjs",

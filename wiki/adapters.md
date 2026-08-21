@@ -247,26 +247,26 @@ The h3 example serves built assets from `dist/client` with an extracted `middlew
 
 ### Serverless
 
-Serverless environments (Netlify, Vercel, Cloudflare Workers with Node compat, etc.) work with any adapter via the same `createRPCMiddleware` factory. The only difference is how the global prefix is set.
+Serverless environments (Netlify, Vercel, Cloudflare Workers with Node compat, etc.) work with any adapter via the same `createRPCMiddleware` factory. Two rules keep deployments crash-free:
 
-In a regular SSR server, `loadRPCConfig()` runs before your server functions are imported, so it automatically calls `setGlobalPrefix(config.rpcPrefix)` for you:
+**1. Import `defineConfig` from `@thednp/rpc/config`, never from the main entry.**
+
+`@thednp/rpc` is a Vite plugin and statically imports Vite. A serverless function bundle that transitively imports the main entry (e.g. via `rpc.config.ts` using `defineConfig`) emits a `require("vite")` at cold start — where Vite isn't installed — and crashes with `Cannot find module 'vite'`. The `/config` subpath has zero dependencies:
 
 ```ts
-// Regular SSR — prefix is set by loadRPCConfig
-const config = await loadRPCConfig();
-await attachRPC(app);
-// attachRPC or your own imports pull in src/api/server.ts after the prefix is set
+// rpc.config.ts
+import { defineConfig } from "@thednp/rpc/config";
+
+export default defineConfig({ rpcPrefix: "@demo" });
 ```
 
-In serverless, ESM static imports are hoisted — they execute before any other module body code. So `import "./src/api/server.ts"` runs before `await loadRPCConfig()` returns, meaning `createServerFunction` calls inside that file see `getGlobalPrefix() === undefined` and register under the wrong prefix.
+**2. Set the prefix in `src/api/server.ts`, before any `createServerFunction` call.**
 
-**Workaround**: call `setGlobalPrefix` directly in the `server.ts` file:
+ESM static imports are hoisted — `import "./src/api/server.ts"` in your function file executes before any `await loadRPCConfig()` returns. Setting the prefix at the top of the server module itself guarantees every function registers correctly regardless of import order:
 
 ```ts
 // src/api/server.ts
-import { setGlobalPrefix, createServerFunction } from "@thednp/rpc/server";
-
-// This is for serverless
+import { createServerFunction, setGlobalPrefix } from "@thednp/rpc/server";
 import cfg from "../rpc.config.ts";
 setGlobalPrefix(cfg.rpcPrefix);
 
@@ -275,10 +275,24 @@ export const sayHi = createServerFunction(
   async (signal, prop) => {
     // do your thing
   }
-)
+);
 ```
 
-In serverless environments you have to make sure the prefix is already set by the time `createServerFunction` runs in `src/api/server.ts`. See the working example in [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts).
+The function handler then imports the server module and mounts middleware with the same config:
+
+```ts
+// netlify/functions/rpc.ts
+import serverless from "serverless-http";
+import { createRPCMiddleware } from "@thednp/rpc/express";
+import "../../src/api/server.ts";
+import cfg from "../../rpc.config.ts";
+
+const rpc = createRPCMiddleware({ rpcPrefix: cfg.rpcPrefix });
+// ... stack + handler
+export const handler = serverless(app);
+```
+
+See the working example in [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts). For Netlify specifically, `[functions] external_node_modules = ["vite"]` in `netlify.toml` keeps Vite out of the function zip as a size optimization.
 
 > **Next:** [Security](./security.md) — the threats the framework handles for you and what it expects you to own.
 

@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.3.1] - 2026-08-21
+
+### Breaking Changes
+
+- **`defineConfig` moved to `@thednp/rpc/config`**: the config helper no longer ships from the main plugin entry. `@thednp/rpc` statically imports Vite (it *is* a Vite plugin), so any server-side file importing it — including a serverless function bundle that merely reads your `rpc.config.ts` — would emit a runtime `require("vite")` and crash at cold start on platforms where Vite isn't installed (Netlify: `Runtime.ImportModuleError: Cannot find module 'vite'` → 502). The new `/config` subpath has zero dependencies, making serverless deployments behave like any other Express server. Update one import line in `rpc.config.ts`: `import { defineConfig } from "@thednp/rpc/config"`. All examples and the demo updated; `tests/fixtures/*` configs now import from source to stay resolution-safe before publish
+- **demo Netlify function hardened** (`demo/netlify/functions/rpc.ts`): URL rewrite reconstructs the path from `cfg.rpcPrefix` instead of a hardcoded `"/@demo/"`; `serverless-http` moved from devDependencies to dependencies (it is runtime code inside the function bundle)
+
+### Added
+
+- **Vite-free `defineConfig` module** (`src/config.ts`, built to `dist/config/config.mjs`): merges partial config over `defaultRPCOptions`, skipping explicitly `undefined` values so callers can't accidentally blank out defaults; zero runtime dependencies (type-only import erased at build)
+- **`./config` subpath export**: wired into `package.json` exports and `deno.json` exports/imports maps; new tsdown build entry alongside the existing adapter/helper entries
+
+### Removed
+
+- **`ensurePrefixFromGlobal` deleted** (`src/functionsMap.ts`) together with its call sites across all five adapter `createMiddleware` files — the copy-from-default-prefix fallback is superseded by the explicit prefix bootstrap below; also removed dead commented `setGlobalPrefix` calls from the adapters and `src/index.ts`
+- **Serverless prefix bootstrap made explicit**: `setGlobalPrefix(cfg.rpcPrefix)` at the top of `src/api/server.ts` replaces implicit framework magic — static-import hoisting guarantees it runs before any `createServerFunction`, regardless of import order in the host function bundle (`demo/src/api/server.ts`)
+
+### Docs
+
+- `wiki/adapters.md` **Serverless section rewritten** around two rules: (1) import `defineConfig` from `@thednp/rpc/config`, never the main entry, with the cold-start crash explained; (2) set the prefix at the top of `src/api/server.ts`; references the working [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts) and keeps `netlify.toml external_node_modules = ["vite"]` documented as a size optimization
+- `wiki/configuration.md` — `defineConfig` section documents the `/config` subpath and why the main entry must never be imported server-side
+- `README.md`, `wiki/quickstart.md`, `wiki/getting-started.md` — all `rpc.config.ts` snippets switched to `@thednp/rpc/config`
+- `AGENTS.md` — h3 added to the adapter list and body-size-limits row (`bodyLimit`/`assertBodySize`); build output table gains `dist/config/config.mjs`
+- `llms.txt` — config section notes the vite-free subpath and its serverless rationale
+
+### Tests
+
+- Fixtures (`tests/fixtures/*.config.ts`) import `defineConfig` from source instead of the main entry, keeping `loadRPCConfig` suites green before publish
+- "load config from file" suite targets `examples/advanced/rpc.config.ts` (the `link:../..` example) so it resolves current source including the unpublished `./config` export
+- New coverage: `defineConfig` skips explicitly `undefined` values back to defaults — **428 tests, 100% on all metrics**
+
+### Fixed
+
+- **Graceful scan without Vite** (`src/scanForServerFiles.ts`): the lazy `import("vite")` is now wrapped in try/catch — when Vite isn't installed (serverless bundles where it's externalized or absent), the scan exits silently instead of crashing the host cold start with `Runtime.ImportModuleError: Cannot find module 'vite'` → 502. Defense-in-depth for deployments whose function bundle doesn't import its server module directly; covered by a new suite that mocks Vite as missing (`tests/scan.test.ts`) — **429 tests, 100% on all metrics**
+- **demo `rpc.config.ts` restored to `defineConfig`**: the plain-object workaround from the Netlify debugging session is retired — the config file now uses the documented `defineConfig({ rpcPrefix: "@demo" })` from `@thednp/rpc/config`, proving the vite-free subpath works end-to-end inside the live Netlify function bundle
+
 ## [0.3.0] - 2026-08-21
 
 ### Features

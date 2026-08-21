@@ -22,6 +22,26 @@ afterEach(() => {
 const originalCwd = process.cwd();
 
 describe("scanForServerFiles", () => {
+  it("should exit gracefully when vite is not installed (serverless cold start)", async () => {
+    // Simulate a serverless bundle where Vite is externalized/absent: the
+    // dynamic `import("vite")` inside scanForServerFiles rejects. The scan
+    // must return without throwing instead of crashing the host runtime.
+    vi.resetModules();
+    vi.doMock("vite", () => {
+      throw new Error("Cannot find module 'vite'");
+    });
+    try {
+      const { scanForServerFiles: freshScan } = await import(
+        "../src/scanForServerFiles.ts"
+      );
+      await expect(freshScan()).resolves.toBeUndefined();
+      expect(serverFunctionsMap.size).toBe(0);
+    } finally {
+      vi.doUnmock("vite");
+      vi.resetModules();
+    }
+  });
+
   it("should scan real example server files from examples/express", async () => {
     // const { scanForServerFiles } = await import("../src/scanForServerFiles");
     // Change to examples/express so process.cwd() points to the example

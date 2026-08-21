@@ -13,13 +13,13 @@
   },
   "dependencies": {
     "@thednp/rpc": "link:..",
+    "serverless-http": "^4.0.0",
     "vite": "^8.2.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "daisyui": "^5.7.19",
     "picocolors": "^1.1.1",
-    "serverless-http": "^4.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
     "valibot": "^1.4.2"

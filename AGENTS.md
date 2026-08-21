@@ -81,6 +81,7 @@ Each example follows the same structure:
 The tsdown.config.ts produces multiple entries:
 
 - `dist/index.mjs` — main Vite plugin
+- `dist/config/config.mjs` — vite-free `defineConfig` (safe for serverless bundles)
 - `dist/server/server.mjs` — standalone server
 - `dist/express/express.mjs` — Express middleware
 - `dist/fastify/fastify.mjs` — Fastify middleware

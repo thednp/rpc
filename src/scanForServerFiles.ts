@@ -45,7 +45,18 @@ export const scanForServerFiles = async (
   // the API module) free of a static Vite dependency — when Vite is
   // externalized by the function bundler, this lazy import is left as a
   // runtime require that is never executed.
-  const { createServer, normalizePath } = await import("vite");
+  let createServer: typeof import("vite").createServer;
+  let normalizePath: typeof import("vite").normalizePath;
+  try {
+    ({ createServer, normalizePath } = await import("vite"));
+  } catch {
+    // Vite is not installed in this environment (e.g. a serverless bundle
+    // where Vite is externalized or absent). Server functions must have been
+    // imported directly into the prefix-scoped map; nothing to scan — exit
+    // gracefully instead of crashing the host's cold start with
+    // `Cannot find module 'vite'`.
+    return;
+  }
   const config = (!initialCfg && !devServer) || !initialCfg
     ? {
       root: process.cwd(),

@@ -1,4 +1,4 @@
-/** @module Main entrypoint for the RPC Vite plugin. Exports `rpcPlugin` (default), `defineConfig`, and `loadRPCConfig`. */
+/** @module Main entrypoint for the RPC Vite plugin. Exports `rpcPlugin` (default) and `loadRPCConfig`. For a Vite-free `defineConfig`, use `@thednp/rpc/config`. */
 import type { ConfigEnv, Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { loadConfigFromFile, mergeConfig } from "vite";
 import { resolve } from "node:path";
@@ -38,18 +38,6 @@ const loadConfigFile = async (env: ConfigEnv, file: string) => {
   return result
     ? { ...result, config: { ...result.config, configFile: file } }
     : /* istanbul ignore next */ null;
-};
-
-/**
- * Type-safe helper to create an RPC configuration object.
- * Merges the provided partial config with built-in defaults.
- * @param uniConfig - System-wide RPC configuration overrides
- * @returns Complete RPC plugin options with defaults applied
- */
-const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions = (
-  uniConfig: Partial<RpcPluginOptions>,
-) => {
-  return mergeConfig(defaultRPCOptions, uniConfig) as RpcPluginOptions;
 };
 
 let RPCConfig: RpcPluginOptions;
@@ -139,12 +127,9 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
     RPCConfig = defaultRPCOptions;
     // Last call load defaults no matter what
     console.warn(NO_CONFIG_FOUND);
-    // return defaultRPCOptions as RpcPluginOptions;
-    // RPCConfig = defaultRPCOptions;
   } catch (error) {
     RPCConfig = defaultRPCOptions;
     console.warn(FAILED_LOAD_CONFIG, error);
-    // return defaultRPCOptions as RpcPluginOptions;
   }
 
   setGlobalPrefix(RPCConfig.rpcPrefix);
@@ -178,7 +163,6 @@ function rpcPlugin(
     async configResolved(resolvedConfig) {
       const uniConfig = await loadRPCConfig();
       options = mergeConfig(uniConfig, devOptions) as RpcPluginOptions;
-      // setGlobalPrefix(options.rpcPrefix);
 
       config = resolvedConfig;
     },
@@ -272,6 +256,6 @@ function rpcPlugin(
 }
 
 export { rpcPlugin as default };
-export { defineConfig, loadRPCConfig };
+export { loadRPCConfig };
 export type * from "./types.d.ts";
 export {};

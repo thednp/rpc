@@ -225,7 +225,13 @@ const EXACT_NAMES = [
 */
 const scanForServerFiles = async (initialCfg, devServer) => {
 	if (isScanned && !devServer) return;
-	const { createServer, normalizePath } = await import("vite");
+	let createServer;
+	let normalizePath;
+	try {
+		({createServer, normalizePath} = await import("vite"));
+	} catch {
+		return;
+	}
 	const config = !initialCfg && !devServer || !initialCfg ? {
 		root: process.cwd(),
 		base: process.env.BASE || "/",

@@ -81,9 +81,11 @@ describe("loadRPCConfig", () => {
   });
 
   it("should load config from file", async () => {
-    const cfg = await loadRPCConfig("examples/hono/rpc.config.ts");
-    expect(cfg.adapter).toBe("hono");
-    expect(cfg.rpcPrefix).toBe("_server");
+    // advanced uses `link:../..` so the test resolves against the current
+    // source (including the unpublished ./config export)
+    const cfg = await loadRPCConfig("examples/advanced/rpc.config.ts");
+    expect(cfg.adapter).toBe("express");
+    expect(cfg.rpcPrefix).toBe("public:rpc");
   });
 
   it("should fallback to defaults for missing file", async () => {

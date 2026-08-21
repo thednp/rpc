@@ -79,7 +79,7 @@ Each matched file is loaded with `vite.ssrLoadModule`, and all named exports are
 ### 1. Config system-wide configuration `rpc.config.ts`
 
 ```ts
-import { defineConfig } from "@thednp/rpc";
+import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: "__rpc",

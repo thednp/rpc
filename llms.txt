@@ -23,7 +23,7 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - See `wiki/wire-protocol.md` for full curl examples
 
 ## Config
-- `rpc.config.ts` with `defineConfig({ rpcPrefix: "__rpc", adapter: "express" | "fastify" | "hono" | "koa" | "h3" })`
+- `rpc.config.ts` imports `defineConfig` from `@thednp/rpc/config` (vite-free subpath — safe for serverless bundles): `defineConfig({ rpcPrefix: "__rpc", adapter: "express" | "fastify" | "hono" | "koa" | "h3" })`
 - `serverFiles: "exact" | "glob"` — `"exact"` (default) matches `server.ts|js|mjs|mts`; `"glob"` recursively matches `*.server.{ts,js,mjs,mts}` under the scan root
 - `scanRoot: string` — scan directory (default `<root>/src/api`); point it at a shared package in monorepos
 - `loadRPCConfig()` loads config programmatically

@@ -26,7 +26,8 @@ import {
   createRPCMiddleware,
 } from "../src/express/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
-import rpcPlugin, { defineConfig, loadRPCConfig } from "../src/index.ts";
+import rpcPlugin, { loadRPCConfig } from "../src/index.ts";
+import { defineConfig } from "../src/config.ts";
 import {
   makeNext,
   makeReq,
@@ -965,6 +966,17 @@ describe("plugin lifecycle", () => {
     const cfg = defineConfig({ adapter: "hono" });
     expect(cfg.adapter).toBe("hono");
     expect(cfg.rpcPrefix).toBe("__rpc");
+  });
+
+  it("defineConfig should skip explicitly undefined values", () => {
+    const cfg = defineConfig({
+      adapter: undefined,
+      rpcPrefix: "_x",
+      serverFiles: undefined,
+    });
+    expect(cfg.adapter).toBe("express");
+    expect(cfg.rpcPrefix).toBe("_x");
+    expect(cfg.serverFiles).toBe("exact");
   });
 
   // it("config() should return SSR noExternal config", async () => {

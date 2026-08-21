@@ -449,13 +449,6 @@ type InnerModReturn<T extends JsonValue> = {
 //#endregion
 //#region src/index.d.ts
 /**
- * Type-safe helper to create an RPC configuration object.
- * Merges the provided partial config with built-in defaults.
- * @param uniConfig - System-wide RPC configuration overrides
- * @returns Complete RPC plugin options with defaults applied
- */
-declare const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions;
-/**
  * Loads the RPC configuration by searching for config files in the project root.
  * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
  * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
@@ -472,5 +465,5 @@ declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
  */
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin;
 //#endregion
-export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type StubOptions, type SupportableContentType, rpcPlugin as default, defineConfig, loadRPCConfig };
+export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type StubOptions, type SupportableContentType, rpcPlugin as default, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map
