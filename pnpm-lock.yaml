@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@hono/node-server': '>=2.1.0'
+  '@hono/node-server': '>=2.1.1'
 
 importers:
 
@@ -182,7 +182,7 @@ importers:
   examples/hono:
     dependencies:
       '@hono/node-server':
-        specifier: '>=2.1.0'
+        specifier: '>=2.1.1'
         version: 2.1.1(hono@4.13.3)
       '@thednp/rpc':
         specifier: ^0.2.1
