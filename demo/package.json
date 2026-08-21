@@ -12,7 +12,7 @@
     "start_": "pnpm kill; (trap 'kill 0' INT TERM EXIT; node --experimental-strip-types ./server.ts & vite preview)"
   },
   "dependencies": {
-    "@thednp/rpc": "link:..",
+    "@thednp/rpc": "^0.3.0",
     "serverless-http": "^4.0.0",
     "vite": "^8.2.2"
   },
