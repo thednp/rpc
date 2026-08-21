@@ -15,7 +15,7 @@ export const sayHi = createServerFunction(
     signal?.throwIfAborted();
     return `Hello ${name}! This reply came from a server function.`;
   },
-  { contentType: "text/plain" },
+  { contentType: "text/plain", rpcPrefix: "@demo" },
 );
 
 export const getServerTime = createServerFunction(
@@ -33,7 +33,7 @@ export const getServerTime = createServerFunction(
       iso: new Date().toISOString(),
     };
   },
-  { method: "GET" },
+  { method: "GET", rpcPrefix: "@demo" },
 );
 
 export const getLibraryInfo = createServerFunction(
@@ -54,7 +54,7 @@ export const getLibraryInfo = createServerFunction(
       prefix: "/@demo",
     };
   },
-  { method: "GET" },
+  { method: "GET", rpcPrefix: "@demo" },
 );
 
 type ContactErrors = Partial<Record<string, [string, ...string[]]>>;
@@ -145,5 +145,5 @@ export const submitContact = createServerFunction(
       githubUser,
     } as ContactResult;
   },
-  { contentType: "multipart/form-data" },
+  { contentType: "multipart/form-data", rpcPrefix: "@demo" },
 );

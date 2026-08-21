@@ -177,7 +177,7 @@ export const renderPage = (state?: FormState): string => `
   <div class="hero-content max-w-full lg:max-w-6xl px-4 sm:px-8 min-w-0 flex-col lg:flex-row gap-10 lg:gap-16 py-16 lg:py-24">
     <div class="flex-1 max-w-full min-w-full lg:min-w-0">
       <div class="flex flex-wrap items-center gap-2 mb-6">
-        <span class="badge badge-primary badge-lg gap-2">${iconBolt}<strong id="lib-version">v0.1.0</strong></span>
+        <span class="badge badge-primary badge-lg gap-2">${iconBolt}<strong id="lib-version">v0.0.0</strong></span>
         <span class="badge badge-outline border-base-300 badge-neutral badge-lg gap-2 text-sm">
           <span class="status status-success"></span>
           Powered by a live RPC call
