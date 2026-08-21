@@ -10,11 +10,12 @@ import { createFormFallback } from "../../src/lib/form-fallback.ts";
 import "../../src/api/server.ts";
 
 // Serverless requires explicit handling
-import cfg from "../../rpc.config.ts";
+// import cfg from "../../rpc.config.ts";
+// console.log(cfg)
 
-const rpc = createRPCMiddleware(cfg);
+const rpc = createRPCMiddleware({ rpcPrefix: "@demo" });
 const formFallback = createFormFallback({
-  rpcPrefix: cfg.rpcPrefix,
+  rpcPrefix: "@demo",
   functionName: "submit-contact",
 });
 
