@@ -1,5 +1,5 @@
 [build]
-  command = "pnpm install --no-frozen-lockfile && pnpm build && pnpm --dir demo install && pnpm --dir demo build"
+  command = "pnpm install && pnpm build && pnpm --dir demo install && pnpm --dir demo build"
   publish = "demo/dist"
   functions = "demo/netlify/functions"
 
