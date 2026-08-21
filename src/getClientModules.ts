@@ -35,50 +35,21 @@ const getModule = (
   const safePrefix = validatePathSegment(options.rpcPrefix, "rpcPrefix");
   const credentials = validateCredentials(options.credentials);
   const method = validateMethod(options.method);
-  let body = "";
-  let headers = "{}";
-  switch (options.contentType) {
-    case "text/plain":
-      {
-        body = `args[0]`;
-        headers = `{ 'Content-Type': 'text/plain' }`;
-      }
-      break;
-    case "application/x-www-form-urlencoded":
-      {
-        body = `new URLSearchParams(args[0]).toString()`;
-        headers = `{ 'Content-Type': 'application/x-www-form-urlencoded' }`;
-      }
-      break;
-    case "multipart/form-data":
-      {
-        // FormData carries its own multipart content type with a random boundary,
-        // so the browser must generate the header (setting it manually strips the boundary)
-        body = `args[0]`;
-        headers = `{}`;
-      }
-      break;
-    default: {
-      body = `JSON.stringify(args)`;
-      headers = `{ 'Content-Type': 'application/json' }`;
-    }
+  const contentType =
+    (options.contentType ?? "application/json") as ServerFunctionOptions[
+      "contentType"
+    ];
+
+  const opts: string[] = [];
+  if (method !== "POST") opts.push(`method: "${method}"`);
+  if (credentials !== "same-origin") opts.push(`credentials: "${credentials}"`);
+  if (contentType !== "application/json") {
+    opts.push(`contentType: "${contentType}"`);
   }
-  // GET requests cannot carry a body: args travel as a JSON query parameter
-  if (method === "GET") {
-    body = `JSON.stringify(args)`;
-    headers = `{}`;
-  }
+  const optsStr = opts.length ? `, { ${opts.join(", ")} }` : "";
 
   const output = `
-export const ${safeFnEntry} = (...args) => {
-  const body = ${body};
-  const headers = ${headers};
-  const prefix = "${safePrefix}";
-  const name = "${safeFnName}";
-  const credentials = "${credentials}";
-  const method = "${method}";
-  return innerModule(body, headers, credentials, prefix, name, method);
-}`;
+ export const ${safeFnEntry} = getClientStub("${safePrefix}", "${safeFnName}"${optsStr});`;
 
   return output.trim();
 };
@@ -104,13 +75,13 @@ export const getClientModules = (
       getModule(registeredName, entry.exportName!, {
         ...initialOptions,
         ...((entry.options as ServerFunctionOptions) || {}),
-      }),
+      })
     )
     .join("\n");
 
   const output = `
 // Client-side RPC modules for prefix: ${initialOptions.rpcPrefix}
-import { innerModule } from "@thednp/rpc/helpers";
+import { getClientStub } from "@thednp/rpc/helpers";
 ${entries}`;
 
   return output.trim();

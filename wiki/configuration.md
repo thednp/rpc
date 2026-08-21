@@ -35,7 +35,7 @@ export default defineConfig({
 
 | Option       | Type     | Default     | Description                                                  |
 | --------------| ----------| -------------| --------------------------------------------------------------|
-| `rpcPrefix` | `string` | `'__rpc'`   | RPC endpoint prefix used in URL routing                      |
+| `rpcPrefix` | `string` | `'__rpc'`   | RPC endpoint prefix used in URL routing. Functions can override this per-call via `createServerFunction(..., { rpcPrefix })` — see [Multi-Prefix Support](./multi-prefix-guide.md) |
 | `adapter`    | `string` | `'express'` | Target adapter (`'express'`, `'fastify'`, `'hono'`, `'koa'`) |
 | `serverFiles` | `'exact'` \| `'glob'` | `'exact'` | Server file matching mode: `'exact'` for the classic `server.ts\|js\|mjs\|mts` names, `'glob'` to recursively match `*.server.{ts,js,mjs,mts}` under the scan root |
 | `scanRoot` | `string` | `undefined` | Directory to scan for server files, relative to the project root. Defaults to `<root>/src/api`. Useful in monorepos where server files live in a shared package |
@@ -89,6 +89,7 @@ console.log(config.adapter);    // 'express'
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Multi-Prefix Support](./multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
 - [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage

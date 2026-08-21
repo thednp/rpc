@@ -12,6 +12,7 @@ The pages below follow a natural learning sequence — each ends with a **Next**
 - [Getting Started](./getting-started.md) — Installation, project structure, and your first function
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Multi-Prefix Support](./multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
 - [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage

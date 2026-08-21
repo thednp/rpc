@@ -7,7 +7,7 @@ import type {
   ServerFunctionOptions,
 } from "./types.d.ts";
 import { getFunctionsForPrefix } from "./functionsMap.ts";
-import { defaultServerFnOptions } from "./options.ts";
+import { defaultPrefix, defaultServerFnOptions } from "./options.ts";
 import { OPERATION_ABORTED } from "./constants.ts";
 
 /**
@@ -57,7 +57,7 @@ export function createServerFunction<
   fnOptions: CreateServerFunctionOptions = {},
 ): ClientFunction<TArgs, TResult> {
   const options = Object.assign({}, defaultServerFnOptions, fnOptions);
-  const rpcPrefix = fnOptions.rpcPrefix || "__rpc";
+  const rpcPrefix = fnOptions.rpcPrefix || defaultPrefix;
 
   const wrappedFunction: ClientFunction<TArgs, TResult> = (...args: TArgs) => {
     const controller = new AbortController();

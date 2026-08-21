@@ -32,6 +32,7 @@ function createServerFunction<T>(
     contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data',
     credentials?: "same-origin" | "include" | "omit",
     method?: "GET" | "POST",
+    rpcPrefix?: string,
   }
 ): ServerFunction<T>;
 ```
@@ -40,10 +41,11 @@ function createServerFunction<T>(
 
 - **`name`** (`string`) — The registered name used in RPC routing.
 - **`handler`** (`(signal: AbortSignal, ...args: JsonArray) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; remaining arguments come from the client. The return value must be JSON-serializable.
-- **`options`** — Optional credentials, serialization strategy, and HTTP method
+- **`options`** — Optional credentials, serialization strategy, HTTP method, and RPC prefix
   * `contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data'` - Defaults to `'application/json'`.
   * `credentials?: "include" | "same-origin" | "omit"` - Defaults to `'same-origin'`.
   * `method?: "GET" | "POST"` - Defaults to `'POST'`.
+  * `rpcPrefix?: string` - Defaults to `'__rpc'`. Registers the function under a custom prefix so multiple RPC instances can coexist (versioned/namespaced APIs) — the same name may be reused under different prefixes. See [Multi-Prefix Support](./multi-prefix-guide.md).
 
 ### Content Types
 
@@ -399,7 +401,7 @@ Because `getRequestContext()` works identically across all five adapters, you ca
 - **HMR stability**: The `AsyncLocalStorage` lives on a `Symbol.for` global key, surviving Vite HMR module reloads.
 - **Framework agnostic**: Same API works across Express, Fastify, Hono, Koa, h3, and the plain Vite dev server.
 
-> **Next:** [Middleware](./middleware.md) — write universal, adapter-agnostic middleware against the request context.
+> **Next:** [Multi-Prefix Support](./multi-prefix-guide.md) — run parallel RPC instances with versioned/namespaced prefixes.
 
 ---
 
@@ -409,6 +411,7 @@ Because `getRequestContext()` works identically across all five adapters, you ca
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Multi-Prefix Support](./multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
 - [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage

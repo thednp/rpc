@@ -30,6 +30,8 @@ async function main() {
   let updated = 0;
 
   for (const dir of fs.readdirSync(EXAMPLES_DIR)) {
+    // advanced links the local source (link:../..) — never overwrite with the published version
+    if (dir === "advanced") continue;
     const file = path.join(EXAMPLES_DIR, dir, "package.json");
     if (!fs.existsSync(file)) continue;
     const pkg = JSON.parse(fs.readFileSync(file, "utf-8"));

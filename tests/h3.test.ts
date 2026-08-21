@@ -433,6 +433,18 @@ describe("h3 createRPCMiddleware", () => {
     expect(await res.json()).toEqual({ data: "hello h3" });
   });
 
+  it("should use default prefix when rpcPrefix is undefined", async () => {
+    createServerFunction(
+      "h3-hello",
+      vi.fn().mockResolvedValue("hello h3"),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware({ rpcPrefix: undefined }));
+    const res = await app.fetch(postJSON("/__rpc/h3-hello", ["arg1"]));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: "hello h3" });
+  });
+
   it("should expose request context to server functions", async () => {
     let seenEvent: unknown;
     let seenLocals: unknown;

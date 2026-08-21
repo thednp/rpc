@@ -10,8 +10,10 @@ export const defaultServerFnOptions = {
   method: "POST",
 } satisfies ServerFunctionOptions;
 
+export const defaultPrefix = "__rpc";
+
 export const defaultRPCOptions: RpcPluginOptions = {
-  rpcPrefix: "__rpc",
+  rpcPrefix: defaultPrefix,
   adapter: "express",
   serverFiles: "exact",
   scanRoot: undefined,

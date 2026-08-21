@@ -12,12 +12,12 @@
     "start": "NODE_ENV=production node server"
   },
   "dependencies": {
-    "@thednp/rpc": "^0.2.0",
+    "@thednp/rpc": "^0.2.1",
     "compression": "^1.8.1",
     "express": "^5.2.1",
     "sirv": "^3.0.2",
     "valibot": "^1.4.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

@@ -67,9 +67,11 @@ type RequestDetails = {
 declare const createMiddleware: ExpressMiddlewareFn;
 /**
  * Creates the Express RPC middleware that routes incoming requests to registered server functions.
- * Reads the request body, dispatches to the matching function via serverFunctionsMap,
+ * Reads the request body, dispatches to the matching function via getFunctionsForPrefix,
  * and sends the JSON-serialized result. Handles client disconnection via abort signals.
- * @param initialOptions - Options including rpcPrefix for URL routing
+ * Supports multi-prefix setups where different middleware instances can route to functions
+ * registered under different prefixes.
+ * @param initialOptions - Options including rpcPrefix for URL routing and prefix-scoped function lookup
  * @returns An Express middleware function
  */
 declare const createRPCMiddleware: ExpressMiddlewareFn;

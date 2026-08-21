@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -49,20 +49,22 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "test": "vitest",
-    "test-ui": "vitest --ui",
-    "test-dev": "node scripts/dev-test",
-    "test-prod": "node scripts/dev-test --mode=preview",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest --watch --coverage",
+    "test:ui": "vitest --ui",
+    "test:dev": "node scripts/dev-test",
+    "test:prod": "node scripts/dev-test --mode=preview",
     "format": "deno fmt src tests examples/**/src",
     "clean": "rm -rf examples/**/dist examples/**/node_modules examples/**/package-lock.json examples/**/pnpm-lock.yaml examples/**/bun.lockb examples/**/deno.lock",
     "dev": "cd examples/spa && pnpm up && pnpm dev",
-    "dev:koa": "cd examples/koa && pnpm up && pnpm dev",
+    "dev:advanced": "cd examples/advanced && pnpm up && pnpm dev",
     "dev:express": "cd examples/express && pnpm up && pnpm dev",
+    "dev:fastify": "cd examples/fastify && pnpm up && pnpm dev",
+    "dev:h3": "cd examples/h3 && pnpm up && pnpm dev",
+    "dev:hono": "cd examples/hono && pnpm up && pnpm dev",
+    "dev:koa": "cd examples/koa && pnpm up && pnpm dev",
     "dev:react-query": "cd examples/react-query && pnpm up && pnpm dev",
     "dev:solid-query": "cd examples/solid-query && pnpm up && pnpm dev",
-    "dev:fastify": "cd examples/fastify && pnpm up && pnpm dev",
-    "dev:hono": "cd examples/hono && pnpm up && pnpm dev",
-    "dev:h3": "cd examples/h3 && pnpm up && pnpm dev",
     "dev:ssr": "cd examples/ssr && pnpm up && pnpm dev",
     "lint": "pnpm lint:ts && pnpm check:ts",
     "lint:ts": "deno lint src",
@@ -81,24 +83,24 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "fastify": "^5.11.3",
+    "fastify": "^5.12.1",
     "fastify-plugin": "^6.0.0",
-    "h3": "2.0.1-rc.26",
-    "hono": "^4.13.1",
+    "h3": "2.0.1-rc.27",
+    "hono": "^4.13.3",
     "koa": "^3.2.1",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   },
   "devDependencies": {
-    "@hono/node-server": "^2.1.0",
+    "@hono/node-server": "^2.1.1",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
     "@types/node": "^26.2.0",
-    "@vitest/coverage-istanbul": "^4.1.10",
-    "@vitest/ui": "^4.1.10",
+    "@vitest/coverage-istanbul": "^4.1.11",
+    "@vitest/ui": "^4.1.11",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
     "vite-plugin-strip-comments": "^0.0.10",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@11.20.0"
 }

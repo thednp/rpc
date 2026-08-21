@@ -71,7 +71,7 @@ const features = [
   {
     icon: iconLayers,
     title: "Request context",
-    text: "<code class=\"font-mono code-hl-inline\" translate=\"no\">getRequestContext()</code> and <code class=\"font-mono code-hl-inline\" translate=\"no\">getRequestMeta()</code> give any function — or middleware — typed access to the current request, without threading req/res through your call stack.",
+    text: "<code class=\"font-mono code-hl-inline\" translate=\"no\">getRequestContext()</code> gives any function or middleware typed access to the current request, without threading req/res through your call stack.",
   },
   {
     icon: iconForm,
@@ -81,7 +81,22 @@ const features = [
   {
     icon: iconShield,
     title: "Enforced at the boundary",
-    text: "HTTP method and Content-Type are checked before dispatch, with anchored prefix matching. Wrong method, wrong media type, or prefix tricks get a clean 405, 415, or 404.",
+    text: "HTTP method and <code class=\"font-mono code-hl-inline\" translate=\"no\">Content-Type</code> are checked before dispatch, with anchored prefix matching. Wrong method, wrong media type, or prefix tricks get a clean 405, 415, or 404.",
+  },
+  {
+    icon: iconCode,
+    title: "Universal middleware",
+    text: "With access to the request context you can write one middleware (rate limiting, audit, authentication) that runs unchanged on Express, Fastify, Hono, Koa and h3.",
+  },
+  {
+    icon: iconSparkle,
+    title: "Multi-prefix",
+    text: "Register the same name under <code class=\"font-mono code-hl-inline\" translate=\"no\">public:rpc</code> and <code class=\"font-mono code-hl-inline\" translate=\"no\">admin:rpc</code> with <code class=\"font-mono code-hl-inline\" translate=\"no\">{ rpcPrefix }</code> — versioned or namespaced APIs coexist without collisions, dispatched to prefix-scoped maps.",
+  },
+  {
+    icon: iconBolt,
+    title: "Isolated APIs",
+    text: "The Vite plugin emits virtual modules per prefix — no files on disk. A <code class=\"font-mono code-hl-inline\" translate=\"no\">public:rpc</code> bundle never contains <code class=\"font-mono code-hl-inline\" translate=\"no\">admin:rpc</code> stubs. Prefix is routing, not a secret — guard privileged prefixes with real auth.",
   },
 ];
 
@@ -170,9 +185,9 @@ export const renderPage = (state?: FormState): string => `
       </div>
 
       <h1 class="text-4xl sm:text-5xl xl:text-6xl font-semibold leading tracking-tight text-balance">
-        Server functions
-        <span class="text-primary font-black text-3xl sm:text-4xl xl:text-5xl">
-          <span class="italic font-serif text-accent font-normal">with</span> client ergonomics.
+        <span class="text-base-content/80">Server functions</span>
+        <span class="font-black text-3xl sm:text-4xl xl:text-5xl">
+          <span class="italic font-serif font-normal text-primary">with</span> client ergonomics.
         </span>
       </h1>
 
@@ -249,7 +264,7 @@ export const renderPage = (state?: FormState): string => `
   <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
-        Why <span class="badge badge-primary">@thednp/rpc</span>
+        Why <span class="font-bold">@thednp/rpc</span>
       </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Everything between the import and the database</h2>
       <p class="mt-4 text-base-content/80">One plugin. One endpoint. The boring plumbing of a web API — routing, serialization, cancellation — handled for you.</p>
@@ -265,7 +280,7 @@ export const renderPage = (state?: FormState): string => `
   <div class="flex flex-col items-center max-w-full lg:max-w-6xl min-w-0 mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
-        How it <span class="badge badge-accent">works</span>
+        How it <span class="font-bold">works</span>
       </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Three steps, complete control</h2>
     </div>
@@ -333,7 +348,7 @@ export const renderPage = (state?: FormState): string => `
   <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
-        Live <span class="badge badge-warning">demo</span>
+        Live <span class="font-bold">demo</span>
       </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Real functions. Real wire calls.</h2>
       <p class="mt-4 text-base-content/80">Everything in this window is a live <code class="font-mono">@thednp/rpc</code> call — try it right now.</p>
@@ -446,7 +461,7 @@ export const renderPage = (state?: FormState): string => `
   <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
       <span class="mb-4">
-        Multipart <span class="badge badge-success badge-lg">demo</span>
+        Multipart <span class="font-bold">demo</span>
       </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Questions? Ideas? Bugs?</h2>
       <p class="mt-4 text-base-content/80 text-pretty">

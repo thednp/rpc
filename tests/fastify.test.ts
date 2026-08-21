@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
-import { serverFunctionsMap } from "../src/functionsMap.ts";
+import {
+  getFunctionsForPrefix,
+  serverFunctionsByPrefix,
+  serverFunctionsMap,
+} from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
@@ -27,7 +31,9 @@ import {
 } from "./fixtures/fastify.ts";
 
 beforeEach(() => {
-  serverFunctionsMap.clear();
+  for (const map of serverFunctionsByPrefix.values()) {
+    map.clear();
+  }
   seedServerMap();
 });
 
@@ -469,6 +475,25 @@ describe("Fastify createRPCMiddleware", () => {
     expect(reply.send).toHaveBeenCalledWith({ data: "hello fastify" });
   });
 
+  it("should use default prefix when rpcPrefix is undefined", async () => {
+    createServerFunction(
+      "fastify-hello",
+      vi.fn().mockResolvedValue("hello fastify"),
+    );
+    const mw = createRPCMiddleware({ rpcPrefix: undefined });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-hello",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["arg1"]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(reply.send).toHaveBeenCalledWith({ data: "hello fastify" });
+  });
+
   it("should expose request context to server functions", async () => {
     let seenRequest: unknown;
     createServerFunction(
@@ -613,7 +638,7 @@ describe("Fastify createRPCMiddleware", () => {
   });
 
   it("should wrap non-array JSON body in array for the handler", async () => {
-    serverFunctionsMap.set("testFn", {
+    getFunctionsForPrefix("__A_server").set("testFn", {
       name: "testFn",
       handler: vi.fn().mockReturnValue({
         data: Promise.resolve("ok"),
@@ -630,7 +655,7 @@ describe("Fastify createRPCMiddleware", () => {
     const done = makeFastifyDone();
     req.body = { key: "value" };
     await mw(req as any, reply as any, done);
-    const handler = serverFunctionsMap.get("testFn")!.handler;
+    const handler = getFunctionsForPrefix("__A_server").get("testFn")!.handler;
     expect(handler).toHaveBeenCalledWith({ key: "value" });
   });
 

@@ -2,8 +2,69 @@ import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { AsyncLocalStorage } from "node:async_hooks";
+//#region src/options.ts
+const defaultServerFnOptions = {
+	contentType: "application/json",
+	credentials: "same-origin",
+	method: "POST"
+};
+const defaultPrefix = "__rpc";
+const defaultRPCOptions = {
+	rpcPrefix: defaultPrefix,
+	adapter: "express",
+	serverFiles: "exact",
+	scanRoot: void 0
+};
+const defaultMiddlewareOptions = {
+	rpcPrefix: void 0,
+	path: void 0,
+	origin: void 0
+};
+//#endregion
 //#region src/functionsMap.ts
-const serverFunctionsMap = /* @__PURE__ */ new Map();
+/**
+* Global symbol under which the shared `serverFunctionsByPrefix` map is stored
+* on `globalThis`. Keeping it on a `Symbol.for` key makes it instance-stable
+* across the bundled entry copies (`index.mjs`, `server.mjs`, `express.mjs`,
+* ...) and dev-server hot reloads, exactly like the request-context storage in
+* `context.ts`. Without this, `scanForServerFiles` (bundled into the plugin)
+* would populate a map copy the adapter middleware could not read.
+*/
+const functionsMapSymbol = Symbol.for("thednp.rpc.functionsMap");
+/**
+* Map of rpcPrefix -> Map of function names -> ServerFnEntry
+* Enables multiple RPC instances with different prefixes to coexist
+* without name collisions.
+*/
+const serverFunctionsByPrefix = globalThis[functionsMapSymbol] ??= /* @__PURE__ */ new Map();
+/**
+* Gets or creates the function map for a specific prefix.
+* @param prefix - The RPC prefix (e.g., "__rpc", "v1:rpc", "admin:rpc")
+* @returns Map of function names to ServerFnEntry for that prefix
+*/
+const getFunctionsForPrefix = (prefix) => {
+	if (!serverFunctionsByPrefix.has(prefix)) serverFunctionsByPrefix.set(prefix, /* @__PURE__ */ new Map());
+	return serverFunctionsByPrefix.get(prefix);
+};
+/**
+* Backward compatibility: default map for the default prefix.
+* Legacy code can still use serverFunctionsMap.set(name, entry).
+*/
+const serverFunctionsMap = {
+	get: (key) => getFunctionsForPrefix(defaultPrefix).get(key),
+	set: (key, value) => getFunctionsForPrefix(defaultPrefix).set(key, value),
+	has: (key) => getFunctionsForPrefix(defaultPrefix).has(key),
+	delete: (key) => getFunctionsForPrefix(defaultPrefix).delete(key),
+	clear: () => getFunctionsForPrefix(defaultPrefix).clear(),
+	get size() {
+		return getFunctionsForPrefix(defaultPrefix).size;
+	},
+	entries: () => getFunctionsForPrefix(defaultPrefix).entries(),
+	keys: () => getFunctionsForPrefix(defaultPrefix).keys(),
+	values: () => getFunctionsForPrefix(defaultPrefix).values(),
+	forEach: (callback) => getFunctionsForPrefix(defaultPrefix).forEach(callback),
+	[Symbol.iterator]: () => getFunctionsForPrefix(defaultPrefix)[Symbol.iterator]()
+};
 //#endregion
 //#region src/constants.ts
 const OPERATION_ABORTED = "Operation aborted";
@@ -13,7 +74,7 @@ const INTERNAL_SERVER_ERROR = "Internal Server Error";
 /** Error message when a value fails the safe-identifier validation. @param label - What kind of value was being validated. @param name - The rejected value */
 const INVALID_IDENTIFIER = (label, name) => `Invalid ${label}: "${name}" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/`;
 /** Error message when a value fails the safe-path-segment validation. @param label - What kind of value was being validated. @param segment - The rejected value */
-const INVALID_PATH_SEGMENT = (label, segment) => `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/`;
+const INVALID_PATH_SEGMENT = (label, segment) => `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/`;
 /** Error template for duplicate server function names across files. @param name - The duplicate registered name */
 const DUPLICATE_FUNCTION_NAME = (name) => `Duplicate server function "${name}" detected. Each server function must have a unique name. Remove or rename the duplicate.`;
 //#endregion
@@ -146,7 +207,7 @@ const EXACT_NAMES = [
 ];
 /**
 * Scans `src/api/` (or an explicit `scanRoot`) for server function files
-* and populates the global `serverFunctionsMap` with their exported functions.
+* and populates the server functions map (scoped by rpcPrefix) with their exported functions.
 * Uses Vite's SSR module loading to resolve and execute each file.
 *
 * Supports two matching modes via `config.serverFiles`:
@@ -204,16 +265,21 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 			}
 			for (const [exportName, exportValue] of moduleEntries) {
 				const registeredName = exportValue.name;
-				if (seenNames.has(registeredName)) {
+				const prefix = exportValue.options?.rpcPrefix || config.rpcPrefix || "__rpc";
+				const seenKey = `${prefix}:${registeredName}`;
+				if (seenNames.has(seenKey)) {
 					if (process.env.NODE_ENV !== "production") throw new Error(DUPLICATE_FUNCTION_NAME(registeredName));
 					console.warn(DUPLICATE_FUNCTION_NAME(registeredName));
 					continue;
 				}
-				seenNames.add(registeredName);
-				serverFunctionsMap.set(registeredName, {
+				seenNames.add(seenKey);
+				const prefixMap = getFunctionsForPrefix(prefix);
+				const existing = prefixMap.get(registeredName);
+				if (existing) existing.exportName = exportName;
+				else prefixMap.set(registeredName, {
 					name: registeredName,
 					handler: exportValue,
-					options: exportValue?.options,
+					options: exportValue.options,
 					exportName
 				});
 			}
@@ -224,36 +290,20 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 	}
 };
 //#endregion
-//#region src/options.ts
-const defaultServerFnOptions = {
-	contentType: "application/json",
-	credentials: "same-origin",
-	method: "POST"
-};
-const defaultRPCOptions = {
-	rpcPrefix: "__rpc",
-	adapter: "express",
-	serverFiles: "exact",
-	scanRoot: void 0
-};
-const defaultMiddlewareOptions = {
-	rpcPrefix: void 0,
-	path: void 0,
-	origin: void 0
-};
-//#endregion
 //#region src/createFunction.ts
 /**
 * Creates a server-side RPC function.
-* Registers the function in the server functions map and returns a client-compatible
-* wrapper that exposes `data` (Promise) and `cancel` (function) for request lifecycle control.
+* Registers the function in the server functions map (scoped by rpcPrefix) and returns
+* a client-compatible wrapper that exposes `data` (Promise) and `cancel` (function)
+* for request lifecycle control.
 * @param name - Unique identifier used by the RPC router to dispatch requests
 * @param handler - The actual implementation receiving an AbortSignal followed by JSON-serializable arguments
-* @param fnOptions - Optional contentType and credentials settings
+* @param fnOptions - Optional contentType, credentials, and rpcPrefix settings
 * @returns A client stub with `data` promise and `cancel` method, auto-registered in the server map
 */
 function createServerFunction(name, handler, fnOptions = {}) {
 	const options = Object.assign({}, defaultServerFnOptions, fnOptions);
+	const rpcPrefix = fnOptions.rpcPrefix || "__rpc";
 	const wrappedFunction = (...args) => {
 		const controller = new AbortController();
 		const cancel = (reason) => controller.abort(reason);
@@ -278,7 +328,7 @@ function createServerFunction(name, handler, fnOptions = {}) {
 			configurable: false
 		}
 	});
-	serverFunctionsMap.set(name, {
+	getFunctionsForPrefix(rpcPrefix).set(name, {
 		name,
 		handler: wrappedFunction,
 		options
@@ -288,7 +338,7 @@ function createServerFunction(name, handler, fnOptions = {}) {
 //#endregion
 //#region src/validate.ts
 const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@][A-Za-z0-9_$@/-]*$/;
+const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/;
 const CREDENTIALS_VALUES = [
 	"same-origin",
 	"include",
@@ -308,7 +358,8 @@ function validateIdentifier(name, label) {
 }
 /**
 * Validates that a string is a safe path segment for RPC routing.
-* Allows alphanumeric characters, underscores, dollar signs, at signs, hyphens, and forward slashes.
+* Allows alphanumeric characters, underscores, dollar signs, at signs,
+* colons, hyphens, and forward slashes.
 * @param segment - The string to validate
 * @param label - Human-readable label for error messages (e.g. "rpcPrefix")
 * @returns The validated segment if it passes
@@ -358,53 +409,28 @@ const getModule = (fnName, fnEntry, options) => {
 	const safePrefix = validatePathSegment(options.rpcPrefix, "rpcPrefix");
 	const credentials = validateCredentials(options.credentials);
 	const method = validateMethod(options.method);
-	let body = "";
-	let headers = "{}";
-	switch (options.contentType) {
-		case "text/plain":
-			body = `args[0]`;
-			headers = `{ 'Content-Type': 'text/plain' }`;
-			break;
-		case "application/x-www-form-urlencoded":
-			body = `new URLSearchParams(args[0]).toString()`;
-			headers = `{ 'Content-Type': 'application/x-www-form-urlencoded' }`;
-			break;
-		case "multipart/form-data":
-			body = `args[0]`;
-			headers = `{}`;
-			break;
-		default:
-			body = `JSON.stringify(args)`;
-			headers = `{ 'Content-Type': 'application/json' }`;
-	}
-	if (method === "GET") {
-		body = `JSON.stringify(args)`;
-		headers = `{}`;
-	}
+	const contentType = options.contentType ?? "application/json";
+	const opts = [];
+	if (method !== "POST") opts.push(`method: "${method}"`);
+	if (credentials !== "same-origin") opts.push(`credentials: "${credentials}"`);
+	if (contentType !== "application/json") opts.push(`contentType: "${contentType}"`);
 	return `
-export const ${safeFnEntry} = (...args) => {
-  const body = ${body};
-  const headers = ${headers};
-  const prefix = "${safePrefix}";
-  const name = "${safeFnName}";
-  const credentials = "${credentials}";
-  const method = "${method}";
-  return innerModule(body, headers, credentials, prefix, name, method);
-}`.trim();
+ export const ${safeFnEntry} = getClientStub("${safePrefix}", "${safeFnName}"${opts.length ? `, { ${opts.join(", ")} }` : ""});`.trim();
 };
 /**
 * Generates the complete client-side module bundle by iterating all registered server functions
-* and producing fetch-based stubs for each. The result is transformed by Vite (or Oxc) during
-* the dev server or production build.
+* for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
+* (or Oxc) during the dev server or production build.
 * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
 * @returns A string of JavaScript code with all client RPC modules and their import dependencies
 */
 const getClientModules = (initialOptions) => {
 	validatePathSegment(initialOptions.rpcPrefix, "rpcPrefix");
+	const prefixMap = getFunctionsForPrefix(initialOptions.rpcPrefix);
 	return `
 
-import { innerModule } from "@thednp/rpc/helpers";
-${Array.from(serverFunctionsMap.entries()).filter(([, entry]) => entry.exportName).map(([registeredName, entry]) => getModule(registeredName, entry.exportName, {
+import { getClientStub } from "@thednp/rpc/helpers";
+${Array.from(prefixMap.entries()).filter(([, entry]) => entry.exportName).map(([registeredName, entry]) => getModule(registeredName, entry.exportName, {
 		...initialOptions,
 		...entry.options || {}
 	})).join("\n")}`.trim();
@@ -507,6 +533,6 @@ const getRequestMeta = (event) => {
 	};
 };
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsMap, walkGlobFiles };
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

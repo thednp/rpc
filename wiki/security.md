@@ -87,6 +87,18 @@ app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
 
 When set, any request carrying an `Origin` header that does not match the configured origin is rejected with `403 Forbidden`. Requests **without** an `Origin` header (curl, native clients) pass through — the check only rejects when the browser-provided header disagrees. This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives.
 
+## Multi-Prefix Client Isolation
+
+`getClientModules` (`src/getClientModules.ts:93`) does **not** write files to disk. The Vite plugin's `transform` hook (`src/index.ts:221`) replaces each scanned server file **in-memory** (a virtual module) with the string returned by `getClientModules`. That string is built from a single prefix-scoped map:
+
+```ts
+const prefixMap = getFunctionsForPrefix(initialOptions.rpcPrefix); // src/getClientModules.ts:100
+```
+
+Only functions whose `createServerFunction(...,{rpcPrefix})` matches the config `rpcPrefix` are emitted. With `rpc.config.ts: {rpcPrefix:"public:rpc", serverFiles:"glob"}` scanning both `public.server.ts` (`public:rpc`) and `admin.server.ts` (`admin:rpc`), a client build for `public:rpc` contains **no** `admin:rpc` stubs — inspecting the public client bundle cannot reveal `admin` function names. Each scanned `*.server.ts` is replaced with the same virtual module (all public functions), not a file per server file.
+
+Prefix isolation is **not** a security boundary. The prefix segment (`/admin:rpc/get-user`) is just a URL path — an attacker can guess `admin:rpc`, `private:rpc`, `v1:rpc` regardless of the bundle. Do not rely on obscurity. Protect every non-public prefix with explicit auth inside the handler (`requireAdmin` via `getRequestContext`/`sendResponse(403)` as in `examples/advanced/src/api/admin.server.ts:13` and `middleware.ts:46`), and validate the prefix with the same escaped-regex guard the adapters use. Client-bundle isolation only prevents accidental leakage; the network boundary must enforce auth.
+
 ## Authentication via Middleware
 
 Authentication is handled by middleware registered **before** `createRPCMiddleware()`. The middleware chain composes naturally:
@@ -119,6 +131,7 @@ Server functions receive raw, untrusted client data. Always validate before use.
 - [Getting Started](./getting-started.md) — Installation and quick start
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
+- [Multi-Prefix Support](./multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
 - [Middleware](./middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage

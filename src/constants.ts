@@ -32,7 +32,7 @@ export const INVALID_IDENTIFIER = (label: string, name: string) =>
 
 /** Error message when a value fails the safe-path-segment validation. @param label - What kind of value was being validated. @param segment - The rejected value */
 export const INVALID_PATH_SEGMENT = (label: string, segment: string) =>
-  `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$][A-Za-z0-9_$/-]*$/`;
+  `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/`;
 
 /** Warning message when a specified RPC config file cannot be resolved on disk. @param configFile - The requested config filename. @param configFilePath - The resolved absolute path */
 export const CONFIG_FILE_NOT_FOUND = (

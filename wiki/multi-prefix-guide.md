@@ -2,6 +2,21 @@
 
 Run multiple RPC instances in parallel with different prefixes. Enables versioned APIs, namespaced endpoints, and API segregation without function name collisions.
 
+## Table of Contents
+
+- [Quick Start](./quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
+- [Getting Started](./getting-started.md) — Installation, project structure, and your first function
+- [Configuration](./configuration.md) — Configuration reference
+- [Server Functions](./server-functions.md) — Creating server functions
+- [Multi-Prefix Support](./multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
+- [Middleware](./middleware.md) — Universal middleware via the request context
+- [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
+- [Client Usage](./client-usage.md) — Client-side usage
+- [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
+- [Adapters](./adapters.md) — Framework adapters
+- [Security](./security.md) — Security hardening
+- [Best Practices](./best-practices.md) — Tips and best practices
+
 ## Problem
 
 Classic single-prefix setup:
@@ -281,8 +296,15 @@ export const login = createServerFunction(
 );
 ```
 
+## Security: Do Not Trust the Prefix
+
+The prefix is a routing segment, not a secret. `getClientModules` only emits the config prefix's stubs (so `admin:rpc` never appears in a `public:rpc` client bundle), but an attacker can still `POST /admin:rpc/get-user` directly. Every privileged prefix **must** call auth inside the handler (e.g. `requireAdmin` via `sendResponse(403)` in `examples/advanced/src/api/middleware.ts:46`) — never rely on hiding the prefix string.
+
 ## Limitations
 
 - Each prefix requires its own `createRPCMiddleware` instance.
 - Functions must explicitly declare their `rpcPrefix` — there's no auto-grouping by directory.
 - The plugin still performs a single scan (by default `src/api/`) for all prefixes; organize functions by file to make intent clear.
+- `transform` replaces each `*.server.ts` in-memory with the same virtual module for the config prefix — no files are written to disk and no `admin` stubs leak into the `public` bundle.
+
+> **Next:** [Middleware](./middleware.md) — write universal, adapter-agnostic middleware against the request context.

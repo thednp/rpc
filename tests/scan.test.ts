@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViteDevServer } from "vite";
 import { scanForServerFiles } from "../src/scanForServerFiles.ts";
+import { createServerFunction } from "../src/createFunction.ts";
 
-import { serverFunctionsMap } from "../src/functionsMap.ts";
+import {
+  getFunctionsForPrefix,
+  serverFunctionsByPrefix,
+  serverFunctionsMap,
+} from "../src/functionsMap.ts";
 
 beforeEach(() => {
-  serverFunctionsMap.clear();
+  for (const map of serverFunctionsByPrefix.values()) {
+    map.clear();
+  }
 });
 
 afterEach(() => {
@@ -237,6 +244,78 @@ describe("scanForServerFiles", () => {
         mockDevServer,
       );
       expect(ssrLoadModule).toHaveBeenCalledTimes(2);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should register functions under their declared prefix without name collision", async () => {
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockImplementation(async (file: string) => {
+      if (file.includes("users.server.ts")) {
+        return {
+          login: { name: "login", options: { rpcPrefix: "v1:rpc" } },
+        };
+      }
+      return {
+        login: { name: "login", options: { rpcPrefix: "v2:rpc" } },
+      };
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    process.chdir("tests/fixtures/scan-api");
+    try {
+      await scanForServerFiles(
+        {
+          base: "/",
+          serverFiles: "glob",
+        },
+        mockDevServer,
+      );
+      // Same registered name under different prefixes is not a duplicate
+      expect(ssrLoadModule).toHaveBeenCalledTimes(2);
+      expect(getFunctionsForPrefix("v1:rpc").get("login")?.exportName).toBe(
+        "login",
+      );
+      expect(getFunctionsForPrefix("v2:rpc").get("login")?.exportName).toBe(
+        "login",
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should update exportName on an existing auto-registered function", async () => {
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    // createServerFunction auto-registers "login" under the default prefix
+    const loginFn = createServerFunction("login", vi.fn());
+    const ssrLoadModule = vi.fn().mockImplementation(async (file: string) => {
+      if (file.includes("users.server.ts")) {
+        return { doLogin: loginFn };
+      }
+      return { otherFn: { name: "other-fn" } };
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    process.chdir("tests/fixtures/scan-api");
+    try {
+      await scanForServerFiles(
+        {
+          base: "/",
+          serverFiles: "glob",
+        },
+        mockDevServer,
+      );
+      // The scan found the already-registered entry and updated exportName
+      expect(serverFunctionsMap.get("login")?.exportName).toBe("doLogin");
     } finally {
       process.chdir(originalCwd);
     }

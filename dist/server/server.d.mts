@@ -40,6 +40,11 @@ interface ServerFunctionOptions {
    * @default "POST"
    */
   method?: "GET" | "POST";
+  /**
+   * RPC endpoint prefix
+   * @default "__rpc"
+   */
+  rpcPrefix?: string;
 }
 // primitives and their compositions
 /**
@@ -98,12 +103,14 @@ interface RpcPluginOptionsInternal {
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
  */
-type ScanConfig = Pick<ResolvedConfig, "base"> & {
+interface ScanConfig extends Pick<ResolvedConfig, "base"> {
   root?: string;
   server?: Partial<ResolvedConfig["server"]>;
   serverFiles?: "exact" | "glob";
   scanRoot?: string;
-};
+  /** Default rpcPrefix to register scanned functions under when a function does not declare its own. Defaults to `__rpc` for backward compatibility. */
+  rpcPrefix?: string;
+}
 /**
  * Entry in the server functions map: registered name, client handler,
  * optional per-function options, and the original export name.
@@ -160,6 +167,22 @@ interface RpcPluginOptions {
 }
 //#endregion
 //#region src/functionsMap.d.ts
+/**
+ * Map of rpcPrefix -> Map of function names -> ServerFnEntry
+ * Enables multiple RPC instances with different prefixes to coexist
+ * without name collisions.
+ */
+declare const serverFunctionsByPrefix: Map<string, Map<string, ServerFnEntry>>;
+/**
+ * Gets or creates the function map for a specific prefix.
+ * @param prefix - The RPC prefix (e.g., "__rpc", "v1:rpc", "admin:rpc")
+ * @returns Map of function names to ServerFnEntry for that prefix
+ */
+declare const getFunctionsForPrefix: (prefix: string) => Map<string, ServerFnEntry>;
+/**
+ * Backward compatibility: default map for the default prefix.
+ * Legacy code can still use serverFunctionsMap.set(name, entry).
+ */
 declare const serverFunctionsMap: Map<string, ServerFnEntry>;
 //#endregion
 //#region src/scanForServerFiles.d.ts
@@ -167,7 +190,7 @@ declare const serverFunctionsMap: Map<string, ServerFnEntry>;
 declare const scannedServerFiles: Set<string>;
 /**
  * Scans `src/api/` (or an explicit `scanRoot`) for server function files
- * and populates the global `serverFunctionsMap` with their exported functions.
+ * and populates the server functions map (scoped by rpcPrefix) with their exported functions.
  * Uses Vite's SSR module loading to resolve and execute each file.
  *
  * Supports two matching modes via `config.serverFiles`:
@@ -180,21 +203,48 @@ declare const scanForServerFiles: (initialCfg?: ScanConfig, devServer?: ViteDevS
 //#endregion
 //#region src/createFunction.d.ts
 /**
+ * Extended options for createServerFunction, including rpcPrefix for multi-instance support.
+ */
+interface CreateServerFunctionOptions extends Partial<ServerFunctionOptions> {
+  /**
+   * RPC prefix for this function. Enables multiple RPC instances with different prefixes.
+   * When using multi-prefix setup, functions with the same name but different prefixes
+   * can coexist without collision.
+   * @default "__rpc"
+   * @example
+   * // v1 API
+   * export const login = createServerFunction(
+   *   "login",
+   *   async (signal, email, password) => ({...}),
+   *   { rpcPrefix: "v1:rpc" },
+   * );
+   *
+   * // v2 API - same function name, different prefix
+   * export const login = createServerFunction(
+   *   "login",
+   *   async (signal, credentials) => ({...}),
+   *   { rpcPrefix: "v2:rpc" },
+   * );
+   */
+  rpcPrefix?: string;
+}
+/**
  * Creates a server-side RPC function.
- * Registers the function in the server functions map and returns a client-compatible
- * wrapper that exposes `data` (Promise) and `cancel` (function) for request lifecycle control.
+ * Registers the function in the server functions map (scoped by rpcPrefix) and returns
+ * a client-compatible wrapper that exposes `data` (Promise) and `cancel` (function)
+ * for request lifecycle control.
  * @param name - Unique identifier used by the RPC router to dispatch requests
  * @param handler - The actual implementation receiving an AbortSignal followed by JSON-serializable arguments
- * @param fnOptions - Optional contentType and credentials settings
+ * @param fnOptions - Optional contentType, credentials, and rpcPrefix settings
  * @returns A client stub with `data` promise and `cancel` method, auto-registered in the server map
  */
-declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: Partial<ServerFunctionOptions>): ClientFunction<TArgs, TResult>;
+declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: CreateServerFunctionOptions): ClientFunction<TArgs, TResult>;
 //#endregion
 //#region src/getClientModules.d.ts
 /**
  * Generates the complete client-side module bundle by iterating all registered server functions
- * and producing fetch-based stubs for each. The result is transformed by Vite (or Oxc) during
- * the dev server or production build.
+ * for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
+ * (or Oxc) during the dev server or production build.
  * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
  * @returns A string of JavaScript code with all client RPC modules and their import dependencies
  */
@@ -409,6 +459,7 @@ declare const defaultServerFnOptions: {
   credentials: "same-origin";
   method: "POST";
 };
+declare const defaultPrefix = "__rpc";
 declare const defaultRPCOptions: RpcPluginOptions;
 declare const defaultMiddlewareOptions: {
   rpcPrefix: undefined;
@@ -416,5 +467,5 @@ declare const defaultMiddlewareOptions: {
   origin: undefined;
 };
 //#endregion
-export { RPCError, RequestEvent, RequestMeta, createServerFunction, defaultMiddlewareOptions, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsMap, walkGlobFiles };
+export { CreateServerFunctionOptions, RPCError, RequestEvent, RequestMeta, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, walkGlobFiles };
 //# sourceMappingURL=server.d.mts.map

@@ -56,6 +56,7 @@ const PREFIX_MAP = {
   h3: "__A_server",
   "react-query": "__A_server",
   "solid-query": "__A_server",
+  advanced: "public:rpc",
   spa: "_server",
   ssr: "_server",
 };

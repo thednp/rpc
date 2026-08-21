@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { default as rpcPlugin, loadRPCConfig } from "../src/index.ts";
 import type { ServerFnEntry, ServerFunctionInit } from "../src/types.d.ts";
 import { createServerFunction } from "../src/createFunction.ts";
-import { serverFunctionsMap } from "../src/functionsMap.ts";
-import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import { getClientModules } from "../src/getClientModules.ts";
+import {
+  getFunctionsForPrefix,
+  serverFunctionsByPrefix,
+  serverFunctionsMap,
+} from "../src/functionsMap.ts";
+import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import {
   validateCredentials,
   validateIdentifier,
@@ -27,7 +31,9 @@ import {
 } from "../src/express/createMiddleware.ts";
 
 beforeEach(() => {
-  serverFunctionsMap.clear();
+  for (const map of serverFunctionsByPrefix.values()) {
+    map.clear();
+  }
 });
 
 vi.mock("vite", async (importOriginal) => {
@@ -183,6 +189,44 @@ describe("createServerFunction", () => {
     expect(typeof entry!.handler).toBe("function");
   });
 
+  it("should register the function in the prefix-scoped map for custom rpcPrefix", () => {
+    createServerFunction("login", vi.fn(), { rpcPrefix: "v1:rpc" });
+    const v1Map = getFunctionsForPrefix("v1:rpc");
+    expect(v1Map.has("login")).toBe(true);
+    expect(serverFunctionsMap.has("login")).toBe(false);
+  });
+
+  it("should proxy Map iteration and mutation methods to the default prefix", () => {
+    createServerFunction("iter-a", vi.fn());
+    createServerFunction("iter-b", vi.fn());
+
+    const names = [...serverFunctionsMap.keys()].sort();
+    expect(names).toContain("iter-a");
+    expect(names).toContain("iter-b");
+
+    const entries = [...serverFunctionsMap.entries()];
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+
+    const values = [...serverFunctionsMap.values()];
+    expect(values.every((entry) => typeof entry.handler).toBeTruthy);
+
+    const forEachNames: string[] = [];
+    serverFunctionsMap.forEach((entry, key) => {
+      forEachNames.push(key);
+      expect(typeof entry.handler).toBe("function");
+    });
+    expect(forEachNames).toContain("iter-a");
+
+    // Direct iteration (Symbol.iterator) on the proxy
+    const iterated = [...serverFunctionsMap];
+    expect(iterated.length).toBeGreaterThanOrEqual(2);
+
+    // delete() routes to the default-prefix map
+    expect(serverFunctionsMap.delete("iter-a")).toBe(true);
+    expect(serverFunctionsMap.has("iter-a")).toBe(false);
+    expect(serverFunctionsMap.delete("iter-a")).toBe(false);
+  });
+
   it("should call user fn with an AbortSignal and correct args", async () => {
     fn = vi.fn().mockResolvedValue("ok");
     const wrapped = createServerFunction(
@@ -268,8 +312,29 @@ describe("getClientModules", () => {
     expect(code).toContain("export const sayHi");
   });
 
+  it("should only generate stubs for functions in the requested prefix", () => {
+    serverFunctionsMap.set("login", {
+      name: "login",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/json" },
+      exportName: "login",
+    });
+    getFunctionsForPrefix("v2:rpc").set("login", {
+      name: "login",
+      handler: (() => {}) as unknown as ServerFnEntry["handler"],
+      options: { contentType: "application/json" },
+      exportName: "login",
+    });
+
+    const v1Code = getClientModules({ rpcPrefix: "__rpc" });
+    expect(v1Code).toContain("export const login");
+    expect(v1Code).toContain('getClientStub("__rpc", "login")');
+    const v2Code = getClientModules({ rpcPrefix: "v2:rpc" });
+    expect(v2Code).toContain('getClientStub("v2:rpc", "login")');
+  });
+
   it("should generate text/plain body for text content type", () => {
-    serverFunctionsMap.set("echo", {
+    getFunctionsForPrefix("rpc").set("echo", {
       name: "echo",
       handler: (() => {}) as unknown as ServerFnEntry["handler"],
       options: { contentType: "text/plain" },
@@ -277,8 +342,8 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "rpc" });
-    expect(code).toContain("Content-Type': 'text/plain'");
-    expect(code).toContain("body = args[0]");
+    expect(code).toContain('getClientStub("rpc", "echo"');
+    expect(code).toContain('contentType: "text/plain"');
   });
 
   it("should pass FormData as body with no Content-Type for multipart", () => {
@@ -290,9 +355,8 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain("body = args[0]");
-    expect(code).toContain("headers = {}");
-    expect(code).not.toContain("Content-Type");
+    expect(code).toContain('getClientStub("__rpc", "upload"');
+    expect(code).toContain('contentType: "multipart/form-data"');
   });
 
   it("should serialize args to URLSearchParams for urlencoded content type", () => {
@@ -304,14 +368,12 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain("body = new URLSearchParams(args[0]).toString()");
-    expect(code).toContain(
-      "Content-Type': 'application/x-www-form-urlencoded'",
-    );
+    expect(code).toContain('getClientStub("__rpc", "form"');
+    expect(code).toContain('contentType: "application/x-www-form-urlencoded"');
   });
 
   it("should generate JSON body for JSON content type", () => {
-    serverFunctionsMap.set("add", {
+    getFunctionsForPrefix("api").set("add", {
       name: "add",
       handler: (() => {}) as unknown as ServerFnEntry["handler"],
       options: { contentType: "application/json" },
@@ -319,7 +381,7 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "api" });
-    expect(code).toContain("const body");
+    expect(code).toContain('getClientStub("api", "add")');
   });
 
   it("should generate include credentials when set", () => {
@@ -331,11 +393,11 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain('credentials = "include"');
+    expect(code).toContain('credentials: "include"');
   });
 
   it("should default to same-origin credentials", () => {
-    serverFunctionsMap.set("defaultFn", {
+    serverFunctionsMap.set("default-fn", {
       name: "default-fn",
       handler: (() => {}) as unknown as ServerFnEntry["handler"],
       options: { contentType: "application/json" },
@@ -343,11 +405,13 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain('credentials = "same-origin"');
+    // default credentials are omitted from generated opts (same-origin is default)
+    expect(code).toContain('getClientStub("__rpc", "default-fn")');
+    expect(code).not.toContain('credentials: "same-origin"');
   });
 
   it("should default to POST method", () => {
-    serverFunctionsMap.set("postFn", {
+    serverFunctionsMap.set("post-fn", {
       name: "post-fn",
       handler: (() => {}) as unknown as ServerFnEntry["handler"],
       options: { contentType: "application/json" },
@@ -355,14 +419,12 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain('method = "POST"');
-    expect(code).toContain(
-      "innerModule(body, headers, credentials, prefix, name, method)",
-    );
+    expect(code).toContain('getClientStub("__rpc", "post-fn")');
+    expect(code).not.toContain('method: "POST"');
   });
 
   it("should generate GET method when set", () => {
-    serverFunctionsMap.set("getFn", {
+    serverFunctionsMap.set("get-fn", {
       name: "get-fn",
       handler: (() => {}) as unknown as ServerFnEntry["handler"],
       options: { contentType: "application/json", method: "GET" },
@@ -370,11 +432,11 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain('method = "GET"');
+    expect(code).toContain('method: "GET"');
   });
 
   it("should serialize args as JSON query body for GET functions", () => {
-    serverFunctionsMap.set("getFn", {
+    serverFunctionsMap.set("get-fn", {
       name: "get-fn",
       handler: (() => {}) as unknown as ServerFnEntry["handler"],
       options: { contentType: "text/plain", method: "GET" },
@@ -382,10 +444,8 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    // GET forces a JSON args body and drops the Content-Type header
-    expect(code).toContain("body = JSON.stringify(args)");
-    expect(code).toContain("headers = {}");
-    expect(code).not.toContain("args[0]");
+    expect(code).toContain('getClientStub("__rpc", "get-fn"');
+    expect(code).toContain('method: "GET"');
   });
 
   it("should handle abort error in generated code", () => {
@@ -396,7 +456,7 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain("const name");
+    expect(code).toContain('getClientStub("__rpc", "fn")');
   });
 
   it("should handle 499/408 status as cancellation", () => {
@@ -407,7 +467,7 @@ describe("getClientModules", () => {
     });
 
     const code = getClientModules({ rpcPrefix: "__rpc" });
-    expect(code).toContain("innerModule");
+    expect(code).toContain("getClientStub");
     // expect(code).toContain("408");
   });
 

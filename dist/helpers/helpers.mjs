@@ -21,6 +21,63 @@ const handleResponse = async (response) => {
 	return result.data;
 };
 /**
+* Low-level stub factory used by both `getClientStub` and the auto-generated
+* modules (`src/getClientModules.ts:73`). Keeps body/header mapping in one
+* place so `innerModule` stays thin.
+*/
+const makeStub = (prefix, name, options = {}) => {
+	const method = options.method ?? "POST";
+	const credentials = options.credentials ?? "same-origin";
+	const contentType = options.contentType ?? "application/json";
+	if (method === "GET") {
+		const headers = {};
+		return ((...args) => {
+			const json = JSON.stringify(args);
+			return innerModule(json, headers, credentials, prefix, name, method);
+		});
+	}
+	switch (contentType) {
+		case "text/plain": {
+			const headers = { "Content-Type": "text/plain" };
+			return ((...args) => innerModule(args[0], headers, credentials, prefix, name, method));
+		}
+		case "application/x-www-form-urlencoded": {
+			const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+			return ((...args) => innerModule(new URLSearchParams(args[0]).toString(), headers, credentials, prefix, name, method));
+		}
+		case "multipart/form-data": {
+			const headers = {};
+			return ((...args) => innerModule(args[0], headers, credentials, prefix, name, method));
+		}
+		default: {
+			const headers = { "Content-Type": "application/json" };
+			return ((...args) => innerModule(JSON.stringify(args), headers, credentials, prefix, name, method));
+		}
+	}
+};
+/**
+* Creates a typed client stub for any prefix — the manual counterpart to the
+* auto-generated `public:rpc` stubs. Useful for privileged prefixes like
+* `admin:rpc` that are not emitted in the public bundle.
+* The stub has the same `{data,cancel}` shape and cancellation/error handling
+* as generated stubs, and is code-splittable: `const adminGetUser = getClientStub("admin:rpc","get-user")`
+* should be `await import`-ed only inside `/admin` routes so the `admin:rpc`
+* literal never appears in the public chunk.
+* @param prefix - RPC prefix (e.g. "admin:rpc")
+* @param name - Registered function name
+* @param options - Optional `method`, `credentials`, `contentType`
+* @returns Client stub `(...args) => {data,cancel}`
+* @example
+* import { getClientStub } from "@thednp/rpc/helpers";
+* const adminGetUser = getClientStub("admin:rpc","get-user");
+* const {data,cancel} = adminGetUser("123");
+* @example
+* const adminStats = getClientStub("admin:rpc","stats", { method: "GET" });
+*/
+function getClientStub(prefix, name, options) {
+	return makeStub(prefix, name, options);
+}
+/**
 * Creates an AbortController-bound fetch call for a single RPC function.
 * Used by the auto-generated client modules to issue HTTP requests with cancellation support.
 * GET requests carry arguments as an `?args=` JSON query parameter, since a fetch
@@ -58,6 +115,6 @@ const innerModule = (body, headers, credentials, prefix, name, method) => {
 	};
 };
 //#endregion
-export { handleResponse, innerModule };
+export { getClientStub, handleResponse, innerModule };
 
 //# sourceMappingURL=helpers.mjs.map

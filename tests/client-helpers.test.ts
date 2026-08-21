@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleResponse, innerModule } from "../src/client-helpers.ts";
+import {
+  getClientStub,
+  handleResponse,
+  innerModule,
+} from "../src/client-helpers.ts";
 
 describe("handleResponse", () => {
   beforeEach(() => {
@@ -190,5 +194,80 @@ describe("innerModule", () => {
     const result = innerModule("{}", {}, "same-origin", "__rpc", "fn");
     result.cancel("user cancelled");
     await expect(result.data).rejects.toThrow("The operation was aborted");
+  });
+});
+
+describe("getClientStub", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should create stub via getClientStub and call admin prefix", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: "admin-ok" }), { status: 200 }),
+    );
+    const adminGetUser = getClientStub("admin:rpc", "get-user");
+    const { data } = adminGetUser("123");
+    await expect(data).resolves.toBe("admin-ok");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin:rpc/get-user",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("should support GET via getClientStub", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: "ok" }), { status: 200 }),
+    );
+    const fn = getClientStub("admin:rpc", "stats", { method: "GET" });
+    await fn("a", 1).data;
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/admin:rpc/stats?args="),
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("should support text/plain via getClientStub", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: "ok" }), { status: 200 }),
+    );
+    const fn = getClientStub("__rpc", "echo", { contentType: "text/plain" });
+    await fn("hello").data;
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ headers: { "Content-Type": "text/plain" } }),
+    );
+  });
+
+  it("should support urlencoded via getClientStub", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: "ok" }), { status: 200 }),
+    );
+    const fn = getClientStub("__rpc", "echo", {
+      contentType: "application/x-www-form-urlencoded",
+    });
+    await fn({ a: "1" }).data;
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      }),
+    );
+  });
+
+  it("should support multipart via getClientStub", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: "ok" }), { status: 200 }),
+    );
+    const fd = new FormData();
+    fd.append("file", new Blob(["hi"]));
+    const fn = getClientStub("__rpc", "upload", {
+      contentType: "multipart/form-data",
+    });
+    await fn(fd).data;
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ headers: {} }),
+    );
   });
 });

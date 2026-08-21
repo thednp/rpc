@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "keywords": [
@@ -48,10 +48,11 @@
     ]
   },
   "tasks": {
-    "test": "vitest",
-    "test-ui": "vitest --ui",
-    "test-dev": "deno run -A scripts/dev-test.js",
-    "test-prod": "deno run -A scripts/dev-test.js --mode=preview",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest --watch --coverage",
+    "test:ui": "vitest --ui",
+    "test:dev": "deno -A scripts/dev-test.js",
+    "test:prod": "deno -A scripts/dev-test.js --mode=preview",
     "format": "deno fmt src tests examples/**/src",
     "lint": "deno task lint:ts && deno task check:ts",
     "lint:ts": "deno lint src",

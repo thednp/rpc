@@ -194,6 +194,7 @@ function rpcPlugin(
           ...config,
           serverFiles: options.serverFiles,
           scanRoot: options.scanRoot,
+          rpcPrefix: options.rpcPrefix,
         };
         await scanForServerFiles(scanCfg, viteServer);
       }
@@ -212,6 +213,7 @@ function rpcPlugin(
           ...config,
           serverFiles: options.serverFiles,
           scanRoot: options.scanRoot,
+          rpcPrefix: options.rpcPrefix,
         };
         await scanForServerFiles(scanCfg);
       }
@@ -234,6 +236,7 @@ function rpcPlugin(
           ...config,
           serverFiles: options.serverFiles,
           scanRoot: options.scanRoot,
+          rpcPrefix: options.rpcPrefix,
         };
         await scanForServerFiles(scanCfg);
       }

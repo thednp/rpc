@@ -355,6 +355,22 @@ describe("Hono createRPCMiddleware", () => {
     expect(c.json).toHaveBeenCalledWith({ data: "hello hono" }, 200);
   });
 
+  it("should use default prefix when rpcPrefix is undefined", async () => {
+    createServerFunction(
+      "hono-hello",
+      vi.fn().mockResolvedValue("hello hono"),
+    );
+    const mw = createRPCMiddleware({ rpcPrefix: undefined });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-hello",
+      method: "POST",
+      body: JSON.stringify(["arg1"]),
+    });
+    const next = makeHonoNext();
+    const result = await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith({ data: "hello hono" }, 200);
+  });
+
   it("should expose request context to server functions", async () => {
     let seenC: unknown;
     createServerFunction(

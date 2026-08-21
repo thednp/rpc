@@ -109,6 +109,11 @@ export interface ServerFunctionOptions {
    * @default "POST"
    */
   method?: "GET" | "POST";
+  /**
+   * RPC endpoint prefix
+   * @default "__rpc"
+   */
+  rpcPrefix?: string;
 }
 
 // primitives and their compositions
@@ -209,12 +214,14 @@ export interface RpcPluginOptionsInternal {
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
  */
-export type ScanConfig = Pick<ResolvedConfig, "base"> & {
+export interface ScanConfig extends Pick<ResolvedConfig, "base"> {
   root?: string;
   server?: Partial<ResolvedConfig["server"]>;
   serverFiles?: "exact" | "glob";
   scanRoot?: string;
-};
+  /** Default rpcPrefix to register scanned functions under when a function does not declare its own. Defaults to `__rpc` for backward compatibility. */
+  rpcPrefix?: string;
+}
 
 /**
  * Entry in the server functions map: registered name, client handler,
@@ -317,6 +324,21 @@ export interface MiddlewareOptions<
   origin?: string;
 
   /**
+   * Server file matching mode. Use `"exact"` for `server.ts|js|mjs|mts`
+   * names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}` inside the
+   * scan root. Only used for the lazy production scan when the middleware
+   * populates its prefix map on first request.
+   * @default "exact"
+   */
+  serverFiles?: "exact" | "glob";
+
+  /**
+   * Root directory for scanning server files. Defaults to `<root>/src/api`.
+   * Only used for the lazy production scan.
+   */
+  scanRoot?: string;
+
+  /**
    * Async handler for request processing.
    * Core middleware function that processes incoming requests.
    *
@@ -337,12 +359,36 @@ export interface MiddlewareOptions<
 }
 
 /**
+ * Options for a manual client stub created via `getClientStub`.
+ * Mirrors `ServerFunctionOptions` but client-only.
+ */
+export interface StubOptions {
+  /**
+   * HTTP method for the stub.
+   * @default "POST"
+   */
+  method: "GET" | "POST";
+  /**
+   * Fetch credentials policy.
+   * @default "same-origin"
+   */
+  credentials: Credentials;
+  /**
+   * Content type for the request body. Only `"application/json"` is used for
+   * most stubs; other values are for `text/plain`, `application/x-www-form-urlencoded`,
+   * and `multipart/form-data` handlers.
+   * @default "application/json"
+   */
+  contentType: ContentType;
+}
+
+/**
  * Return shape of `innerModule`: a promise of the response data plus
  * a `cancel` function to abort the underlying fetch request.
  */
-export type InnerModReturn = {
+export type InnerModReturn<T extends JsonValue> = {
   /** Promise resolving to the server response data */
-  data: Promise<JsonValue | void>;
+  data: Promise<T | void>;
   /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };

@@ -174,6 +174,19 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    */
   origin?: string;
   /**
+   * Server file matching mode. Use `"exact"` for `server.ts|js|mjs|mts`
+   * names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}` inside the
+   * scan root. Only used for the lazy production scan when the middleware
+   * populates its prefix map on first request.
+   * @default "exact"
+   */
+  serverFiles?: "exact" | "glob";
+  /**
+   * Root directory for scanning server files. Defaults to `<root>/src/api`.
+   * Only used for the lazy production scan.
+   */
+  scanRoot?: string;
+  /**
    * Async handler for request processing.
    * Core middleware function that processes incoming requests.
    *

@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
-import { serverFunctionsMap } from "../src/functionsMap.ts";
+import {
+  getFunctionsForPrefix,
+  serverFunctionsByPrefix,
+  serverFunctionsMap,
+} from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
@@ -26,7 +30,9 @@ import {
 } from "./fixtures/koa.ts";
 
 beforeEach(() => {
-  serverFunctionsMap.clear();
+  for (const map of serverFunctionsByPrefix.values()) {
+    map.clear();
+  }
   seedServerMap();
 });
 
@@ -480,6 +486,20 @@ describe("Koa createRPCMiddleware", () => {
     expect(ctx.body).toEqual({ data: "hello koa" });
   });
 
+  it("should use default prefix when rpcPrefix is undefined", async () => {
+    createServerFunction(
+      "koa-hello",
+      vi.fn().mockResolvedValue("hello koa"),
+    );
+    const mw = createRPCMiddleware({ rpcPrefix: undefined });
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-hello", method: "POST" });
+    simulateKoaBody(ctx, JSON.stringify(["arg1"]));
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(200);
+    expect(ctx.body).toEqual({ data: "hello koa" });
+  });
+
   it("should expose request context to server functions", async () => {
     let seenLocals: unknown;
     createServerFunction(
@@ -602,7 +622,7 @@ describe("Koa createRPCMiddleware", () => {
   });
 
   it("should wrap non-array JSON body in array for the handler", async () => {
-    serverFunctionsMap.set("testFn", {
+    getFunctionsForPrefix("__A_server").set("testFn", {
       name: "testFn",
       handler: vi.fn().mockReturnValue({
         data: Promise.resolve("ok"),
@@ -621,7 +641,7 @@ describe("Koa createRPCMiddleware", () => {
       ctx.req.emit("end");
     });
     await mw(ctx, next);
-    const handler = serverFunctionsMap.get("testFn")!.handler;
+    const handler = getFunctionsForPrefix("__A_server").get("testFn")!.handler;
     expect(handler).toHaveBeenCalledWith({ key: "value" });
   });
 

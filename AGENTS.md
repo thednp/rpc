@@ -4,6 +4,7 @@
 
 ```bash
 pnpm dev # Run examples/spa dev server
+pnpm dev:advanced # Run examples/advanced dev server
 pnpm dev:express # Run examples/express dev server
 pnpm dev:fastify # Run examples/fastify dev server
 pnpm dev:h3 # Run examples/h3 dev server
@@ -13,18 +14,23 @@ pnpm dev:react-query # Run examples/react-query dev server
 pnpm dev:solid-query # Run examples/solid-query dev server
 pnpm dev:ssr # Run examples/ssr dev server
 pnpm lint # Lint + typecheck (deno lint + tsc)
-pnpm test # Run tests with coverage
-pnpm test-ui # Run tests with UI
+pnpm test # Run tests once with coverage (vitest run --coverage)
+pnpm test:watch # Run tests in watch mode with coverage
+pnpm test:ui # Run tests with UI
+pnpm test:dev # Run examples in dev mode (scripts/dev-test)
+pnpm test:prod # Run examples in prod preview (scripts/dev-test --mode=preview)
 pnpm lint:ts # deno lint src
 pnpm fix:ts # deno lint src --fix
 pnpm check:ts # tsc -noEmit
-pnpm format # deno fmt src
+pnpm format # deno fmt src tests examples/**/src
+pnpm clean # Remove build artifacts and caches
 pnpm build # tsdown (outputs to dist/)
 pnpm up:examples # Update all example deps (to latest published @thednp/rpc + latest example deps)
 pnpm up:examples:lib # Sync examples to the latest published @thednp/rpc version
 pnpm up:root # Update root deps
 pnpm up:deno # deno update + sync deno.json deps
 pnpm upd # Update all deps (up:examples + up:examples:lib + up:root)
+pnpm audit:src # Audit src deps
 pnpm prepareOnly # upd + up:deno + lint + format + audit:src + build
 pnpm release # Publish npm + jsr (scripts/release.js)
 ```
@@ -35,19 +41,20 @@ pnpm release # Publish npm + jsr (scripts/release.js)
 
 ## Examples
 
-The `examples/` directory contains 9 example apps:
+The `examples/` directory contains 10 example apps:
 
-| Example       | Adapter                                                           | Type | Run Command             | Config                                  |
-| ----------------| -------------------------------------------------------------------| ------| -------------------------| -----------------------------------------|
-| `spa`          | Vite dev server (no adapter)                                      | SPA  | `pnpm dev`              | `examples/spa/rpc.config.ts`            |
-| `express`      | Express                                                           | SSR  | `pnpm dev:express`      | `examples/express/rpc.config.ts`        |
-| `fastify`      | Fastify                                                           | SSR  | `pnpm dev:fastify`      | `examples/fastify/rpc.config.ts`        |
-| `h3`           | h3                                                                | SSR  | `pnpm dev:h3`           | `examples/h3/rpc.config.ts`             |
-| `hono`         | Hono                                                              | SSR  | `pnpm dev:hono`         | `examples/hono/rpc.config.ts`           |
-| `koa`          | Koa                                                               | SSR  | `pnpm dev:koa`          | `examples/koa/rpc.config.ts`            |
-| `react-query`  | Express (React + @tanstack/react-query SSR)                       | SSR  | `pnpm dev:react-query`  | `examples/react-query/rpc.config.ts`    |
-| `solid-query`  | Express (Solid + @tanstack/solid-query SSR)                       | SSR  | `pnpm dev:solid-query`  | `examples/solid-query/rpc.config.ts`    |
-| `ssr`          | Custom `http-express.ts` (Express-compatible `node:http` server ) | SSR  | `pnpm dev:ssr`          | `examples/ssr/rpc.config.ts`            |
+| Example       | Adapter                                                           | Type | Run Command            | Config                               |
+| ---------------| -------------------------------------------------------------------| ------| ------------------------| --------------------------------------|
+| `spa`         | Vite dev server (no adapter)                                      | SPA  | `pnpm dev`             | `examples/spa/rpc.config.ts`         |
+| `express`     | Express                                                           | SSR  | `pnpm dev:express`     | `examples/express/rpc.config.ts`     |
+| `advanced`    | Express                                                           | SSR  | `pnpm dev:advanced`    | `examples/advanced/rpc.config.ts`    |
+| `fastify`     | Fastify                                                           | SSR  | `pnpm dev:fastify`     | `examples/fastify/rpc.config.ts`     |
+| `h3`          | h3                                                                | SSR  | `pnpm dev:h3`          | `examples/h3/rpc.config.ts`          |
+| `hono`        | Hono                                                              | SSR  | `pnpm dev:hono`        | `examples/hono/rpc.config.ts`        |
+| `koa`         | Koa                                                               | SSR  | `pnpm dev:koa`         | `examples/koa/rpc.config.ts`         |
+| `react-query` | Express (React + @tanstack/react-query SSR)                       | SSR  | `pnpm dev:react-query` | `examples/react-query/rpc.config.ts` |
+| `solid-query` | Express (Solid + @tanstack/solid-query SSR)                       | SSR  | `pnpm dev:solid-query` | `examples/solid-query/rpc.config.ts` |
+| `ssr`         | Custom `http-express.ts` (Express-compatible `node:http` server ) | SSR  | `pnpm dev:ssr`         | `examples/ssr/rpc.config.ts`         |
 
 Each example follows the same structure:
 
@@ -111,6 +118,7 @@ The tsdown.config.ts produces multiple entries:
 - Framework-agnostic core with adapters for Express, Fastify, Hono, and Koa
 - Client modules are auto-generated with `AbortController` support for cancellation
 - Server-side caching must be handled by third party tools (e.g. `@tanstack/react-query`)
+- **Multi-prefix support**: `createServerFunction(..., { rpcPrefix })` registers functions in a prefix-scoped map (`getFunctionsForPrefix`), so multiple RPC instances can coexist (versioned/namespaced APIs). All five adapters dispatch via `getFunctionsForPrefix(rpcPrefix || defaultPrefix)`; `serverFunctionsMap` is a backward-compatible proxy for the default `"__rpc"` prefix (`defaultPrefix`)
 
 ## Security & Hardening
 
@@ -118,7 +126,7 @@ The tsdown.config.ts produces multiple entries:
 - **Prefix regex injection prevention**: `rpcPrefix` config string is escaped via `escapeRegExp()` before being embedded in the boundary regex, preventing ReDoS or unintended matching from metacharacters in the prefix
 - **Regex compilation hoisted**: All prefix/path regexes are compiled once at middleware creation time (not per-request), eliminating per-request regex overhead
 - **Koa URL normalization**: Koa adapter parses `ctx.url` through `new URL()` to strip query strings and normalize encoding before prefix checking
-- **Code injection prevention in client module generation**: `getClientModules.ts` validates all interpolated identifiers (`fnName`, `fnEntry`, `rpcPrefix`) against `/^[A-Za-z_$][A-Za-z0-9_$]*$/` (and a path-safe variant allowing `/`) before interpolating into the generated client bundle. This prevents code injection via malicious export names or prefixes containing template literal interpolations (`${...}`), backticks, or `</script>` sequences.
+- **Code injection prevention in client module generation**: `getClientModules.ts` validates all interpolated identifiers (`fnName`, `fnEntry`, `rpcPrefix`) against `/^[A-Za-z_$][A-Za-z0-9_$]*$/` (and a path-safe variant allowing `/`, `@`, `:`, `-`) before interpolating into the generated client bundle. This prevents code injection via malicious export names or prefixes containing template literal interpolations (`${...}`), backticks, or `</script>` sequences.
 - **Body size limits**: Host frameworks cap parsed JSON bodies — Express (`express.json({ limit })`), Fastify (`bodyLimit`), Koa (`koa-body`), Hono (`hono/body-limit`). Rely on your framework's body parser middleware for size limits (see wiki/best-practices.md). The raw stream path in `readBody` does not impose a built-in limit — use framework middleware or a custom body limit handler for defense-in-depth.
 - **Generic 404 responses**: Error messages never echo the requested function name (no message-based function enumeration). Note the status code still distinguishes unknown (`404`) from known functions (`405`/`415`/`403`); function names ship in the client bundle so they are not secret — see `wiki/security.md`
 - **Auth is middleware's responsibility**: Authentication should be handled by middleware registered before `createRPCMiddleware()`. The middleware chain naturally composes — no built-in auth hook is needed.
@@ -145,6 +153,12 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 - Be free to send as many requests as the host allows (no rate limiting — host's responsibility)
 - Be free to hit any URL (no auth — host's responsibility via prior middleware)
 - Be rejected with generic error bodies (no function-name disclosure in messages, no stack traces); status-code differential still reveals existence — see `wiki/security.md`
+
+## Workflow notes (important!)
+
+- **Harness folders**: when scaffolding a minimal repro/harness to debug the Vite plugin or an adapter, create it inside the repo (e.g. `TEMP/`) — **never** in the root or in OS temp dirs. Root-level harness files break `tsdown`/`vitest` path resolution, and temp dirs outside the project get swept by OS cleaners and leave stale `node_modules`/`.vite` state that corrupts the next run.
+- **Never delete files**: do not `rm` source/test files. If a file must be removed from the tree, **rename it to `<name>-bak.<ext>`** (e.g. `foo.ts` → `foo-bak.ts`) and leave it in place. The `-bak` suffix is the only sanctioned way to retire a file; the repo may be scanned for history or references later.
+
 
 ## Documentation
 

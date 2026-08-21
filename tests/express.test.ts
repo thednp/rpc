@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
-import { serverFunctionsMap } from "../src/functionsMap.ts";
+import {
+  getFunctionsForPrefix,
+  serverFunctionsByPrefix,
+  serverFunctionsMap,
+} from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
@@ -32,7 +36,9 @@ import {
 } from "./fixtures/express.ts";
 
 beforeEach(() => {
-  serverFunctionsMap.clear();
+  for (const map of serverFunctionsByPrefix.values()) {
+    map.clear();
+  }
   seedServerMap();
 });
 
@@ -452,6 +458,23 @@ describe("Express createRPCMiddleware handler", () => {
     expect(sentData).toEqual({ data: "hello" });
   });
 
+  it("should use default prefix when rpcPrefix is undefined", async () => {
+    createServerFunction("hello-fn", vi.fn().mockResolvedValue("hello"));
+    const mw = createRPCMiddleware({ rpcPrefix: undefined });
+    const req = makeReq({
+      originalUrl: "/__rpc/hello-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify(["arg"]));
+    await mw(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ data: "hello" });
+  });
+
   it("should expose request context to server functions", async () => {
     let seenLocals: unknown;
     createServerFunction(
@@ -775,7 +798,7 @@ describe("Express createRPCMiddleware handler", () => {
   });
 
   it("should wrap non-array JSON body in array for the handler", async () => {
-    serverFunctionsMap.set("testFn", {
+    getFunctionsForPrefix("__A_server").set("testFn", {
       name: "testFn",
       handler: vi.fn().mockReturnValue({
         data: Promise.resolve("ok"),
@@ -793,7 +816,7 @@ describe("Express createRPCMiddleware handler", () => {
       req.emit("end");
     });
     await mw(req, res, () => {});
-    const handler = serverFunctionsMap.get("testFn")!.handler;
+    const handler = getFunctionsForPrefix("__A_server").get("testFn")!.handler;
     expect(handler).toHaveBeenCalledWith({ key: "value" });
   });
 

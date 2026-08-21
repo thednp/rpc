@@ -6,7 +6,8 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `createServerFunction(name, handler, options?)` — define a server function: first arg is `AbortSignal`, remaining args are JSON-serializable
 - `import { fn } from "./api"` — on the server calls the real handler, in the browser calls auto-generated `fetch` stubs
 - Returns `{ data: Promise<T>, cancel: (reason: string) => void }`
-- Options: `{ method: "GET" | "POST", contentType: "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data", credentials }`
+- Options: `{ method: "GET" | "POST", contentType: "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data", credentials, rpcPrefix }`
+- **Multi-prefix**: `rpcPrefix` (default `"__rpc"` via the exported `defaultPrefix` constant) registers the function in a prefix-scoped map (`getFunctionsForPrefix(prefix)`). Same names can coexist under different prefixes (versioned/namespaced APIs); middleware dispatches to the prefix-scoped map; the plugin generates client stubs per prefix. See `wiki/multi-prefix-guide.md`
 - `RPCError(message, code?, data?)` — throwable typed error, exported from `@thednp/rpc/server` (as is `formatError`); throw for server-side failures (not validation — return `{ error }` for expected user-facing problems). Dev 500 body: `{ error, code, data }`; prod: generic `{ error: "Internal Server Error" }` only. Client rejection `message` = the error string
 - `provideRequestContext(init, cb)` / `getRequestContext()` — per-request `AsyncLocalStorage` context available to all server function code; `RequestEvent` includes `nativeEvent`, `locals`, adapter-bound `redirect`; works across Express/Fastify/Hono/Koa/h3
 - Registered function names become URL paths: `POST /{prefix}/{name}` with body `JSON.stringify(args)`
@@ -35,7 +36,7 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `src/api/index.ts` — `export * from "./server"` (single import point for SSR + client — types flow through this)
 - SSR: `src/entry-server.ts` (imports real functions) and `src/entry-client.ts` (imports fetch stubs)
 - SPA: just import from `./api` in client code
-- Example apps: `examples/` — `spa`, `express`, `fastify`, `h3`, `hono`, `koa`, `ssr` (plain RPC + DOM update), plus `react-query` and `solid-query` (show `@tanstack/*-query` integration on top of RPC)
+- Example apps: `examples/` — `spa`, `express`, `fastify`, `h3`, `hono`, `koa`, `ssr` (plain RPC + DOM update), plus `react-query` and `solid-query` (show `@tanstack/*-query` integration on top of RPC), plus `advanced` (Express multi-prefix `public:rpc`/`admin:rpc` + universal middleware)
 
 ## Rules
 - First handler argument is always `(signal: AbortSignal, ...args)`
@@ -54,11 +55,23 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - Auth, rate limiting, origin checks: all middleware-host, registered before `createRPCMiddleware()`
 - Body limits: host framework's parser (express.json, bodyLimit, koa-body, hono/body-limit)
 
+## Development Scripts
+- `pnpm test` — run tests once with coverage (`vitest run --coverage`); project aims for 100% coverage on all metrics
+- `pnpm test:watch` — run tests in watch mode with coverage
+- `pnpm test:ui` — run tests with UI
+- `pnpm test:dev` — run examples in dev mode (scripts/dev-test)
+- `pnpm test:prod` — run examples in prod preview (scripts/dev-test --mode=preview)
+- `pnpm lint` — lint + typecheck (`deno lint src` + `tsc -noEmit`)
+- `pnpm format` — `deno fmt src tests examples/**/src`
+- `pnpm clean` — remove build artifacts and caches
+- `pnpm build` — tsdown bundle (outputs to `dist/`)
+
 ## Wiki Pages (in learning order)
 - `wiki/quickstart.md` — Rebuild the Express SSR example from `create-vite` in under a minute
 - `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
 - `wiki/configuration.md` — `rpc.config.ts`, `vite.config.ts`, `loadRPCConfig`
 - `wiki/server-functions.md` — `createServerFunction` API, methods, content types (JSON/text/urlencoded/multipart), validation (zod + valibot), typed errors (`RPCError`), AbortSignal, request context (`RequestEvent`, `send`, `functionName`)
+- `wiki/multi-prefix-guide.md` — Parallel RPC instances: versioned/public/admin API layouts, per-prefix middleware, canary deployments, origin validation per instance
 - `wiki/middleware.md` — Universal adapter-agnostic middleware via the request context (`locals` bridge, `getRequestMeta`, `sendResponse` short-circuits, wrapping official framework middleware)
 - `wiki/nojs-fallback.md` — Progressive enhancement: making an RPC endpoint work as a no-JS `<form>` action (detection rule, shared validation, PRG 303 redirects, state recovery)
 - `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration, and an SSR gotcha for disabled queries (solid-query hangs `renderToStringAsync`; use `queryClient.fetchQuery()` on submit instead)

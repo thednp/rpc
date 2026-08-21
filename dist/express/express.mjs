@@ -1,5 +1,4 @@
-import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles, serverFunctionsMap } from "@thednp/rpc/server";
-//#region src/options.ts
+import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, scanForServerFiles } from "@thednp/rpc/server";
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
 	adapter: "express",
@@ -10,6 +9,32 @@ const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
 	path: void 0,
 	origin: void 0
+};
+//#endregion
+//#region src/functionsMap.ts
+/**
+* Global symbol under which the shared `serverFunctionsByPrefix` map is stored
+* on `globalThis`. Keeping it on a `Symbol.for` key makes it instance-stable
+* across the bundled entry copies (`index.mjs`, `server.mjs`, `express.mjs`,
+* ...) and dev-server hot reloads, exactly like the request-context storage in
+* `context.ts`. Without this, `scanForServerFiles` (bundled into the plugin)
+* would populate a map copy the adapter middleware could not read.
+*/
+const functionsMapSymbol = Symbol.for("thednp.rpc.functionsMap");
+/**
+* Map of rpcPrefix -> Map of function names -> ServerFnEntry
+* Enables multiple RPC instances with different prefixes to coexist
+* without name collisions.
+*/
+const serverFunctionsByPrefix = globalThis[functionsMapSymbol] ??= /* @__PURE__ */ new Map();
+/**
+* Gets or creates the function map for a specific prefix.
+* @param prefix - The RPC prefix (e.g., "__rpc", "v1:rpc", "admin:rpc")
+* @returns Map of function names to ServerFnEntry for that prefix
+*/
+const getFunctionsForPrefix = (prefix) => {
+	if (!serverFunctionsByPrefix.has(prefix)) serverFunctionsByPrefix.set(prefix, /* @__PURE__ */ new Map());
+	return serverFunctionsByPrefix.get(prefix);
 };
 //#endregion
 //#region src/constants.ts
@@ -226,7 +251,7 @@ const middlewareStack = /* @__PURE__ */ new Set();
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
-	const rpcPrefix = options.rpcPrefix;
+	let rpcPrefix = options.rpcPrefix;
 	const path = options.path;
 	const handler = options.handler;
 	let name = middlewareName;
@@ -240,10 +265,15 @@ const createMiddleware = (initialOptions = {}) => {
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (req, res, next) => {
 		const { url } = getRequestDetails(req);
-		if (serverFunctionsMap.size === 0) await scanForServerFiles();
 		if (!handler) return next?.();
 		if (pathMatcher && !pathMatcher.test(url)) return next?.();
 		if (prefixRegex && !prefixRegex.test(url)) return next?.();
+		rpcPrefix = rpcPrefix ?? "__rpc";
+		if (getFunctionsForPrefix(rpcPrefix).size === 0) await scanForServerFiles({
+			rpcPrefix,
+			serverFiles: options.serverFiles,
+			scanRoot: options.scanRoot
+		});
 		await handler(req, res, next);
 	};
 	Object.defineProperty(middlewareHandler, "name", { value: name });
@@ -251,16 +281,19 @@ const createMiddleware = (initialOptions = {}) => {
 };
 /**
 * Creates the Express RPC middleware that routes incoming requests to registered server functions.
-* Reads the request body, dispatches to the matching function via serverFunctionsMap,
+* Reads the request body, dispatches to the matching function via getFunctionsForPrefix,
 * and sends the JSON-serialized result. Handles client disconnection via abort signals.
-* @param initialOptions - Options including rpcPrefix for URL routing
+* Supports multi-prefix setups where different middleware instances can route to functions
+* registered under different prefixes.
+* @param initialOptions - Options including rpcPrefix for URL routing and prefix-scoped function lookup
 * @returns An Express middleware function
 */
 const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;
+	const prefix = rpcPrefix || "__rpc";
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
-	const prefixReplace = `/${rpcPrefix}/`;
+	const prefixReplace = `/${prefix}/`;
 	return createMiddleware({
 		...options,
 		handler: async (req, res, _next) => {
@@ -274,7 +307,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				return;
 			}
 			const functionName = path.replace(prefixReplace, "");
-			const serverFunction = serverFunctionsMap.get(functionName);
+			const serverFunction = getFunctionsForPrefix(prefix).get(functionName);
 			if (!serverFunction) {
 				sendResponse(404, { error: FUNCTION_NOT_FOUND });
 				return;

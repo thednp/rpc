@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 
 import { getFunctionsForPrefix } from "./functionsMap.ts";
+import { defaultPrefix } from "./options.ts";
 import { walkGlobFiles } from "./server-helpers.ts";
 import {
   DUPLICATE_FUNCTION_NAME,
@@ -47,13 +48,13 @@ export const scanForServerFiles = async (
   const { createServer, normalizePath } = await import("vite");
   const config = (!initialCfg && !devServer) || !initialCfg
     ? {
-        root: process.cwd(),
-        base: process.env.BASE || "/",
-        server: { middlewareMode: true },
-      }
+      root: process.cwd(),
+      base: process.env.BASE || "/",
+      server: { middlewareMode: true },
+    }
     : {
-        ...initialCfg,
-      };
+      ...initialCfg,
+    };
 
   let server = devServer;
   if (!server) {
@@ -87,8 +88,9 @@ export const scanForServerFiles = async (
   const serverFiles: "exact" | "glob" = config.serverFiles ??
     "exact";
 
-  // Names registered during this scan run, used for duplicate detection
-  // (see the registration loop below).
+  // Names registered during this scan run, used for duplicate detection.
+  // Keyed by `${prefix}:${registeredName}` so the same name can coexist
+  // under different rpcPrefixes (see the registration loop below).
   const seenNames = new Set<string>();
 
   let files: string[];
@@ -123,22 +125,40 @@ export const scanForServerFiles = async (
         return;
       }
 
-      // `createServerFunction` auto-registers its name into the appropriate
-      // prefix-scoped map at module load. Track names seen in THIS scan run only:
-      // a name repeated within one scan (e.g. two files exporting the same function
-      // name with the same prefix) is a genuine conflict.
+      // Register each export into its prefix-scoped map, recording the
+      // original export name so `getClientModules` can emit the matching
+      // client stub. `createServerFunction` already auto-registers its name
+      // into the appropriate prefix-scoped map at module load, so a function
+      // may already exist here — in that case only the export name is added.
+      // Track names seen in THIS scan run only, keyed by prefix: a name
+      // repeated within one scan under the same prefix (e.g. two files
+      // exporting the same function name) is a genuine conflict.
       for (const [exportName, exportValue] of moduleEntries) {
         const registeredName = exportValue.name;
-        if (seenNames.has(registeredName)) {
+        const prefix = exportValue.options?.rpcPrefix ||
+          config.rpcPrefix ||
+          defaultPrefix;
+        const seenKey = `${prefix}:${registeredName}`;
+        if (seenNames.has(seenKey)) {
           if (process.env.NODE_ENV !== "production") {
             throw new Error(DUPLICATE_FUNCTION_NAME(registeredName));
           }
           console.warn(DUPLICATE_FUNCTION_NAME(registeredName));
           continue;
         }
-        seenNames.add(registeredName);
-        // Functions already registered in their prefix-scoped map via createServerFunction,
-        // so this is just recording that we've seen the export
+        seenNames.add(seenKey);
+        const prefixMap = getFunctionsForPrefix(prefix);
+        const existing = prefixMap.get(registeredName);
+        if (existing) {
+          existing.exportName = exportName;
+        } else {
+          prefixMap.set(registeredName, {
+            name: registeredName,
+            handler: exportValue,
+            options: exportValue.options,
+            exportName,
+          });
+        }
       }
     }
   } finally {

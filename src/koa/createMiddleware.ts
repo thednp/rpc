@@ -10,8 +10,8 @@ import {
   provideRequestContext,
   safeURL,
   scanForServerFiles,
-  serverFunctionsMap,
 } from "@thednp/rpc/server";
+import { getFunctionsForPrefix } from "../functionsMap.ts";
 import {
   BAD_REQUEST,
   CLIENT_DISCONNECTED,
@@ -22,7 +22,11 @@ import {
   UNSUPPORTED_MEDIA_TYPE,
 } from "../constants.ts";
 
-import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
+import {
+  defaultMiddlewareOptions,
+  defaultPrefix,
+  defaultRPCOptions,
+} from "../options.ts";
 import { readBody, redirect as koaRedirect } from "./helpers.ts";
 
 let middlewareCount = 0;
@@ -43,7 +47,7 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   ) as KoaMiddlewareOptions;
 
   const middlewareName = options.name;
-  const rpcPrefix = options.rpcPrefix;
+  let rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -69,10 +73,6 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   const middlewareHandler = async (ctx: Context, next: Next) => {
     const url = safeURL(ctx.url).pathname;
 
-    if (serverFunctionsMap.size === 0) {
-      await scanForServerFiles();
-    }
-
     // No need to continue when no handler provided
     if (!handler) {
       return next();
@@ -84,6 +84,18 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
 
     if (prefixRegex && !prefixRegex.test(url)) {
       return next();
+    }
+
+    rpcPrefix = (rpcPrefix ?? defaultPrefix) as string;
+
+    // When serving from production server, scan for server files
+    if (getFunctionsForPrefix(rpcPrefix).size === 0) {
+      await scanForServerFiles({
+        rpcPrefix,
+        serverFiles: (options as unknown as { serverFiles?: "exact" | "glob" })
+          .serverFiles,
+        scanRoot: (options as unknown as { scanRoot?: string }).scanRoot,
+      } as never);
     }
 
     await handler(ctx, next);
@@ -114,10 +126,11 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
+  const prefix = rpcPrefix || defaultPrefix;
   const prefixRegex = rpcPrefix
     ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
-  const prefixReplace = `/${rpcPrefix}/`;
+  const prefixReplace = `/${prefix}/`;
 
   return createMiddleware({
     ...options,
@@ -145,7 +158,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
       }
 
       const functionName = url.replace(prefixReplace, "");
-      const serverFunction = serverFunctionsMap.get(functionName);
+      const serverFunction = getFunctionsForPrefix(prefix).get(functionName);
 
       if (!serverFunction) {
         ctx.status = 404;

@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.3.0] - 2026-08-21
+
+### Features
+
+- **Multi-prefix support**: `createServerFunction` accepts a per-function `rpcPrefix` option (`{ rpcPrefix: "v1:rpc" }`) so multiple RPC instances can coexist in parallel — versioned APIs, namespaced endpoints, and API segregation without function-name collisions. The server functions map is now scoped by prefix (`getFunctionsForPrefix(prefix)`), the plugin generates client stubs per prefix (`getClientModules` reads only the requested prefix's map), and all five adapters (Express, Fastify, Hono, Koa, h3) look functions up in the prefix-scoped map instead of a single global map. Functions default to `"__rpc"` for full backward compatibility; the same registered name under different prefixes is no longer a duplicate, while same-prefix duplicates still throw in dev / warn in production
+- **`getFunctionsForPrefix(prefix)`**: new exported server helper returning (and lazily creating) the `Map<name, ServerFnEntry>` for a given RPC prefix; `serverFunctionsMap` remains as the backward-compatible proxy for the default `"__rpc"` prefix
+- **`defaultPrefix` constant**: the default `"__rpc"` prefix is now a named export from `@thednp/rpc/server`, used consistently across the scan, adapters, and function registration instead of a hardcoded string
+- **Prefix charset widened**: `validatePathSegment` now permits `:` (and `@` in the first position) so versioned prefixes like `v1:rpc` / `v2:rpc` pass validation; `.` remains disallowed to keep path-traversal rejection (`foo..bar`, `foo/../bar`) intact
+- **`getClientStub` helper** (`@thednp/rpc/helpers`): manual typed client stub factory for privileged prefixes not emitted in the public bundle — `getClientStub("admin:rpc","get-user")` (also curried `getClientStub("admin:rpc")("get-user")`) returns the same `{data,cancel}` shape as auto-generated stubs, with `method`/`credentials`/`contentType` options; code-splittable so `admin:rpc` literals never appear in the public chunk when `await import`-ed only inside `/admin` routes
+- **Advanced example auth**: `examples/advanced` now has cookie-session auth (`HttpOnly; SameSite=Lax` `sid` via `Symbol.for("thednp.rpc.advanced.session")`), `public:rpc/login`/`logout`/`me`, `admin:rpc` guarded by `requireAdminSession` (403 without admin role), and SSR guard for `/admin` → `403` in `server.js` — demonstrates that `admin:rpc` isolation is not obscurity and that `getClientStub` must be used with real auth
+
+### Fixes
+
+- **Cross-bundle map sharing**: `serverFunctionsByPrefix` now on `globalThis[Symbol.for("thednp.rpc.functionsMap")]` (`src/functionsMap.ts:12`) like `requestContext` — plugin scan (`dist/index.mjs`) and adapter dispatch (`dist/express/*.mjs`) share one map instead of per-bundle copies (dev 404 fix)
+- **Config fallback**: scan fallback `exportValue.options?.rpcPrefix || config.rpcPrefix || defaultPrefix` (`src/scanForServerFiles.ts:138`) and `ScanConfig.rpcPrefix` (`src/types.d.ts:217`) propagated from `vite.config.ts`/`rpc.config.ts` via `src/index.ts:193` and lazy `src/*/*createMiddleware.ts:107` — existing examples without per-function `rpcPrefix` now register under the config prefix instead of `__rpc`
+- **Glob scan in prod**: `MiddlewareOptions.serverFiles/scanRoot` (`src/types.d.ts:333`) now forwarded to lazy `scanForServerFiles` in all five adapters, and `examples/advanced/server.js:25` `admin:rpc` mounts with `serverFiles:"glob"` — prod `preview` finds `*.server.ts` files instead of defaulting to `exact`
+- **Client generation DRY**: `src/getClientModules.ts:47` now emits `getClientStub("prefix","name",{...})` via `src/client-helpers.ts:32` `makeStub` instead of duplicating `body`/`headers` per function
+
+### Docs
+
+- New `wiki/multi-prefix-guide.md` — parallel RPC instances: versioned/public/admin API layouts, per-prefix middleware wiring, canary deployments, origin validation per instance, and backward compatibility; added **Security: Do Not Trust the Prefix** section
+- `wiki/security.md:92` **Multi-Prefix Client Isolation** — `getClientModules` virtual modules (`src/index.ts:221`), no disk files, only config prefix emitted, prefix is not a secret, must use `requireAdminSession`/`sendResponse(403)`
+- `wiki/index.md` TOC + cross-links from `wiki/configuration.md` and `wiki/adapters.md` to the multi-prefix guide
+- `AGENTS.md`, `llms.txt`, and `README.md` updated for the multi-prefix feature, `defaultPrefix` constant, `getClientStub`, and `dev:advanced`/`test:dev`/`test:prod` scripts
+- `examples/advanced/README.md` rewritten for auth + multi-prefix demo
+
+### Tests
+
+- Multi-prefix coverage: `createServerFunction` registers under a custom prefix (isolated from the default map), `getClientModules` generates `getClientStub` stubs only for the requested prefix, and the scan registers functions under their declared prefix without name collision
+- Adapter middleware tests updated to register functions in the prefix-scoped map for non-default prefixes
+- `getClientStub` coverage: curried `getClientStub("admin:rpc")("get-user")` and direct `getClientStub("admin:rpc","get-user")` plus `GET`/`text/plain`/`urlencoded`/`multipart` branches (`tests/client-helpers.test.ts:198`)
+- **100% coverage**: all metrics (statements, branches, functions, lines) at 100% — 428 tests
+
+### Chores
+
+- `pnpm test` now `vitest run --coverage`; new `pnpm test:watch` `vitest --watch --coverage`; `pnpm test:dev`/`test:prod` now `test:dev`/`test:prod` with colon; `pnpm clean` and `pnpm audit:src` documented; `scripts/update-examples.js:33` skips `advanced` (`link:../..`)
+
 ## [0.2.1] - 2026-08-10
 
 ### Features
@@ -16,6 +53,7 @@
 - **demo**: `body-limit.ts` stashes multipart bodies as `{ raw: body }` to mirror `@thednp/rpc/express`'s `readBody` streaming semantics; the render page and `getLibraryInfo` now count 9 examples and list the h3 adapter; the features grid grows to 9 cards (3×3) with request-context, no-JS form-fallback, and boundary-enforcement entries
 - **fastify example**: switch the production server to `@fastify/compress` (gzip) for the RPC endpoint and static HTML. `@fastify/compress` attaches its per-route `onSend` hook via `onRoute`, which never fires for the RPC plugin's global `preHandler` handling, so the example registers a scoped `app.post("/_server/*")` catch-all route — the RPC `preHandler` short-circuits before the handler runs, letting compress's hook attach to RPC POSTs while non-RPC POSTs still get a 404. Verified with curl: HTML and RPC POST responses (200 and 404) compress (gzip) with byte-identical decompression (md5 match), and non-RPC POSTs keep their 404
 - Sync all 9 examples to `@thednp/rpc ^0.2.0`
+- **advanced example** (`examples/advanced`): Express SSR showcase of the multi-prefix model and universal middleware — the same `get-user` function name is registered under both `public:rpc` (rate-limited, 5 req/10s, returns public user data) and `admin:rpc` (guarded by a `x-admin-token` header check, returns full record), served by two `createRPCMiddleware` instances mounted in `server.js` while the client stubs are generated only for the config `public:rpc` prefix; a `middleware.ts` module (`rateLimit`, `auditLog`, `requireAdmin`) built on `getRequestContext`/`getRequestMeta`/`sendResponse` is shared across both prefixes. Dev mode mounts the admin middleware explicitly since the Vite plugin only auto-mounts the configured prefix; `scripts/dev-test.js` PREFIX_MAP includes `advanced: "public:rpc"` and the root `dev:advanced` script runs it
 
 ### Docs
 

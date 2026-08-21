@@ -99,6 +99,18 @@ Server errors return a generic `Internal Server Error` — no messages, codes, o
 Generic type inference flows from your server function's arguments and return type all the way to the client stub. You get autocomplete for function names, argument types, and return types without writing a single type annotation on the client side.
 </details>
 
+<details>
+<summary><b>Multi-prefix support</b></summary>
+
+Run multiple RPC instances in parallel. Pass `{ rpcPrefix: "v1:rpc" }` to `createServerFunction` to register a function under a custom prefix — versioned APIs, namespaced endpoints, and API segregation without function-name collisions. The same name can coexist under different prefixes (`v1:rpc/login` + `v2:rpc/login`), middleware dispatches to the prefix-scoped map, and the plugin generates client stubs per prefix. Functions default to `"__rpc"` for full backward compatibility. See the [Multi-Prefix Guide](./wiki/multi-prefix-guide.md).
+</details>
+
+<details>
+<summary><b>Universal middleware</b></summary>
+
+Write **one** middleware function that runs unchanged on every adapter (Express, Fastify, Hono, Koa, h3). Because every dispatch runs inside a per-request context, middleware written against `getRequestContext()` — reading normalized request data via `getRequestMeta()`, short-circuiting with `sendResponse(status, body, headers)` — behaves identically regardless of the host framework. No per-framework rewrites for cross-cutting RPC rules like per-function rate limiting, audit logging, or feature flags. See the [Middleware Guide](./wiki/middleware.md).
+</details>
+
 ## Examples
 
 | Source                                                                                 | Demo                                                                                         | Clone                                                   |
@@ -112,6 +124,7 @@ Generic type inference flows from your server function's arguments and return ty
 | [examples/koa](https://github.com/thednp/rpc/tree/master/examples/koa)                 | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/koa)         | `pnpm dlx degit thednp/rpc/examples/koa my-app`         |
 | [examples/react-query](https://github.com/thednp/rpc/tree/master/examples/react-query) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/react-query) | `pnpm dlx degit thednp/rpc/examples/react-query my-app` |
 | [examples/solid-query](https://github.com/thednp/rpc/tree/master/examples/solid-query) | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/solid-query) | `pnpm dlx degit thednp/rpc/examples/solid-query my-app` |
+| [examples/advanced](https://github.com/thednp/rpc/tree/master/examples/advanced)       | [StackBlitz](https://stackblitz.com/fork/github/thednp/rpc/tree/master/examples/advanced)    | `pnpm dlx degit thednp/rpc/examples/advanced my-app`    |
 
 > **Clone an example**: `degit` scaffolds a fresh copy straight from the repo — no git history, ready to run:
 
@@ -244,9 +257,9 @@ See the [Adapters guide](./wiki/adapters.md) for full snippets for each framewor
 ### Unit Testing
 
 ```bash
-pnpm test         # Run tests with coverage
-pnpm test-ui      # Run tests with UI
-pnpm test --run   # Single run
+pnpm test         # Run tests once with coverage (vitest run --coverage)
+pnpm test:watch   # Run tests in watch mode with coverage
+pnpm test:ui      # Run tests with UI
 ```
 
 Tests use **Vitest** with **Istanbul** coverage — 10 test files covering the plugin, scanning, server/client helpers, request context, and all five adapters, at 100% coverage.
@@ -254,8 +267,8 @@ Tests use **Vitest** with **Istanbul** coverage — 10 test files covering the p
 ### Live Testing
 
 ```bash
-pnpm test-dev     # Runs all examples/<example> in DEV mode and reports their status in a table
-pnpm test-prod    # Runs all examples/<example> in PRODUCTION mode and reports their status in a table
+pnpm test:dev     # Runs all examples/<example> in DEV mode and reports their status in a table
+pnpm test:prod    # Runs all examples/<example> in PRODUCTION mode and reports their status in a table
 ```
 
 These tests check the following:
@@ -277,10 +290,10 @@ Contributions are welcome. This project uses:
 
 ```bash
 pnpm lint         # deno lint + tsc -noEmit
-pnpm format       # deno fmt src
-pnpm test         # Run tests with coverage
-pnpm test-ui      # Run tests with interactive UI 
-pnpm build        # Bundle with tsdown
+pnpm format       # deno fmt src tests examples/**/src
+pnpm test         # Run tests once with coverage (vitest run --coverage)
+pnpm test:ui      # Run tests with UI
+pnpm build        # Bundle with tsdown (tsdown)
 ```
 
 All changes should pass `pnpm lint && pnpm format && pnpm test` before submitting. See [AGENTS.md](./AGENTS.md) for the full command reference and project conventions.

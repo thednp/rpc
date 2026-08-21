@@ -1,4 +1,15 @@
 import type { ServerFnEntry } from "./types.d.ts";
+import { defaultPrefix } from "./options.ts";
+
+/**
+ * Global symbol under which the shared `serverFunctionsByPrefix` map is stored
+ * on `globalThis`. Keeping it on a `Symbol.for` key makes it instance-stable
+ * across the bundled entry copies (`index.mjs`, `server.mjs`, `express.mjs`,
+ * ...) and dev-server hot reloads, exactly like the request-context storage in
+ * `context.ts`. Without this, `scanForServerFiles` (bundled into the plugin)
+ * would populate a map copy the adapter middleware could not read.
+ */
+const functionsMapSymbol = Symbol.for("thednp.rpc.functionsMap");
 
 /**
  * Map of rpcPrefix -> Map of function names -> ServerFnEntry
@@ -8,7 +19,9 @@ import type { ServerFnEntry } from "./types.d.ts";
 export const serverFunctionsByPrefix: Map<
   string,
   Map<string, ServerFnEntry>
-> = new Map();
+> = ((globalThis as Record<symbol, Map<string, Map<string, ServerFnEntry>>>)[
+  functionsMapSymbol
+] ??= new Map());
 
 /**
  * Gets or creates the function map for a specific prefix.
@@ -25,22 +38,29 @@ export const getFunctionsForPrefix = (
 };
 
 /**
- * Backward compatibility: default map for "__rpc" prefix.
+ * Backward compatibility: default map for the default prefix.
  * Legacy code can still use serverFunctionsMap.set(name, entry).
  */
 export const serverFunctionsMap: Map<string, ServerFnEntry> = {
-  get: (key: string) => getFunctionsForPrefix("__rpc").get(key),
+  get: (key: string) => getFunctionsForPrefix(defaultPrefix).get(key),
   set: (key: string, value: ServerFnEntry) =>
-    getFunctionsForPrefix("__rpc").set(key, value),
-  has: (key: string) => getFunctionsForPrefix("__rpc").has(key),
-  delete: (key: string) => getFunctionsForPrefix("__rpc").delete(key),
-  clear: () => getFunctionsForPrefix("__rpc").clear(),
+    getFunctionsForPrefix(defaultPrefix).set(key, value),
+  has: (key: string) => getFunctionsForPrefix(defaultPrefix).has(key),
+  delete: (key: string) => getFunctionsForPrefix(defaultPrefix).delete(key),
+  clear: () => getFunctionsForPrefix(defaultPrefix).clear(),
   get size() {
-    return getFunctionsForPrefix("__rpc").size;
+    return getFunctionsForPrefix(defaultPrefix).size;
   },
-  entries: () => getFunctionsForPrefix("__rpc").entries(),
-  keys: () => getFunctionsForPrefix("__rpc").keys(),
-  values: () => getFunctionsForPrefix("__rpc").values(),
-  forEach: (callback: any) => getFunctionsForPrefix("__rpc").forEach(callback),
-  [Symbol.iterator]: () => getFunctionsForPrefix("__rpc")[Symbol.iterator](),
-} as any;
+  entries: () => getFunctionsForPrefix(defaultPrefix).entries(),
+  keys: () => getFunctionsForPrefix(defaultPrefix).keys(),
+  values: () => getFunctionsForPrefix(defaultPrefix).values(),
+  forEach: (
+    callback: (
+      value: ServerFnEntry,
+      key: string,
+      map: Map<string, ServerFnEntry>,
+    ) => void,
+  ) => getFunctionsForPrefix(defaultPrefix).forEach(callback),
+  [Symbol.iterator]: () =>
+    getFunctionsForPrefix(defaultPrefix)[Symbol.iterator](),
+} as unknown as Map<string, ServerFnEntry>;

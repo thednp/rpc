@@ -15,9 +15,13 @@ import {
   provideRequestContext,
   safeURL,
   scanForServerFiles,
-  serverFunctionsMap,
 } from "@thednp/rpc/server";
-import { defaultMiddlewareOptions, defaultRPCOptions } from "../options.ts";
+import { getFunctionsForPrefix } from "../functionsMap.ts";
+import {
+  defaultMiddlewareOptions,
+  defaultPrefix,
+  defaultRPCOptions,
+} from "../options.ts";
 import {
   BAD_REQUEST,
   CLIENT_DISCONNECTED,
@@ -47,7 +51,7 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   ) as HonoMiddlewareOptions;
 
   const middlewareName = options.name;
-  const rpcPrefix = options.rpcPrefix;
+  let rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -75,10 +79,6 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
       const reqUrl = safeURL(c.req.path);
       const url = reqUrl.pathname;
 
-      if (serverFunctionsMap.size === 0) {
-        await scanForServerFiles();
-      }
-
       // No need to continue when no handler provided
       if (!handler) {
         return next();
@@ -90,6 +90,19 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
 
       if (prefixRegex && !prefixRegex.test(url)) {
         return next();
+      }
+
+      rpcPrefix = (rpcPrefix ?? defaultPrefix) as string;
+
+      // When serving from production server, scan for server files
+      if (getFunctionsForPrefix(rpcPrefix).size === 0) {
+        await scanForServerFiles({
+          rpcPrefix,
+          serverFiles:
+            (options as unknown as { serverFiles?: "exact" | "glob" })
+              .serverFiles,
+          scanRoot: (options as unknown as { scanRoot?: string }).scanRoot,
+        } as never);
       }
 
       return (await handler(c, next)) as Response;
@@ -121,10 +134,11 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
+  const prefix = rpcPrefix || defaultPrefix;
   const prefixRegex = rpcPrefix
     ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
-  const prefixReplace = `/${rpcPrefix}/`;
+  const prefixReplace = `/${prefix}/`;
 
   return createMiddleware({
     ...options,
@@ -150,7 +164,7 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
       }
 
       const functionName = reqPath.replace(prefixReplace, "");
-      const serverFunction = serverFunctionsMap.get(functionName);
+      const serverFunction = getFunctionsForPrefix(prefix).get(functionName);
 
       if (!serverFunction) {
         return c.json({ error: FUNCTION_NOT_FOUND }, 404);
