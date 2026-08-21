@@ -4,7 +4,7 @@ import { loadConfigFromFile, mergeConfig } from "vite";
 import { resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
-import { defaultRPCOptions } from "./options.ts";
+import { defaultRPCOptions, setGlobalPrefix } from "./options.ts";
 import type { RpcPluginOptions, ScanConfig } from "./types.d.ts";
 import {
   CONFIG_FILE_NOT_FOUND,
@@ -182,6 +182,7 @@ function rpcPlugin(
     async configResolved(resolvedConfig) {
       const uniConfig = await loadRPCConfig();
       options = mergeConfig(uniConfig, devOptions) as RpcPluginOptions;
+      setGlobalPrefix(options.rpcPrefix);
 
       config = resolvedConfig;
     },

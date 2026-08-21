@@ -180,6 +180,15 @@ declare const serverFunctionsByPrefix: Map<string, Map<string, ServerFnEntry>>;
  */
 declare const getFunctionsForPrefix: (prefix: string) => Map<string, ServerFnEntry>;
 /**
+ * If the requested prefix is the globally configured one and its map is empty
+ * but the default map already holds functions (registered before the global
+ * was known — e.g. Netlify imports `src/api/server.ts` before
+ * `createRPCMiddleware({rpcPrefix})`), copy them. This implements the
+ * fallback chain `options.rpcPrefix → global config → default` without
+ * requiring `vite` at runtime on serverless.
+ */
+declare const ensurePrefixFromGlobal: (prefix: string) => void;
+/**
  * Backward compatibility: default map for the default prefix.
  * Legacy code can still use serverFunctionsMap.set(name, entry).
  */
@@ -466,6 +475,9 @@ declare const defaultMiddlewareOptions: {
   path: undefined;
   origin: undefined;
 };
+/** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
+declare const getGlobalPrefix: () => string | undefined;
+declare const setGlobalPrefix: (prefix: string | undefined) => void;
 //#endregion
-export { CreateServerFunctionOptions, RPCError, RequestEvent, RequestMeta, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, walkGlobFiles };
+export { CreateServerFunctionOptions, RPCError, RequestEvent, RequestMeta, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, ensurePrefixFromGlobal, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
 //# sourceMappingURL=server.d.mts.map

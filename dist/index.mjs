@@ -12,6 +12,11 @@ const defaultRPCOptions = {
 	serverFiles: "exact",
 	scanRoot: void 0
 };
+const globalPrefixSymbol = Symbol.for("thednp.rpc.globalPrefix");
+const setGlobalPrefix = (prefix) => {
+	if (prefix) globalThis[globalPrefixSymbol] = prefix;
+	else delete globalThis[globalPrefixSymbol];
+};
 //#endregion
 //#region src/constants.ts
 const NO_SERVER_FUNCTION_FOUND = "No server function found.";
@@ -398,6 +403,7 @@ function rpcPlugin(devOptions = {}) {
 		async configResolved(resolvedConfig) {
 			const uniConfig = await loadRPCConfig();
 			options = mergeConfig(uniConfig, devOptions);
+			setGlobalPrefix(options.rpcPrefix);
 			config = resolvedConfig;
 		},
 		async configureServer(server) {

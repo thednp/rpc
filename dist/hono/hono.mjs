@@ -1,7 +1,9 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
 import { escapeRegExp, formatError, hasContentTypeMismatch, provideRequestContext, safeURL, scanForServerFiles } from "@thednp/rpc/server";
+//#region src/options.ts
+const defaultPrefix = "__rpc";
 const defaultRPCOptions = {
-	rpcPrefix: "__rpc",
+	rpcPrefix: defaultPrefix,
 	adapter: "express",
 	serverFiles: "exact",
 	scanRoot: void 0
@@ -10,6 +12,13 @@ const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
 	path: void 0,
 	origin: void 0
+};
+const globalPrefixSymbol = Symbol.for("thednp.rpc.globalPrefix");
+/** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
+const getGlobalPrefix = () => globalThis[globalPrefixSymbol];
+const setGlobalPrefix = (prefix) => {
+	if (prefix) globalThis[globalPrefixSymbol] = prefix;
+	else delete globalThis[globalPrefixSymbol];
 };
 //#endregion
 //#region src/functionsMap.ts
@@ -36,6 +45,23 @@ const serverFunctionsByPrefix = globalThis[functionsMapSymbol] ??= /* @__PURE__ 
 const getFunctionsForPrefix = (prefix) => {
 	if (!serverFunctionsByPrefix.has(prefix)) serverFunctionsByPrefix.set(prefix, /* @__PURE__ */ new Map());
 	return serverFunctionsByPrefix.get(prefix);
+};
+/**
+* If the requested prefix is the globally configured one and its map is empty
+* but the default map already holds functions (registered before the global
+* was known — e.g. Netlify imports `src/api/server.ts` before
+* `createRPCMiddleware({rpcPrefix})`), copy them. This implements the
+* fallback chain `options.rpcPrefix → global config → default` without
+* requiring `vite` at runtime on serverless.
+*/
+const ensurePrefixFromGlobal = (prefix) => {
+	const global = getGlobalPrefix();
+	if (!global || prefix !== global) return;
+	const target = getFunctionsForPrefix(prefix);
+	if (target.size > 0) return;
+	const def = getFunctionsForPrefix(defaultPrefix);
+	if (def.size === 0) return;
+	for (const [name, entry] of def) if (!target.has(name)) target.set(name, entry);
 };
 //#endregion
 //#region src/constants.ts
@@ -178,6 +204,7 @@ const createMiddleware = (initialOptions = {}) => {
 		if (pathMatcher && !pathMatcher.test(url)) return next();
 		if (prefixRegex && !prefixRegex.test(url)) return next();
 		rpcPrefix = rpcPrefix ?? "__rpc";
+		ensurePrefixFromGlobal(rpcPrefix);
 		if (getFunctionsForPrefix(rpcPrefix).size === 0) await scanForServerFiles({
 			rpcPrefix,
 			serverFiles: options.serverFiles,
@@ -199,6 +226,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;
 	const prefix = rpcPrefix || "__rpc";
+	if (rpcPrefix) setGlobalPrefix(rpcPrefix);
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const prefixReplace = `/${prefix}/`;
 	return createMiddleware({
@@ -210,6 +238,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 			const requestOrigin = c.req.header("origin");
 			if (origin && requestOrigin && requestOrigin !== origin) return c.json({ error: REQUEST_FORBIDDEN }, 403);
 			const functionName = reqPath.replace(prefixReplace, "");
+			ensurePrefixFromGlobal(prefix);
 			const serverFunction = getFunctionsForPrefix(prefix).get(functionName);
 			if (!serverFunction) return c.json({ error: FUNCTION_NOT_FOUND }, 404);
 			try {

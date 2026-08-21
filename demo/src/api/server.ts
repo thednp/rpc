@@ -1,6 +1,7 @@
 import { createServerFunction } from "@thednp/rpc/server";
 import pkg from "../../package.json" with { type: "json" };
 import rootPkg from "../../../package.json" with { type: "json" };
+
 import {
   CONTACT_FIELDS,
   parseMultipartFormData,
@@ -15,7 +16,7 @@ export const sayHi = createServerFunction(
     signal?.throwIfAborted();
     return `Hello ${name}! This reply came from a server function.`;
   },
-  { contentType: "text/plain", rpcPrefix: "@demo" },
+  { contentType: "text/plain", /*rpcPrefix: "@demo"*/ },
 );
 
 export const getServerTime = createServerFunction(
@@ -33,7 +34,7 @@ export const getServerTime = createServerFunction(
       iso: new Date().toISOString(),
     };
   },
-  { method: "GET", rpcPrefix: "@demo" },
+  { method: "GET", /*rpcPrefix: "@demo"*/ },
 );
 
 export const getLibraryInfo = createServerFunction(
@@ -54,7 +55,7 @@ export const getLibraryInfo = createServerFunction(
       prefix: "/@demo",
     };
   },
-  { method: "GET", rpcPrefix: "@demo" },
+  { method: "GET", /*rpcPrefix: "@demo"*/ },
 );
 
 type ContactErrors = Partial<Record<string, [string, ...string[]]>>;
@@ -145,5 +146,5 @@ export const submitContact = createServerFunction(
       githubUser,
     } as ContactResult;
   },
-  { contentType: "multipart/form-data", rpcPrefix: "@demo" },
+  { contentType: "multipart/form-data", /*rpcPrefix: "@demo"*/ },
 );

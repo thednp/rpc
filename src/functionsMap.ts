@@ -1,5 +1,5 @@
 import type { ServerFnEntry } from "./types.d.ts";
-import { defaultPrefix } from "./options.ts";
+import { defaultPrefix, getGlobalPrefix } from "./options.ts";
 
 /**
  * Global symbol under which the shared `serverFunctionsByPrefix` map is stored
@@ -35,6 +35,26 @@ export const getFunctionsForPrefix = (
     serverFunctionsByPrefix.set(prefix, new Map());
   }
   return serverFunctionsByPrefix.get(prefix)!;
+};
+
+/**
+ * If the requested prefix is the globally configured one and its map is empty
+ * but the default map already holds functions (registered before the global
+ * was known — e.g. Netlify imports `src/api/server.ts` before
+ * `createRPCMiddleware({rpcPrefix})`), copy them. This implements the
+ * fallback chain `options.rpcPrefix → global config → default` without
+ * requiring `vite` at runtime on serverless.
+ */
+export const ensurePrefixFromGlobal = (prefix: string): void => {
+  const global = getGlobalPrefix();
+  if (!global || prefix !== global) return;
+  const target = getFunctionsForPrefix(prefix);
+  if (target.size > 0) return;
+  const def = getFunctionsForPrefix(defaultPrefix);
+  if (def.size === 0) return;
+  for (const [name, entry] of def) {
+    if (!target.has(name)) target.set(name, entry);
+  }
 };
 
 /**

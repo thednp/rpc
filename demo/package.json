@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "pnpm build && pnpm start",
     "kill": "node ./scripts/kill.mjs",
-    "start": "pnpm kill; (trap 'kill 0' INT TERM EXIT; node --experimental-strip-types ./server.ts & vite preview)"
+    "start": "node --experimental-strip-types ./server.ts & vite preview",
+    "start_": "pnpm kill; (trap 'kill 0' INT TERM EXIT; node --experimental-strip-types ./server.ts & vite preview)"
   },
   "dependencies": {
     "@thednp/rpc": "link:..",
