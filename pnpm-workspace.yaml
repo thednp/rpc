@@ -2,10 +2,10 @@ packages:
   - "."
   - "examples/*"
 overrides:
-  '@hono/node-server': '>=2.1.1'
+  '@hono/node-server': '>=2.1.0'
 minimumReleaseAgeExclude:
   - '@thednp/rpc@0.0.13 || 0.1.0 || 0.1.1 || 0.2.0 || 0.3.0'
-  - '@hono/node-server@2.1.1'
+  - '@hono/node-server@2.1.0'
   - hono@4.13.0 || 4.13.1
   - '@fastify/compress@9.1.1'
   - '@fastify/static@10.1.3'

@@ -74,7 +74,7 @@
     "check:ts": "tsc -noEmit",
     "up:examples": "pnpm up -r --latest --filter \"./examples/*\"",
     "up:examples:lib": "deno run -A scripts/update-examples.js",
-    "up:root": "pnpm up --latest",
+    "up:root": "pnpm up --latest && pnpm install",
     "release": "node scripts/release.js",
     "up:deno": "deno update && deno -A scripts/update-deno.js",
     "upd": "pnpm up:examples && pnpm up:root && pnpm up:examples:lib",
