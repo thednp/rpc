@@ -7,14 +7,17 @@ import serverless from "serverless-http";
 import { createRPCMiddleware } from "@thednp/rpc/express";
 import { bodyLimit } from "../../body-limit.ts";
 import { createFormFallback } from "../../src/lib/form-fallback.ts";
-
 import "../../src/api/server.ts";
 
-const rpc = createRPCMiddleware({ rpcPrefix: "@demo" });
+// Serverless requires explicit handling
+import cfg from "../../rpc.config.ts";
+
+const rpc = createRPCMiddleware(cfg);
 const formFallback = createFormFallback({
-  rpcPrefix: "@demo",
+  rpcPrefix: cfg.rpcPrefix,
   functionName: "submit-contact",
 });
+
 const stack = [bodyLimit, formFallback, rpc];
 
 const app = (req: any, res: any, next: any) => {

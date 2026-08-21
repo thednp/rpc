@@ -76,6 +76,8 @@ export const logout = createServerFunction(
 );
 ```
 
+> **Shortcut:** When every function in a file shares the same `rpcPrefix`, call `setGlobalPrefix` once at the top instead of repeating the option per-function. This is the correct pattern for serverless deployments where functions register at import time (see [Adapters — Serverless](./adapters.md#serverless)).
+
 ```typescript
 // src/api/v2/auth.server.ts
 import { createServerFunction } from "@thednp/rpc/server";
@@ -126,7 +128,7 @@ app.use(
 );
 ```
 
-### 3. Client Usage (Unchanged)
+### 3. Client Usage
 
 The plugin still generates client modules automatically. Each `rpcPrefix` generates stubs that call the correct endpoint:
 
@@ -146,6 +148,7 @@ const result = await data; // → POST /api/v1/v1:rpc/login
 export * from "./auth.server";
 
 // Client code
+// src/index.ts
 import { login } from "./api/v2";
 
 const { data } = login({ email: "user@example.com", password: "pass", mfa: "123456" });

@@ -245,7 +245,40 @@ Cap request bodies with h3's native `bodyLimit`/`assertBodySize`, which swap `ev
 
 The h3 example serves built assets from `dist/client` with an extracted `middleware/serveStatic.js` (aliases h3's `serveStatic` from `h3/node`, adds `Content-Length`, `Last-Modified` and `Cache-Control: public, max-age=31536000, immutable`), registered **after** `createRPCMiddleware()` so asset requests never reach server functions and missing files fall through to the SSR handler.
 
----
+### Serverless
+
+Serverless environments (Netlify, Vercel, Cloudflare Workers with Node compat, etc.) work with any adapter via the same `createRPCMiddleware` factory. The only difference is how the global prefix is set.
+
+In a regular SSR server, `loadRPCConfig()` runs before your server functions are imported, so it automatically calls `setGlobalPrefix(config.rpcPrefix)` for you:
+
+```ts
+// Regular SSR — prefix is set by loadRPCConfig
+const config = await loadRPCConfig();
+await attachRPC(app);
+// attachRPC or your own imports pull in src/api/server.ts after the prefix is set
+```
+
+In serverless, ESM static imports are hoisted — they execute before any other module body code. So `import "./src/api/server.ts"` runs before `await loadRPCConfig()` returns, meaning `createServerFunction` calls inside that file see `getGlobalPrefix() === undefined` and register under the wrong prefix.
+
+**Workaround**: call `setGlobalPrefix` directly in the `server.ts` file:
+
+```ts
+// src/api/server.ts
+import { setGlobalPrefix, createServerFunction } from "@thednp/rpc/server";
+
+// This is for serverless
+import cfg from "../rpc.config.ts";
+setGlobalPrefix(cfg.rpcPrefix);
+
+export const sayHi = createServerFunction(
+  "say-hi",
+  async (signal, prop) => {
+    // do your thing
+  }
+)
+```
+
+In serverless environments you have to make sure the prefix is already set by the time `createServerFunction` runs in `src/api/server.ts`. See the working example in [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts).
 
 > **Next:** [Security](./security.md) — the threats the framework handles for you and what it expects you to own.
 

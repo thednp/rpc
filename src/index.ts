@@ -4,7 +4,7 @@ import { loadConfigFromFile, mergeConfig } from "vite";
 import { resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
-import { defaultRPCOptions, setGlobalPrefix } from "./options.ts";
+import { defaultRPCOptions } from "./options.ts";
 import type { RpcPluginOptions, ScanConfig } from "./types.d.ts";
 import {
   CONFIG_FILE_NOT_FOUND,
@@ -20,6 +20,7 @@ import {
 } from "./scanForServerFiles.ts";
 import { serverFunctionsMap } from "./functionsMap.ts";
 
+import { setGlobalPrefix } from "@thednp/rpc/server";
 import { createRPCMiddleware } from "@thednp/rpc/express";
 
 /**
@@ -85,6 +86,7 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
       if (!existsSync(configFilePath)) {
         console.warn(CONFIG_FILE_NOT_FOUND(configFile, configFilePath));
         RPCConfig = defaultRPCOptions;
+        setGlobalPrefix(defaultRPCOptions.rpcPrefix);
         return defaultRPCOptions as RpcPluginOptions;
       }
 
@@ -99,6 +101,7 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
           result.config,
         ) as RpcPluginOptions;
 
+        setGlobalPrefix(RPCConfig.rpcPrefix);
         return RPCConfig;
       }
       // istanbul ignore next - this is a necessary fallback here
@@ -106,6 +109,8 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
     }
 
     if (RPCConfig !== undefined) {
+      setGlobalPrefix(RPCConfig.rpcPrefix);
+
       return RPCConfig;
     }
 
@@ -142,6 +147,8 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
     // return defaultRPCOptions as RpcPluginOptions;
   }
 
+  setGlobalPrefix(RPCConfig.rpcPrefix);
+
   return RPCConfig;
 };
 
@@ -168,21 +175,10 @@ function rpcPlugin(
     name: "vite-plugin-universal-rpc",
     enforce: "pre",
     // Plugin methods
-    // config() {
-    //   return {
-    //     // optimizeDeps: {
-    //     //   noDiscovery: true,
-    //     //   include: ["@thednp/rpc"],
-    //     // },
-    //     ssr: {
-    //       noExternal: ["@thednp/rpc"],
-    //     },
-    //   };
-    // },
     async configResolved(resolvedConfig) {
       const uniConfig = await loadRPCConfig();
       options = mergeConfig(uniConfig, devOptions) as RpcPluginOptions;
-      setGlobalPrefix(options.rpcPrefix);
+      // setGlobalPrefix(options.rpcPrefix);
 
       config = resolvedConfig;
     },

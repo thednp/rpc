@@ -15,19 +15,16 @@ import type { RequestEvent } from "@thednp/rpc/server";
 import {
   escapeRegExp,
   formatError,
+  getGlobalPrefix,
   hasContentTypeMismatch,
   provideRequestContext,
   scanForServerFiles,
 } from "@thednp/rpc/server";
-import {
-  ensurePrefixFromGlobal,
-  getFunctionsForPrefix,
-} from "../functionsMap.ts";
+import { getFunctionsForPrefix } from "../functionsMap.ts";
 import {
   defaultMiddlewareOptions,
   defaultPrefix,
   defaultRPCOptions,
-  setGlobalPrefix,
 } from "../options.ts";
 import {
   getRequestDetails,
@@ -106,15 +103,13 @@ export const createMiddleware: ExpressMiddlewareFn = (initialOptions = {}) => {
     }
 
     rpcPrefix = (rpcPrefix ?? defaultPrefix) as string;
-    ensurePrefixFromGlobal(rpcPrefix);
 
     // When serving from production server, scan for server files
     if (getFunctionsForPrefix(rpcPrefix).size === 0) {
       await scanForServerFiles({
         rpcPrefix,
-        serverFiles: (options as unknown as { serverFiles?: "exact" | "glob" })
-          .serverFiles,
-        scanRoot: (options as unknown as { scanRoot?: string }).scanRoot,
+        serverFiles: options.serverFiles,
+        scanRoot: options.scanRoot,
       } as never);
     }
 
@@ -151,8 +146,8 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
-  const prefix = rpcPrefix || defaultPrefix;
-  if (rpcPrefix) setGlobalPrefix(rpcPrefix as string);
+  const prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
+
   const prefixRegex = rpcPrefix
     ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
@@ -187,9 +182,6 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
       }
 
       const functionName = path.replace(prefixReplace, "");
-      // Fallback chain: if prefix is the globally configured one and its map
-      // is empty (functions registered before global was known), copy from default
-      ensurePrefixFromGlobal(prefix);
       // Look up function in the prefix-scoped map
       const serverFunctionsForPrefix = getFunctionsForPrefix(prefix);
       const serverFunction = serverFunctionsForPrefix.get(functionName);

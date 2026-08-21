@@ -8,6 +8,11 @@ import {
   validateContactForm,
 } from "../lib/contact-form";
 
+// Serverless requires explicit handling
+import { setGlobalPrefix } from "@thednp/rpc/server";
+import cfg from "../../rpc.config.ts";
+setGlobalPrefix(cfg.rpcPrefix);
+
 export const sayHi = createServerFunction(
   "say-hi",
   async (signal, name: string) => {
@@ -16,7 +21,7 @@ export const sayHi = createServerFunction(
     signal?.throwIfAborted();
     return `Hello ${name}! This reply came from a server function.`;
   },
-  { contentType: "text/plain", /*rpcPrefix: "@demo"*/ },
+  { contentType: "text/plain" },
 );
 
 export const getServerTime = createServerFunction(
@@ -34,7 +39,7 @@ export const getServerTime = createServerFunction(
       iso: new Date().toISOString(),
     };
   },
-  { method: "GET", /*rpcPrefix: "@demo"*/ },
+  { method: "GET" },
 );
 
 export const getLibraryInfo = createServerFunction(
@@ -55,7 +60,7 @@ export const getLibraryInfo = createServerFunction(
       prefix: "/@demo",
     };
   },
-  { method: "GET", /*rpcPrefix: "@demo"*/ },
+  { method: "GET" },
 );
 
 type ContactErrors = Partial<Record<string, [string, ...string[]]>>;
@@ -146,5 +151,5 @@ export const submitContact = createServerFunction(
       githubUser,
     } as ContactResult;
   },
-  { contentType: "multipart/form-data", /*rpcPrefix: "@demo"*/ },
+  { contentType: "multipart/form-data" },
 );

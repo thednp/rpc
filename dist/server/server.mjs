@@ -20,13 +20,6 @@ const defaultMiddlewareOptions = {
 	path: void 0,
 	origin: void 0
 };
-const globalPrefixSymbol = Symbol.for("thednp.rpc.globalPrefix");
-/** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
-const getGlobalPrefix = () => globalThis[globalPrefixSymbol];
-const setGlobalPrefix = (prefix) => {
-	if (prefix) globalThis[globalPrefixSymbol] = prefix;
-	else delete globalThis[globalPrefixSymbol];
-};
 //#endregion
 //#region src/functionsMap.ts
 /**
@@ -52,23 +45,6 @@ const serverFunctionsByPrefix = globalThis[functionsMapSymbol] ??= /* @__PURE__ 
 const getFunctionsForPrefix = (prefix) => {
 	if (!serverFunctionsByPrefix.has(prefix)) serverFunctionsByPrefix.set(prefix, /* @__PURE__ */ new Map());
 	return serverFunctionsByPrefix.get(prefix);
-};
-/**
-* If the requested prefix is the globally configured one and its map is empty
-* but the default map already holds functions (registered before the global
-* was known — e.g. Netlify imports `src/api/server.ts` before
-* `createRPCMiddleware({rpcPrefix})`), copy them. This implements the
-* fallback chain `options.rpcPrefix → global config → default` without
-* requiring `vite` at runtime on serverless.
-*/
-const ensurePrefixFromGlobal = (prefix) => {
-	const global = getGlobalPrefix();
-	if (!global || prefix !== global) return;
-	const target = getFunctionsForPrefix(prefix);
-	if (target.size > 0) return;
-	const def = getFunctionsForPrefix(defaultPrefix);
-	if (def.size === 0) return;
-	for (const [name, entry] of def) if (!target.has(name)) target.set(name, entry);
 };
 /**
 * Backward compatibility: default map for the default prefix.
@@ -217,6 +193,13 @@ const safeURL = (rawUrl, base = SAFE_URL_BASE) => {
 	} catch {
 		return new URL("/", base);
 	}
+};
+const globalPrefixSymbol = Symbol.for("thednp.rpc.globalPrefix");
+/** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
+const getGlobalPrefix = () => globalThis[globalPrefixSymbol];
+const setGlobalPrefix = (prefix) => {
+	if (prefix) globalThis[globalPrefixSymbol] = prefix;
+	else delete globalThis[globalPrefixSymbol];
 };
 //#endregion
 //#region src/scanForServerFiles.ts
@@ -557,6 +540,6 @@ const getRequestMeta = (event) => {
 	};
 };
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, ensurePrefixFromGlobal, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

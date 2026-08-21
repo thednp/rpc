@@ -115,7 +115,7 @@ The tsdown.config.ts produces multiple entries:
 
 - Vite plugin for creating server functions with automatic RPC generation
 - Server functions return `{ data: Promise<T>, cancel: (reason?: string) => void }` shape
-- Framework-agnostic core with adapters for Express, Fastify, Hono, and Koa
+- Framework-agnostic core with adapters for Express, Fastify, Hono, Koa, and h3
 - Client modules are auto-generated with `AbortController` support for cancellation
 - Server-side caching must be handled by third party tools (e.g. `@tanstack/react-query`)
 - **Multi-prefix support**: `createServerFunction(..., { rpcPrefix })` registers functions in a prefix-scoped map (`getFunctionsForPrefix`), so multiple RPC instances can coexist (versioned/namespaced APIs). All five adapters dispatch via `getFunctionsForPrefix(rpcPrefix || defaultPrefix)`; `serverFunctionsMap` is a backward-compatible proxy for the default `"__rpc"` prefix (`defaultPrefix`)
@@ -127,7 +127,7 @@ The tsdown.config.ts produces multiple entries:
 - **Regex compilation hoisted**: All prefix/path regexes are compiled once at middleware creation time (not per-request), eliminating per-request regex overhead
 - **Koa URL normalization**: Koa adapter parses `ctx.url` through `new URL()` to strip query strings and normalize encoding before prefix checking
 - **Code injection prevention in client module generation**: `getClientModules.ts` validates all interpolated identifiers (`fnName`, `fnEntry`, `rpcPrefix`) against `/^[A-Za-z_$][A-Za-z0-9_$]*$/` (and a path-safe variant allowing `/`, `@`, `:`, `-`) before interpolating into the generated client bundle. This prevents code injection via malicious export names or prefixes containing template literal interpolations (`${...}`), backticks, or `</script>` sequences.
-- **Body size limits**: Host frameworks cap parsed JSON bodies — Express (`express.json({ limit })`), Fastify (`bodyLimit`), Koa (`koa-body`), Hono (`hono/body-limit`). Rely on your framework's body parser middleware for size limits (see wiki/best-practices.md). The raw stream path in `readBody` does not impose a built-in limit — use framework middleware or a custom body limit handler for defense-in-depth.
+- **Body size limits**: Host frameworks cap parsed JSON bodies — Express (`express.json({ limit })`), Fastify (`bodyLimit`), Koa (`koa-body`), Hono (`hono/body-limit`), h3 (`bodyLimit`/`assertBodySize`). Rely on your framework's body parser middleware for size limits (see wiki/best-practices.md). The raw stream path in `readBody` does not impose a built-in limit — use framework middleware or a custom body limit handler for defense-in-depth.
 - **Generic 404 responses**: Error messages never echo the requested function name (no message-based function enumeration). Note the status code still distinguishes unknown (`404`) from known functions (`405`/`415`/`403`); function names ship in the client bundle so they are not secret — see `wiki/security.md`
 - **Auth is middleware's responsibility**: Authentication should be handled by middleware registered before `createRPCMiddleware()`. The middleware chain naturally composes — no built-in auth hook is needed.
 - **No client-side secrets or stack traces**: Error responses always return `"Internal Server Error"` regardless of the underlying error; `console.error(String(err))` is server-side only for debugging and does not surface internals to the client

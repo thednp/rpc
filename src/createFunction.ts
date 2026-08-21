@@ -7,11 +7,8 @@ import type {
   ServerFunctionOptions,
 } from "./types.d.ts";
 import { getFunctionsForPrefix } from "./functionsMap.ts";
-import {
-  defaultPrefix,
-  defaultServerFnOptions,
-  getGlobalPrefix,
-} from "./options.ts";
+import { defaultPrefix, defaultServerFnOptions } from "./options.ts";
+import { getGlobalPrefix } from "./server-helpers.ts";
 import { OPERATION_ABORTED } from "./constants.ts";
 
 /**

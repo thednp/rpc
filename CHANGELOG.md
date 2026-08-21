@@ -31,7 +31,7 @@
 - Multi-prefix coverage: `createServerFunction` registers under a custom prefix (isolated from the default map), `getClientModules` generates `getClientStub` stubs only for the requested prefix, and the scan registers functions under their declared prefix without name collision
 - Adapter middleware tests updated to register functions in the prefix-scoped map for non-default prefixes
 - `getClientStub` coverage: curried `getClientStub("admin:rpc")("get-user")` and direct `getClientStub("admin:rpc","get-user")` plus `GET`/`text/plain`/`urlencoded`/`multipart` branches (`tests/client-helpers.test.ts:198`)
-- **100% coverage**: all metrics (statements, branches, functions, lines) at 100% — 428 tests
+- **100% coverage**: all metrics (statements, branches, functions, lines) at 100% — 427 tests
 
 ### Chores
 

@@ -2,8 +2,10 @@ import EventEmitter from "node:events";
 import { vi } from "vitest";
 import type { ServerFnEntry } from "../../src/types.d.ts";
 import { serverFunctionsMap } from "../../src/functionsMap.ts";
+import { setGlobalPrefix } from "../../src/server.ts";
 
 function seedServerMap() {
+  setGlobalPrefix(undefined);
   serverFunctionsMap.set("__dummy", {
     name: "__dummy",
     handler: vi.fn() as unknown as ServerFnEntry["handler"],

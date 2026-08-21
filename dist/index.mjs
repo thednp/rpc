@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
+import { setGlobalPrefix } from "@thednp/rpc/server";
 import { createRPCMiddleware } from "@thednp/rpc/express";
 //#region src/options.ts
 const defaultPrefix = "__rpc";
@@ -11,11 +12,6 @@ const defaultRPCOptions = {
 	adapter: "express",
 	serverFiles: "exact",
 	scanRoot: void 0
-};
-const globalPrefixSymbol = Symbol.for("thednp.rpc.globalPrefix");
-const setGlobalPrefix = (prefix) => {
-	if (prefix) globalThis[globalPrefixSymbol] = prefix;
-	else delete globalThis[globalPrefixSymbol];
 };
 //#endregion
 //#region src/constants.ts
@@ -352,6 +348,7 @@ const loadRPCConfig = async (configFile) => {
 			if (!existsSync(configFilePath)) {
 				console.warn(CONFIG_FILE_NOT_FOUND(configFile, configFilePath));
 				RPCConfig = defaultRPCOptions;
+				setGlobalPrefix(defaultRPCOptions.rpcPrefix);
 				return defaultRPCOptions;
 			}
 			const result = await loadConfigFile(env, configFile);
@@ -360,11 +357,15 @@ const loadRPCConfig = async (configFile) => {
 					...defaultRPCOptions,
 					configFile: configFilePath
 				}, result.config);
+				setGlobalPrefix(RPCConfig.rpcPrefix);
 				return RPCConfig;
 			}
 			RPCConfig = defaultRPCOptions;
 		}
-		if (RPCConfig !== void 0) return RPCConfig;
+		if (RPCConfig !== void 0) {
+			setGlobalPrefix(RPCConfig.rpcPrefix);
+			return RPCConfig;
+		}
 		for (const file of defaultConfigFiles) {
 			const configFilePath = resolve(env.root, file);
 			if (!existsSync(configFilePath)) continue;
@@ -383,6 +384,7 @@ const loadRPCConfig = async (configFile) => {
 		RPCConfig = defaultRPCOptions;
 		console.warn(FAILED_LOAD_CONFIG, error);
 	}
+	setGlobalPrefix(RPCConfig.rpcPrefix);
 	return RPCConfig;
 };
 /**
@@ -403,7 +405,6 @@ function rpcPlugin(devOptions = {}) {
 		async configResolved(resolvedConfig) {
 			const uniConfig = await loadRPCConfig();
 			options = mergeConfig(uniConfig, devOptions);
-			setGlobalPrefix(options.rpcPrefix);
 			config = resolvedConfig;
 		},
 		async configureServer(server) {

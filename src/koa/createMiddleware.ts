@@ -6,15 +6,13 @@ import type { RequestEvent } from "@thednp/rpc/server";
 import {
   escapeRegExp,
   formatError,
+  getGlobalPrefix,
   hasContentTypeMismatch,
   provideRequestContext,
   safeURL,
   scanForServerFiles,
 } from "@thednp/rpc/server";
-import {
-  ensurePrefixFromGlobal,
-  getFunctionsForPrefix,
-} from "../functionsMap.ts";
+import { getFunctionsForPrefix } from "../functionsMap.ts";
 import {
   BAD_REQUEST,
   CLIENT_DISCONNECTED,
@@ -29,7 +27,6 @@ import {
   defaultMiddlewareOptions,
   defaultPrefix,
   defaultRPCOptions,
-  setGlobalPrefix,
 } from "../options.ts";
 import { readBody, redirect as koaRedirect } from "./helpers.ts";
 
@@ -91,7 +88,6 @@ export const createMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
     }
 
     rpcPrefix = (rpcPrefix ?? defaultPrefix) as string;
-    ensurePrefixFromGlobal(rpcPrefix);
 
     // When serving from production server, scan for server files
     if (getFunctionsForPrefix(rpcPrefix).size === 0) {
@@ -131,8 +127,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
-  const prefix = rpcPrefix || defaultPrefix;
-  if (rpcPrefix) setGlobalPrefix(rpcPrefix as string);
+  const prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
   const prefixRegex = rpcPrefix
     ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;
@@ -164,7 +159,6 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
       }
 
       const functionName = url.replace(prefixReplace, "");
-      ensurePrefixFromGlobal(prefix);
       const serverFunction = getFunctionsForPrefix(prefix).get(functionName);
 
       if (!serverFunction) {

@@ -4,8 +4,10 @@ import type { H3Event } from "h3";
 import { vi } from "vitest";
 import { mockEvent } from "h3";
 import { serverFunctionsMap } from "../../src/functionsMap.ts";
+import { setGlobalPrefix } from "../../src/server.ts";
 
 function seedServerMap() {
+  setGlobalPrefix(undefined);
   serverFunctionsMap.set("__dummy", {
     name: "__dummy",
     handler: vi.fn() as unknown as ServerFnEntry["handler"],

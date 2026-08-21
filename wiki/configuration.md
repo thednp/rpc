@@ -75,9 +75,13 @@ Programmatically load the RPC config, useful in custom server setups:
 import { loadRPCConfig } from '@thednp/rpc';
 
 const config = await loadRPCConfig();
-console.log(config.rpcPrefix); // '__rpc'
+console.log(config.rpcPrefix);  // '__rpc'
 console.log(config.adapter);    // 'express'
 ```
+
+`loadRPCConfig` also calls `setGlobalPrefix(config.rpcPrefix)` internally — any `createServerFunction` calls that follow will automatically register under the configured prefix. This makes it the recommended bootstrap step for regular SSR servers (Express, Fastify, Hono, Koa, h3).
+
+> **Note for serverless environments:** In serverless (Netlify, Vercel, etc.), call `setGlobalPrefix` directly before importing your server files or before defining your server functions — see [Adapters — Serverless](./adapters.md#serverless).
 
 > **Next:** [Server Functions](./server-functions.md) — creating the functions the whole library is built around.
 

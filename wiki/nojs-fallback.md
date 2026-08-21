@@ -86,7 +86,7 @@ The fallback is a plain Connect/Express middleware, so it mounts anywhere the RP
 
 - **Vite dev server** — `server.middlewares.use(formFallback)` in a plugin's `configureServer` (see [demo/vite.config.ts](../demo/vite.config.ts))
 - **Your own `node:http` server** — in the request handler before the RPC middleware (see [demo/server.ts](../demo/server.ts))
-- **serverless** — inside the function handler before `createRPCMiddleware` (see [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts))
+- **serverless** — call `setGlobalPrefix` in your `src/api/server.ts` before any `createServerFunction` calls; the function handler then imports the server module and mounts the middleware (see [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts) and [demo/src/api/server.ts](../demo/src/api/server.ts))
 
 Order matters: **always mount the fallback before the RPC middleware**, so matched navigations never reach the JSON layer.
 
