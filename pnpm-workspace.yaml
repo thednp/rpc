@@ -1,5 +1,6 @@
 packages:
   - "."
   - "examples/*"
+  - "experiments/json-db/cms"
 minimumReleaseAgeExclude:
-  - '@thednp/rpc@0.0.13 || 0.1.0 || 0.1.1 || 0.2.0 || 0.3.0'
+  - '@thednp/rpc@0.0.13 || 0.1.0 || 0.1.1 || 0.2.0 || 0.3.0 || 0.3.1'
