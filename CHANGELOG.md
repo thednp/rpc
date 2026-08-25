@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.2] - Staging (unreleased)
+## [0.3.2] - 2026-08-25
 
 ### Features
 
