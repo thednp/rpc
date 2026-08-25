@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.2] - Staging (unreleased)
+
+### Features
+
+- **Adapter framework type re-exports** (`src/{express,fastify,h3,hono,koa}/types.d.ts`): each adapter now re-exports its framework's core types so consumers can annotate apps/handlers without a direct `express`/`fastify`/`h3`/`hono`/`koa` devDependency — `Express`/`ExpressRequest`/`ExpressResponse`/`ExpressNext` (`src/express/types.d.ts:84`), `Fastify`/`FastifyRequest`/`FastifyReply` (`src/fastify/types.d.ts:73`), `H3`/`H3Event`/`H3Middleware` (`src/h3/types.d.ts:44`), `Hono`/`HonoContext`/`HonoMiddlewareHandler` (`src/hono/types.d.ts:35`), `KoaContext`/`KoaNext` (`src/koa/types.d.ts:46`). Rebuilt `dist/*/*.d.mts` updated; no runtime change, pure type ergonomics
+
+### Chores
+
+- Bump version to `0.3.2` (`package.json`, `deno.json`)
+- Dep bumps: `hono ^4.13.3` → `^4.13.4`, `@types/node ^26.2.0` → `^26.3.0`; `pnpm-workspace.yaml` adds `@types/node@26.3.0` to `minimumReleaseAgeExclude`
+- `pnpm-lock.yaml` / `deno.lock` refreshed; `dist/*/*.d.mts.map` rebuilt
+
 ## [0.3.1] - 2026-08-21
 
 ### Breaking Changes

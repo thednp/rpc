@@ -1,7 +1,7 @@
 import { Connect, ViteDevServer } from "vite";
 import { BodyResult, JsonValue, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
-import { Express, NextFunction, Request, Response } from "express";
+import { Express, Express as Express$1, NextFunction, NextFunction as ExpressNext, Request, Request as ExpressRequest, Response, Response as ExpressResponse } from "express";
 //#region src/express/types.d.ts
 /**
  * Express-specific middleware options, constrained to the `"express"` adapter.
@@ -82,13 +82,13 @@ declare const createRPCMiddleware: ExpressMiddlewareFn;
  * Dynamically imports loadRPCConfig and creates the middleware with loaded options.
  * @param app - Express application instance
  */
-declare function attachRPC(app: Express): Promise<void>;
+declare function attachRPC(app: Express$1): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to an Express app for development mode.
  * @param app - Express application instance
  * @param vite - Running Vite dev server
  */
-declare function attachVite(app: Express, vite: ViteDevServer): void;
+declare function attachVite(app: Express$1, vite: ViteDevServer): void;
 /**
  * Reads and parses the HTTP request body from an Express or Node IncomingMessage.
  * If a body parser middleware (e.g. express.json()) already consumed the stream,
@@ -143,5 +143,5 @@ declare const getRequestDetails: (request: Request | IncomingMessage) => Request
  */
 declare const getResponseDetails: (response: Response | ServerResponse) => ResponseDetails;
 //#endregion
-export { type ExpressMiddlewareFn, type ExpressMiddlewareHooks, type ExpressMiddlewareOptions, type RequestDetails, type ResponseDetails, attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody, redirect };
+export { type Express, type ExpressMiddlewareFn, type ExpressMiddlewareHooks, type ExpressMiddlewareOptions, type ExpressNext, type ExpressRequest, type ExpressResponse, type RequestDetails, type ResponseDetails, attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody, redirect };
 //# sourceMappingURL=express.d.mts.map

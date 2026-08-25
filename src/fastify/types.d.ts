@@ -65,3 +65,12 @@ export interface FastifyMiddlewareHooks {
     done: HookHandlerDoneFunction,
   ) => Promise<void>;
 }
+
+/**
+ * Framework types re-exported from `fastify` so consumers can annotate
+ * instances, requests, and replies without a direct dependency on fastify
+ * types.
+ */
+export type { FastifyInstance as Fastify } from "fastify";
+export type { FastifyRequest } from "fastify";
+export type { FastifyReply } from "fastify";

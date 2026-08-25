@@ -1,4 +1,4 @@
-import { H3, H3Event, HTTPResponse, Middleware } from "h3";
+import { H3, H3 as H3$1, H3Event, H3Event as H3Event$1, HTTPResponse, Middleware, Middleware as H3Middleware } from "h3";
 import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { ViteDevServer } from "vite";
 //#region src/h3/types.d.ts
@@ -25,11 +25,11 @@ type H3MiddlewareFn = <A extends RpcPluginOptions["adapter"] = "h3">(initialOpti
 /**
  * h3 application reference used by helpers that attach middleware to an app.
  */
-type H3App = H3;
+type H3App = H3$1;
 /**
  * h3 event extended with an optional pre-parsed body.
  */
-type H3EventWithBody = H3Event & {
+type H3EventWithBody = H3Event$1 & {
   body?: unknown;
 };
 //#endregion
@@ -79,7 +79,7 @@ declare const viteMiddleware: (vite: ViteDevServer) => Middleware;
  * @param event - h3 event object
  * @returns A promise resolving to the parsed body with its content type
  */
-declare const readBody: (event: H3Event) => Promise<BodyResult>;
+declare const readBody: (event: H3Event$1) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect. h3's `redirect()` returns an `HTTPResponse`
  * object that the handler must return (it never writes directly). Defaults
@@ -90,5 +90,5 @@ declare const readBody: (event: H3Event) => Promise<BodyResult>;
  */
 declare const redirect: (location: string, status?: number) => HTTPResponse;
 //#endregion
-export { type H3App, type H3EventWithBody, type H3MiddlewareFn, type H3MiddlewareHooks, type H3MiddlewareOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
+export { type H3, type H3App, type H3Event, type H3EventWithBody, type H3Middleware, type H3MiddlewareFn, type H3MiddlewareHooks, type H3MiddlewareOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
 //# sourceMappingURL=h3.d.mts.map

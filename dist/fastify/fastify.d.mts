@@ -1,5 +1,5 @@
 import fp from "fastify-plugin";
-import { FastifyInstance, FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
+import { FastifyInstance, FastifyInstance as Fastify, FastifyReply, FastifyReply as FastifyReply$1, FastifyRequest, FastifyRequest as FastifyRequest$1, HookHandlerDoneFunction } from "fastify";
 import { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { ViteDevServer } from "vite";
 import "express";
@@ -48,7 +48,7 @@ interface FastifyMiddlewareHooks {
    * @param res - Fastify reply object
    * @param done - Fastify hook completion callback
    */
-  handler: (req: FastifyRequest, res: FastifyReply, done: HookHandlerDoneFunction) => Promise<void>;
+  handler: (req: FastifyRequest$1, res: FastifyReply$1, done: HookHandlerDoneFunction) => Promise<void>;
 }
 //#endregion
 //#region src/fastify/createMiddleware.d.ts
@@ -125,7 +125,7 @@ declare function attachVite(app: FastifyInstance, vite: ViteDevServer): void;
  * @param req - Fastify request object
  * @returns A promise resolving to the parsed body with its content type
  */
-declare const readBody: (req: FastifyRequest) => Promise<BodyResult>;
+declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Fastify reply using the native
  * `reply.redirect(location, status)` API (Fastify v5 signature: destination
@@ -135,7 +135,7 @@ declare const readBody: (req: FastifyRequest) => Promise<BodyResult>;
  * @param location - The URL to redirect to
  * @param status - HTTP status code, defaults to 303
  */
-declare const redirect: (reply: FastifyReply, location: string, status?: number) => void;
+declare const redirect: (reply: FastifyReply$1, location: string, status?: number) => void;
 //#endregion
-export { type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type FastifyPlugin, type FastifyRPCPlugin, type RegisteredFastifyRPCPlugin, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
+export { type Fastify, type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type FastifyPlugin, type FastifyRPCPlugin, type FastifyReply, type FastifyRequest, type RegisteredFastifyRPCPlugin, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
 //# sourceMappingURL=fastify.d.mts.map

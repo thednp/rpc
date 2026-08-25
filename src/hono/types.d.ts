@@ -27,3 +27,11 @@ export interface HonoMiddlewareHooks {
 export type HonoMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "hono">(
   initialOptions?: Partial<MiddlewareOptions<A>>,
 ) => HonoMiddlewareHooks["handler"];
+
+/**
+ * Framework types re-exported from `hono` so consumers can annotate apps
+ * and handlers without a direct dependency on hono types.
+ */
+export type { Hono } from "hono";
+export type { Context as HonoContext } from "hono";
+export type { MiddlewareHandler as HonoMiddlewareHandler } from "hono";

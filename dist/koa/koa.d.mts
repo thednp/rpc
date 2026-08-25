@@ -1,4 +1,4 @@
-import Koa, { Context, Next } from "koa";
+import Koa, { Context, Next, Next as KoaNext } from "koa";
 import { BodyResult, JsonValue, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { ViteDevServer } from "vite";
 //#region src/koa/types.d.ts
@@ -85,5 +85,5 @@ declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
  */
 declare const redirect: (ctx: KoaContext, location: string, status?: number) => void;
 //#endregion
-export { type Koa, type KoaContext, type KoaMiddlewareFn, type KoaMiddlewareHooks, type KoaMiddlewareOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
+export { type Koa, type KoaContext, type KoaMiddlewareFn, type KoaMiddlewareHooks, type KoaMiddlewareOptions, type KoaNext, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
 //# sourceMappingURL=koa.d.mts.map

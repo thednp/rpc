@@ -36,3 +36,11 @@ export type H3App = H3;
  * h3 event extended with an optional pre-parsed body.
  */
 export type H3EventWithBody = H3Event & { body?: unknown };
+
+/**
+ * Framework types re-exported from `h3` so consumers can annotate apps and
+ * events without a direct dependency on h3 types.
+ */
+export type { H3 } from "h3";
+export type { H3Event } from "h3";
+export type { Middleware as H3Middleware } from "h3";

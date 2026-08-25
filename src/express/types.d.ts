@@ -75,3 +75,13 @@ export type RequestDetails = {
   /** HTTP method (GET, POST, etc.) */
   method: string | undefined;
 };
+
+/**
+ * Framework types re-exported from `express` so consumers can annotate
+ * apps, handlers, and middleware without a direct dependency on express
+ * types. The RPC middleware handler tuple is composed of these.
+ */
+export type { Express } from "express";
+export type { Request as ExpressRequest } from "express";
+export type { Response as ExpressResponse } from "express";
+export type { NextFunction as ExpressNext } from "express";

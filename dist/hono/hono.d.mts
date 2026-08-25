@@ -1,5 +1,5 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
-import { Context, Hono, MiddlewareHandler } from "hono";
+import { Context, Context as HonoContext, Hono, Hono as Hono$1, MiddlewareHandler, MiddlewareHandler as HonoMiddlewareHandler } from "hono";
 import { IncomingMessage } from "node:http";
 import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { HttpBindings } from "@hono/node-server";
@@ -53,14 +53,14 @@ declare const createRPCMiddleware: HonoMiddlewareFn;
  * Dynamically imports loadRPCConfig and registers the middleware.
  * @param app - Hono application instance
  */
-declare function attachRPC(app: Hono): Promise<void>;
+declare function attachRPC(app: Hono$1): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to a Hono app for development mode.
  * Uses the viteMiddleware wrapper to bridge Vite's Connect-compatible stack into Hono.
  * @param app - Hono application instance
  * @param vite - Running Vite dev server
  */
-declare const attachVite: (app: Hono, vite: ViteDevServer) => void;
+declare const attachVite: (app: Hono$1, vite: ViteDevServer) => void;
 /**
  * Creates a Hono-compatible middleware from a Vite dev server middleware stack.
  * Bridges the Connect/Express middleware interface to Hono's context-based request/response model.
@@ -91,5 +91,5 @@ declare const readBody: (c: Context) => Promise<BodyResult>;
  */
 declare const redirect: (c: Context, location: string, status?: RedirectStatusCode) => Response;
 //#endregion
-export { type HonoMiddlewareFn, type HonoMiddlewareHooks, type HonoMiddlewareOptions, type IncomingWithBody, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
+export { type Hono, type HonoContext, type HonoMiddlewareFn, type HonoMiddlewareHandler, type HonoMiddlewareHooks, type HonoMiddlewareOptions, type IncomingWithBody, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
 //# sourceMappingURL=hono.d.mts.map

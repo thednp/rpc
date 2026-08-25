@@ -38,3 +38,10 @@ export interface KoaMiddlewareHooks {
 export type KoaMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "koa">(
   initialOptions?: Partial<KoaMiddlewareOptions>,
 ) => KoaMiddlewareHooks["handler"];
+
+/**
+ * Framework types re-exported from `koa` so consumers can annotate apps,
+ * contexts, and middleware without a direct dependency on koa types.
+ */
+export type { Context as KoaContext } from "koa";
+export type { Next as KoaNext } from "koa";
