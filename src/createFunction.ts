@@ -51,7 +51,7 @@ export interface CreateServerFunctionOptions
  */
 export function createServerFunction<
   TArgs extends JsonArray = JsonArray,
-  TResult extends JsonValue = JsonValue,
+  TResult = JsonValue,
 >(
   name: string,
   handler: ServerFunctionInit<TArgs, TResult>,

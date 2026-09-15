@@ -42,7 +42,7 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * Returns a promise-backed `data` handle plus a `cancel` function
  * that aborts the underlying fetch request.
  */
-type ClientFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (...args: TArgs) => {
+type ClientFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (...args: TArgs) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
   /** Aborts the in-flight request with the given reason */
@@ -91,7 +91,21 @@ type InnerModReturn<T extends JsonValue> = {
  * @param response - Fetch Response object from the RPC endpoint
  * @returns The response data, or void on cancellation
  */
-declare const handleResponse: <R extends JsonValue>(response: Response) => Promise<R | void>;
+export declare const handleResponse: <R extends JsonValue>(response: Response) => Promise<R | void>;
+/**
+ * Unwraps the `{ data }` envelope from a parsed RPC response body.
+ * When the input is an object with a `data` property, returns `data`.
+ * Otherwise returns the input as-is (for direct responses without the envelope).
+ * @param json - Parsed JSON response body
+ * @returns The unwrapped response data
+ * @example
+ * ```ts
+ * const response = await fetch("/__rpc/greet", { method: "POST", ... });
+ * const body = await response.json();
+ * const greeting = unwrapEnvelope<string>(body); // "Hello, world!"
+ * ```
+ */
+export declare const unwrapEnvelope: <T>(json: unknown) => T;
 /**
  * Creates a typed client stub for any prefix — the manual counterpart to the
  * auto-generated `public:rpc` stubs. Useful for privileged prefixes like
@@ -111,7 +125,7 @@ declare const handleResponse: <R extends JsonValue>(response: Response) => Promi
  * @example
  * const adminStats = getClientStub("admin:rpc","stats", { method: "GET" });
  */
-declare function getClientStub<T extends JsonArray, R extends JsonValue>(prefix: string, name: string, options?: Partial<StubOptions>): ClientFunction<T, R>;
+export declare function getClientStub<T extends JsonArray, R extends JsonValue>(prefix: string, name: string, options?: Partial<StubOptions>): ClientFunction<T, R>;
 /**
  * Creates an AbortController-bound fetch call for a single RPC function.
  * Used by the auto-generated client modules to issue HTTP requests with cancellation support.
@@ -125,7 +139,6 @@ declare function getClientStub<T extends JsonArray, R extends JsonValue>(prefix:
  * @param method - HTTP method to use, "POST" by default
  * @returns An object with `data` (promise resolving to the server response) and `cancel` (abort function)
  */
-declare const innerModule: <R extends JsonValue>(body: BodyInit, headers: HeadersInit, credentials: Credentials, prefix: string, name: string, method?: "GET" | "POST") => InnerModReturn<R>;
+export declare const innerModule: <R extends JsonValue>(body: BodyInit, headers: HeadersInit, credentials: Credentials, prefix: string, name: string, method?: "GET" | "POST") => InnerModReturn<R>;
 //#endregion
-export { getClientStub, handleResponse, innerModule };
 //# sourceMappingURL=helpers.d.mts.map

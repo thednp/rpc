@@ -37,6 +37,8 @@ function createServerFunction<T>(
 ): ServerFunction<T>;
 ```
 
+> **Note:** `T` is unconstrained (no `extends JsonValue` requirement). The actual wire protocol serialization still uses JSON, but the relaxed type allows wrapper libraries to define server functions with non-JSON return types without double-casts.
+
 ### Parameters
 
 - **`name`** (`string`) — The registered name used in RPC routing.

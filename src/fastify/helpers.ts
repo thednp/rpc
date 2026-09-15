@@ -37,6 +37,35 @@ export function attachVite(app: FastifyInstance, vite: ViteDevServer) {
 }
 
 /**
+ * Creates a Fastify `onRequest` hook handler that delegates to Vite's
+ * connect-compatible middleware stack. Use with `app.addHook("onRequest", ...)`.
+ *
+ * @example
+ * ```ts
+ * import Fastify from "fastify";
+ * import { createServer } from "vite";
+ * import { viteMiddleware } from "@thednp/rpc/fastify";
+ *
+ * const app = Fastify();
+ * const vite = await createServer({ server: { middlewareMode: true } });
+ * app.addHook("onRequest", viteMiddleware(vite));
+ * ```
+ * @param vite - Running Vite dev server
+ * @returns A Fastify `onRequest` hook handler
+ */
+export function viteMiddleware(
+  vite: ViteDevServer,
+): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  return async (request, reply) => {
+    reply.hijack();
+    await new Promise<void>((resolve, reject) => {
+      const next = (err?: unknown) => (err ? reject(err) : resolve());
+      vite.middlewares(request.raw, reply.raw, next);
+    });
+  };
+}
+
+/**
  * Reads and parses the HTTP request body from a Fastify request.
  * If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
  * @param req - Fastify request object

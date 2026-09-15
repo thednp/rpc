@@ -19,7 +19,7 @@ import { defaultRPCOptions } from "./options.ts";
 export const defineConfig: (
   c: Partial<RpcPluginOptions>,
 ) => RpcPluginOptions = (uniConfig: Partial<RpcPluginOptions>) => {
-  const merged: RpcPluginOptions & Record<string, string> = {
+  const merged: RpcPluginOptions & Record<string, unknown> = {
     ...defaultRPCOptions,
   };
   for (const [key, value] of Object.entries(uniConfig)) {

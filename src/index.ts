@@ -47,11 +47,13 @@ let RPCConfig: RpcPluginOptions;
  * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
  * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
  * @param configFile - Optional explicit config file path; skips file search when provided
+ * @param opts - Optional settings; `silent` suppresses the "no config found" warning
  * @returns Resolved RPC plugin options
  */
-const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
+const loadRPCConfig: (
   configFile?: string,
-) => {
+  opts?: { silent?: boolean },
+) => Promise<RpcPluginOptions> = async (configFile?, opts?) => {
   try {
     // istanbul ignore next
     const env: ConfigEnv & { root: string } = {
@@ -126,7 +128,7 @@ const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions> = async (
     }
     RPCConfig = defaultRPCOptions;
     // Last call load defaults no matter what
-    console.warn(NO_CONFIG_FOUND);
+    if (!opts?.silent) console.warn(NO_CONFIG_FOUND);
   } catch (error) {
     RPCConfig = defaultRPCOptions;
     console.warn(FAILED_LOAD_CONFIG, error);
@@ -161,7 +163,9 @@ function rpcPlugin(
     enforce: "pre",
     // Plugin methods
     async configResolved(resolvedConfig) {
-      const uniConfig = await loadRPCConfig();
+      const uniConfig = await loadRPCConfig(undefined, {
+        silent: devOptions.silent,
+      });
       options = mergeConfig(uniConfig, devOptions) as RpcPluginOptions;
 
       config = resolvedConfig;

@@ -58,7 +58,7 @@ interface FastifyMiddlewareHooks {
  * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
  * @returns A Fastify preHandler hook function
  */
-declare const createMiddleware: FastifyMiddlewareFn;
+export declare const createMiddleware: FastifyMiddlewareFn;
 /**
  * Creates the Fastify RPC middleware that routes incoming requests to registered server functions.
  * Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
@@ -66,7 +66,7 @@ declare const createMiddleware: FastifyMiddlewareFn;
  * @param initialOptions - Options including rpcPrefix for URL routing
  * @returns A Fastify preHandler hook function
  */
-declare const createRPCMiddleware: FastifyMiddlewareFn;
+export declare const createRPCMiddleware: FastifyMiddlewareFn;
 //#endregion
 //#region src/types.d.ts
 /**
@@ -111,21 +111,39 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * Dynamically imports loadRPCConfig and registers the fastify-rpc plugin.
  * @param app - Fastify instance
  */
-declare function attachRPC(app: FastifyInstance): Promise<void>;
+export declare function attachRPC(app: FastifyInstance): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to a Fastify instance for development mode.
  * Uses an `onRequest` hook to delegate to Vite's connect-compatible middleware stack.
  * @param app - Fastify instance
  * @param vite - Running Vite dev server
  */
-declare function attachVite(app: FastifyInstance, vite: ViteDevServer): void;
+export declare function attachVite(app: FastifyInstance, vite: ViteDevServer): void;
+/**
+ * Creates a Fastify `onRequest` hook handler that delegates to Vite's
+ * connect-compatible middleware stack. Use with `app.addHook("onRequest", ...)`.
+ *
+ * @example
+ * ```ts
+ * import Fastify from "fastify";
+ * import { createServer } from "vite";
+ * import { viteMiddleware } from "@thednp/rpc/fastify";
+ *
+ * const app = Fastify();
+ * const vite = await createServer({ server: { middlewareMode: true } });
+ * app.addHook("onRequest", viteMiddleware(vite));
+ * ```
+ * @param vite - Running Vite dev server
+ * @returns A Fastify `onRequest` hook handler
+ */
+export declare function viteMiddleware(vite: ViteDevServer): (request: FastifyRequest$1, reply: FastifyReply$1) => Promise<void>;
 /**
  * Reads and parses the HTTP request body from a Fastify request.
  * If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
  * @param req - Fastify request object
  * @returns A promise resolving to the parsed body with its content type
  */
-declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
+export declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Fastify reply using the native
  * `reply.redirect(location, status)` API (Fastify v5 signature: destination
@@ -135,7 +153,7 @@ declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
  * @param location - The URL to redirect to
  * @param status - HTTP status code, defaults to 303
  */
-declare const redirect: (reply: FastifyReply$1, location: string, status?: number) => void;
+export declare const redirect: (reply: FastifyReply$1, location: string, status?: number) => void;
 //#endregion
-export { type Fastify, type FastifyMiddlewareFn, type FastifyMiddlewareHooks, type FastifyMiddlewareOptions, type FastifyPlugin, type FastifyRPCPlugin, type FastifyReply, type FastifyRequest, type RegisteredFastifyRPCPlugin, type RpcFastifyPluginOptions, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
+export type { Fastify, FastifyMiddlewareFn, FastifyMiddlewareHooks, FastifyMiddlewareOptions, FastifyPlugin, FastifyRPCPlugin, FastifyReply, FastifyRequest, RegisteredFastifyRPCPlugin, RpcFastifyPluginOptions };
 //# sourceMappingURL=fastify.d.mts.map

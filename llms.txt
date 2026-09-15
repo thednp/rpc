@@ -3,13 +3,14 @@
 Vite plugin for automatic RPC generation from server functions. One module (`src/api/server.ts`), two resolutions: real functions on SSR/Node, fetch stubs in the browser. Types flow through because tsc sees the source module — only the Vite bundler swaps the implementation.
 
 ## Core API
-- `createServerFunction(name, handler, options?)` — define a server function: first arg is `AbortSignal`, remaining args are JSON-serializable
+- `createServerFunction(name, handler, options?)` — define a server function: first arg is `AbortSignal`, remaining args are JSON-serializable. `TResult` is unconstrained (no `extends JsonValue` requirement) — only `getClientStub` retains the constraint for wire protocol safety
 - `import { fn } from "./api"` — on the server calls the real handler, in the browser calls auto-generated `fetch` stubs
 - Returns `{ data: Promise<T>, cancel: (reason: string) => void }`
 - Options: `{ method: "GET" | "POST", contentType: "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data", credentials, rpcPrefix }`
 - **Multi-prefix**: `rpcPrefix` (default `"__rpc"` via the exported `defaultPrefix` constant) registers the function in a prefix-scoped map (`getFunctionsForPrefix(prefix)`). Same names can coexist under different prefixes (versioned/namespaced APIs); middleware dispatches to the prefix-scoped map; the plugin generates client stubs per prefix. See `wiki/multi-prefix-guide.md`
 - `RPCError(message, code?, data?)` — throwable typed error, exported from `@thednp/rpc/server` (as is `formatError`); throw for server-side failures (not validation — return `{ error }` for expected user-facing problems). Dev 500 body: `{ error, code, data }`; prod: generic `{ error: "Internal Server Error" }` only. Client rejection `message` = the error string
 - `provideRequestContext(init, cb)` / `getRequestContext()` — per-request `AsyncLocalStorage` context available to all server function code; `RequestEvent` includes `nativeEvent`, `locals`, adapter-bound `redirect`; works across Express/Fastify/Hono/Koa/h3
+- `unwrapEnvelope<T>(json)` — client helper from `@thednp/rpc/helpers` to unwrap `{ data }` wire protocol responses; re-throws `RPCError` on `{ error }` bodies. For native HTTP clients (Deno, Bun, curl-equivalent) that don't use auto-generated fetch stubs
 - Registered function names become URL paths: `POST /{prefix}/{name}` with body `JSON.stringify(args)`
 
 ## Wire Protocol (client module → server)
@@ -26,7 +27,8 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `rpc.config.ts` imports `defineConfig` from `@thednp/rpc/config` (vite-free subpath — safe for serverless bundles): `defineConfig({ rpcPrefix: "__rpc", adapter: "express" | "fastify" | "hono" | "koa" | "h3" })`
 - `serverFiles: "exact" | "glob"` — `"exact"` (default) matches `server.ts|js|mjs|mts`; `"glob"` recursively matches `*.server.{ts,js,mjs,mts}` under the scan root
 - `scanRoot: string` — scan directory (default `<root>/src/api`); point it at a shared package in monorepos
-- `loadRPCConfig()` loads config programmatically
+- `silent: boolean` — suppress the `NO_CONFIG_FOUND` warning when no config file is found. Useful for wrapper plugins that define server functions directly without a config file
+- `loadRPCConfig(opts?)` — loads config programmatically; pass `{ silent: true }` to suppress warnings
 - `createRPCMiddleware({ origin })` — optional origin check: requests with a mismatching `Origin` header get 403; requests without one pass through
 - Plugin options in `vite.config.ts` (`rpc()`) override `rpc.config.ts` in dev only
 - Config discovery: `rpc.config.ts` > `.js` > `.mjs` > `.mts` > `.rpcrc.ts` > `.rpcrc.js`
@@ -76,6 +78,6 @@ Vite plugin for automatic RPC generation from server functions. One module (`src
 - `wiki/nojs-fallback.md` — Progressive enhancement: making an RPC endpoint work as a no-JS `<form>` action (detection rule, shared validation, PRG 303 redirects, state recovery)
 - `wiki/client-usage.md` — Generated client modules, type safety, error handling, multipart uploads, `@tanstack/react-query` integration, and an SSR gotcha for disabled queries (solid-query hangs `renderToStringAsync`; use `queryClient.fetchQuery()` on submit instead)
 - `wiki/wire-protocol.md` — HTTP contract: request/response bodies, status codes, curl debugging
-- `wiki/adapters.md` — Express, Fastify, Hono, Koa, h3 (`attachRPC`, `attachVite`, body limits)
+- `wiki/adapters.md` — Express, Fastify, Hono, Koa, h3 (`attachRPC`, `attachVite`, body limits, `viteMiddleware` for Fastify/Hono/h3, Hono header fallback in `getRequestMeta`)
 - `wiki/security.md` — Prefix guards, method enforcement, origin, CSRF hardening
 - `wiki/best-practices.md` — Auth middleware, rate limiting, per-function authorization, body limits

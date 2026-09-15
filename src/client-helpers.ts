@@ -32,6 +32,26 @@ export const handleResponse = async <R extends JsonValue>(
 };
 
 /**
+ * Unwraps the `{ data }` envelope from a parsed RPC response body.
+ * When the input is an object with a `data` property, returns `data`.
+ * Otherwise returns the input as-is (for direct responses without the envelope).
+ * @param json - Parsed JSON response body
+ * @returns The unwrapped response data
+ * @example
+ * ```ts
+ * const response = await fetch("/__rpc/greet", { method: "POST", ... });
+ * const body = await response.json();
+ * const greeting = unwrapEnvelope<string>(body); // "Hello, world!"
+ * ```
+ */
+export const unwrapEnvelope = <T>(json: unknown): T => {
+  if (json !== null && typeof json === "object" && "data" in json) {
+    return (json as { data: T }).data;
+  }
+  return json as T;
+};
+
+/**
  * Low-level stub factory used by both `getClientStub` and the auto-generated
  * modules (`src/getClientModules.ts:73`). Keeps body/header mapping in one
  * place so `innerModule` stays thin.

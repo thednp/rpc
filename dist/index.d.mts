@@ -245,18 +245,18 @@ type ServerFnArgs = [...JsonArray];
  * Server-side handler signature: receives the `AbortSignal` first,
  * followed by any serializable arguments.
  */
-type ServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 /**
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
-type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 /**
  * Client-side stub signature generated for each server function.
  * Returns a promise-backed `data` handle plus a `cancel` function
  * that aborts the underlying fetch request.
  */
-type ClientFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (...args: TArgs) => {
+type ClientFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (...args: TArgs) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
   /** Aborts the in-flight request with the given reason */
@@ -345,6 +345,13 @@ interface RpcPluginOptions {
    * @default "exact"
    */
   serverFiles?: "exact" | "glob";
+  /**
+   * Suppress the "no RPC config found" warning when no config file is
+   * discovered. Useful when the plugin is wrapped by another tool that
+   * provides configuration externally (e.g. a meta-framework adapter).
+   * @default false
+   */
+  silent?: boolean;
 }
 interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
   /**
@@ -453,9 +460,12 @@ type InnerModReturn<T extends JsonValue> = {
  * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
  * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
  * @param configFile - Optional explicit config file path; skips file search when provided
+ * @param opts - Optional settings; `silent` suppresses the "no config found" warning
  * @returns Resolved RPC plugin options
  */
-declare const loadRPCConfig: (f?: string) => Promise<RpcPluginOptions>;
+declare const loadRPCConfig: (configFile?: string, opts?: {
+  silent?: boolean;
+}) => Promise<RpcPluginOptions>;
 /**
  * Vite plugin that enables automatic RPC generation.
  * Transforms server function imports into fetch-based client stubs during development and production builds.

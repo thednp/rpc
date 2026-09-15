@@ -103,6 +103,20 @@ Set `bodyLimit` when creating the Fastify instance (see [examples/fastify/server
 const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 }); // 1 MB
 ```
 
+### `viteMiddleware`
+
+For custom Vite setups, `viteMiddleware(vite)` returns an `onRequest` hook handler that streams Vite's middleware stack using `reply.hijack()`:
+
+```ts
+import { createServer } from 'vite';
+import { viteMiddleware } from '@thednp/rpc/fastify';
+
+const vite = await createServer({ server: { middlewareMode: true } });
+fastify.addHook('onRequest', viteMiddleware(vite));
+```
+
+This is the same pattern as h3 and Hono's `viteMiddleware` — all three adapters export a standalone middleware factory for custom setups. Express does not need it — mount `vite.middlewares` directly as Connect/Express middleware.
+
 ## Hono
 
 ### Installation
@@ -146,6 +160,10 @@ import { bodyLimit } from 'hono/body-limit';
 
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 })); // 1 MB
 ```
+
+### Header Fallback
+
+`getRequestMeta` reads `req?.raw?.headers` as a fallback when `req?.headers` is undefined. This matches Hono's internal request structure where native `Headers` live on `req.raw`. If you use custom Hono middleware that replaces `req.raw`, ensure headers are still accessible at `req.raw.headers`.
 
 ## Koa
 

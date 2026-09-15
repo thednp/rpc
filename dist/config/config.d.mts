@@ -49,6 +49,13 @@ interface RpcPluginOptions {
    * @default "exact"
    */
   serverFiles?: "exact" | "glob";
+  /**
+   * Suppress the "no RPC config found" warning when no config file is
+   * discovered. Useful when the plugin is wrapped by another tool that
+   * provides configuration externally (e.g. a meta-framework adapter).
+   * @default false
+   */
+  silent?: boolean;
 }
 //#endregion
 //#region src/config.d.ts
@@ -59,7 +66,6 @@ interface RpcPluginOptions {
  * @param uniConfig - System-wide RPC configuration overrides
  * @returns Complete RPC plugin options with defaults applied
  */
-declare const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions;
+export declare const defineConfig: (c: Partial<RpcPluginOptions>) => RpcPluginOptions;
 //#endregion
-export { defineConfig };
 //# sourceMappingURL=config.d.mts.map

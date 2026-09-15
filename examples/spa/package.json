@@ -10,13 +10,13 @@
     "start": "vite preview"
   },
   "dependencies": {
-    "@thednp/rpc": "^0.3.1",
-    "vite": "^8.2.2"
+    "@thednp/rpc": "^0.3.2",
+    "vite": "^8.3.0"
   },
   "devDependencies": {
     "picocolors": "^1.1.1",
     "typescript": "~7.0.2",
-    "valibot": "^1.4.2"
+    "valibot": "^1.5.0"
   },
-  "packageManager": "pnpm@11.17.0"
+  "packageManager": "pnpm@11.22.0"
 }

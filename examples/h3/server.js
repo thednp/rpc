@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
 import { H3 } from "h3";
-import { toNodeListener } from "h3/node";
+import { toNodeHandler } from "h3/node";
 import { loadRPCConfig } from "@thednp/rpc";
 
 // Constants
@@ -88,7 +88,7 @@ app.use(async (event) => {
 });
 
 // Start http server
-createServer(toNodeListener(app)).listen(port, () => {
+createServer(toNodeHandler(app)).listen(port, () => {
   console.log(
     `  ➜  Server started in "${MODE}" mode at http://localhost:${port}`,
   );

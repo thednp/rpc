@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.3] - 2026-09-15
+
+### Features
+
+- **Relaxed `JsonValue` constraint on `createServerFunction`** (`src/types.d.ts`, `src/createFunction.ts`): the generic `TResult` parameter of `ClientFunction`, `ServerFunction`, `ServerFunctionInit`, and `createServerFunction` no longer requires `extends JsonValue`. Only `getClientStub` and the internal `innerModule` retain the constraint for wire protocol safety. This eliminates double-casts and `LooseClientFunction` workarounds in wrapper libraries that define server functions with non-JSON return types
+- **Hono header fallback in `getRequestMeta`** (`src/context.ts:218`): `getRequestMeta` now reads `req?.raw?.headers` as a fallback when `req?.headers` is undefined, matching Hono's internal request structure where native `Headers` live on `req.raw`. All other adapters pass headers via `req.headers` and are unaffected
+- **`viteMiddleware` for Fastify** (`src/fastify/helpers.ts:40-68`): new `viteMiddleware(vite)` export returning an `onRequest` hook handler with `reply.hijack()` for streaming. Consistent with h3 and Hono's `viteMiddleware` — all three adapters now export a standalone middleware factory for custom Vite setups
+- **`unwrapEnvelope<T>(json)` client helper** (`src/client-helpers.ts:44-55`, exported from `@thednp/rpc/helpers`): typed helper to unwrap `{ data }` wire protocol responses. For native HTTP clients or non-Vite toolchains that don't use the auto-generated fetch stubs. Re-throws `RPCError` on `{ error }` bodies
+- **`silent` option on `loadRPCConfig` / `rpcPlugin`** (`src/config.ts:45`, `src/types.d.ts:239`, `src/index.ts:166`): new `silent?: boolean` suppresses the `NO_CONFIG_FOUND` warning. The plugin passes `devOptions.silent` through to `loadRPCConfig`, allowing wrapper plugins to define server functions directly without a config file
+
+### Chores
+
+- Bump version to `0.3.3` (`package.json`, `deno.json`)
+
 ## [0.3.2] - 2026-08-25
 
 ### Features

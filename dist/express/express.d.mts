@@ -64,7 +64,7 @@ type RequestDetails = {
  * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
  * @returns An Express middleware function
  */
-declare const createMiddleware: ExpressMiddlewareFn;
+export declare const createMiddleware: ExpressMiddlewareFn;
 /**
  * Creates the Express RPC middleware that routes incoming requests to registered server functions.
  * Reads the request body, dispatches to the matching function via getFunctionsForPrefix,
@@ -74,7 +74,7 @@ declare const createMiddleware: ExpressMiddlewareFn;
  * @param initialOptions - Options including rpcPrefix for URL routing and prefix-scoped function lookup
  * @returns An Express middleware function
  */
-declare const createRPCMiddleware: ExpressMiddlewareFn;
+export declare const createRPCMiddleware: ExpressMiddlewareFn;
 //#endregion
 //#region src/express/helpers.d.ts
 /**
@@ -82,13 +82,13 @@ declare const createRPCMiddleware: ExpressMiddlewareFn;
  * Dynamically imports loadRPCConfig and creates the middleware with loaded options.
  * @param app - Express application instance
  */
-declare function attachRPC(app: Express$1): Promise<void>;
+export declare function attachRPC(app: Express$1): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to an Express app for development mode.
  * @param app - Express application instance
  * @param vite - Running Vite dev server
  */
-declare function attachVite(app: Express$1, vite: ViteDevServer): void;
+export declare function attachVite(app: Express$1, vite: ViteDevServer): void;
 /**
  * Reads and parses the HTTP request body from an Express or Node IncomingMessage.
  * If a body parser middleware (e.g. express.json()) already consumed the stream,
@@ -96,19 +96,19 @@ declare function attachVite(app: Express$1, vite: ViteDevServer): void;
  * @param req - Express or Node.js IncomingMessage
  * @returns A promise resolving to the parsed body with its content type
  */
-declare const readBody: (req: Request | IncomingMessage) => Promise<BodyResult>;
+export declare const readBody: (req: Request | IncomingMessage) => Promise<BodyResult>;
 /**
  * Type guard that checks whether a request is an Express Request (has `originalUrl`).
  * @param req - A Node IncomingMessage or Express Request
  * @returns True if the request is an Express Request
  */
-declare const isExpressRequest: (req: IncomingMessage | Request) => req is Request;
+export declare const isExpressRequest: (req: IncomingMessage | Request) => req is Request;
 /**
  * Type guard that checks whether a response is an Express Response (has `json` and `send` methods).
  * @param res - A Node ServerResponse or Express Response
  * @returns True if the response is an Express Response
  */
-declare const isExpressResponse: (res: ServerResponse | Response) => res is Response;
+export declare const isExpressResponse: (res: ServerResponse | Response) => res is Response;
 /**
  * Issues an HTTP redirect on an Express or raw Node ServerResponse.
  * Uses Express's native `res.redirect(status, location)` when an Express
@@ -120,28 +120,28 @@ declare const isExpressResponse: (res: ServerResponse | Response) => res is Resp
  * @param location - The URL to redirect to
  * @param status - HTTP status code, defaults to 303
  */
-declare const redirect: (res: ServerResponse | Response, location: string, status?: number) => void;
+export declare const redirect: (res: ServerResponse | Response, location: string, status?: number) => void;
 /**
  * Type guard that checks whether a request has a pre-parsed body (`body` property).
  * Used to detect if a body-parser middleware already consumed the stream.
  * @param req - A Node IncomingMessage or Express Request
  * @returns True if the request has a body property
  */
-declare const hasPreParsedBody: (req: IncomingMessage | Request) => req is Request;
+export declare const hasPreParsedBody: (req: IncomingMessage | Request) => req is Request;
 /**
  * Extracts normalized request details from an Express or Node IncomingMessage.
  * Parses the URL to extract pathname, search string, and search params.
  * @param request - Express or Node.js request object
  * @returns Normalized request details including URL, headers, and method
  */
-declare const getRequestDetails: (request: Request | IncomingMessage) => RequestDetails;
+export declare const getRequestDetails: (request: Request | IncomingMessage) => RequestDetails;
 /**
  * Wraps an Express or Node ServerResponse with a uniform API for setting headers,
  * status codes, and sending JSON responses. Handles the Express vs raw Node API differences.
  * @param response - Express or Node.js server response object
  * @returns A ResponseDetails object with setHeader, setStatusCode, and sendResponse helpers
  */
-declare const getResponseDetails: (response: Response | ServerResponse) => ResponseDetails;
+export declare const getResponseDetails: (response: Response | ServerResponse) => ResponseDetails;
 //#endregion
-export { type Express, type ExpressMiddlewareFn, type ExpressMiddlewareHooks, type ExpressMiddlewareOptions, type ExpressNext, type ExpressRequest, type ExpressResponse, type RequestDetails, type ResponseDetails, attachRPC, attachVite, createMiddleware, createRPCMiddleware, getRequestDetails, getResponseDetails, hasPreParsedBody, isExpressRequest, isExpressResponse, readBody, redirect };
+export type { Express, ExpressMiddlewareFn, ExpressMiddlewareHooks, ExpressMiddlewareOptions, ExpressNext, ExpressRequest, ExpressResponse, RequestDetails, ResponseDetails };
 //# sourceMappingURL=express.d.mts.map

@@ -149,13 +149,13 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
-type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 /**
  * Client-side stub signature generated for each server function.
  * Returns a promise-backed `data` handle plus a `cancel` function
  * that aborts the underlying fetch request.
  */
-type ClientFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue> = (...args: TArgs) => {
+type ClientFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (...args: TArgs) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
   /** Aborts the in-flight request with the given reason */
@@ -244,6 +244,13 @@ interface RpcPluginOptions {
    * @default "exact"
    */
   serverFiles?: "exact" | "glob";
+  /**
+   * Suppress the "no RPC config found" warning when no config file is
+   * discovered. Useful when the plugin is wrapped by another tool that
+   * provides configuration externally (e.g. a meta-framework adapter).
+   * @default false
+   */
+  silent?: boolean;
 }
 interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
   /**
@@ -319,22 +326,22 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
  * Enables multiple RPC instances with different prefixes to coexist
  * without name collisions.
  */
-declare const serverFunctionsByPrefix: Map<string, Map<string, ServerFnEntry>>;
+export declare const serverFunctionsByPrefix: Map<string, Map<string, ServerFnEntry>>;
 /**
  * Gets or creates the function map for a specific prefix.
  * @param prefix - The RPC prefix (e.g., "__rpc", "v1:rpc", "admin:rpc")
  * @returns Map of function names to ServerFnEntry for that prefix
  */
-declare const getFunctionsForPrefix: (prefix: string) => Map<string, ServerFnEntry>;
+export declare const getFunctionsForPrefix: (prefix: string) => Map<string, ServerFnEntry>;
 /**
  * Backward compatibility: default map for the default prefix.
  * Legacy code can still use serverFunctionsMap.set(name, entry).
  */
-declare const serverFunctionsMap: Map<string, ServerFnEntry>;
+export declare const serverFunctionsMap: Map<string, ServerFnEntry>;
 //#endregion
 //#region src/scanForServerFiles.d.ts
 /** Absolute ids (normalized) of the scanned server function files. */
-declare const scannedServerFiles: Set<string>;
+export declare const scannedServerFiles: Set<string>;
 /**
  * Scans `src/api/` (or an explicit `scanRoot`) for server function files
  * and populates the server functions map (scoped by rpcPrefix) with their exported functions.
@@ -346,13 +353,13 @@ declare const scannedServerFiles: Set<string>;
  * @param initialCfg - Optional Vite config overrides (root, base, server, serverFiles, scanRoot)
  * @param devServer - Optional running Vite dev server instance; when provided, skips creating a new one
  */
-declare const scanForServerFiles: (initialCfg?: ScanConfig, devServer?: ViteDevServer) => Promise<void>;
+export declare const scanForServerFiles: (initialCfg?: ScanConfig, devServer?: ViteDevServer) => Promise<void>;
 //#endregion
 //#region src/createFunction.d.ts
 /**
  * Extended options for createServerFunction, including rpcPrefix for multi-instance support.
  */
-interface CreateServerFunctionOptions extends Partial<ServerFunctionOptions> {
+export interface CreateServerFunctionOptions extends Partial<ServerFunctionOptions> {
   /**
    * RPC prefix for this function. Enables multiple RPC instances with different prefixes.
    * When using multi-prefix setup, functions with the same name but different prefixes
@@ -385,7 +392,7 @@ interface CreateServerFunctionOptions extends Partial<ServerFunctionOptions> {
  * @param fnOptions - Optional contentType, credentials, and rpcPrefix settings
  * @returns A client stub with `data` promise and `cancel` method, auto-registered in the server map
  */
-declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: CreateServerFunctionOptions): ClientFunction<TArgs, TResult>;
+export declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: CreateServerFunctionOptions): ClientFunction<TArgs, TResult>;
 //#endregion
 //#region src/getClientModules.d.ts
 /**
@@ -395,20 +402,20 @@ declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResu
  * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
  * @returns A string of JavaScript code with all client RPC modules and their import dependencies
  */
-declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => string;
+export declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => string;
 //#endregion
 //#region src/server-helpers.d.ts
 /**
  * Recursively walks `dir` and collects absolute paths to files whose
  * basename matches the `*.server.{ts,js,mjs,mts}` glob pattern.
  */
-declare const walkGlobFiles: (dir: string) => Promise<string[]>;
+export declare const walkGlobFiles: (dir: string) => Promise<string[]>;
 /**
  * A typed error thrown from server functions.
  * The middleware serializes the `message` and `code` in the response,
  * allowing clients to recognise and handle specific error conditions.
  */
-declare class RPCError extends Error {
+export declare class RPCError extends Error {
   /** Machine-readable error code (e.g. "VALIDATION_FAILED", "UNAUTHORIZED") */
   code: string;
   /** Optional diagnostic payload */
@@ -423,14 +430,14 @@ declare class RPCError extends Error {
  * information disclosure; server-side diagnostics are preserved via the
  * middleware's `console.error` logging.
  */
-declare const formatError: (err: unknown, isProduction: boolean) => JsonObject;
+export declare const formatError: (err: unknown, isProduction: boolean) => JsonObject;
 /**
  * Checks whether a content type maps to a form encoding
  * (`multipart/form-data` or `application/x-www-form-urlencoded`).
  * Form-declared functions accept either encoding so native browser
  * submissions (urlencoded) keep working without JavaScript.
  */
-declare const isFormContentType: (contentType: string) => boolean;
+export declare const isFormContentType: (contentType: string) => boolean;
 /**
  * Detects whether an incoming request's `Content-Type` header conflicts
  * with the function's declared content type. JSON and text functions are
@@ -441,7 +448,7 @@ declare const isFormContentType: (contentType: string) => boolean;
  * @param declared - The declared `contentType` from the server function options
  * @param rawHeader - The raw `Content-Type` request header, if present
  */
-declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: string | undefined) => boolean;
+export declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: string | undefined) => boolean;
 /**
  * Escapes special regex metacharacters in a string.
  * Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
@@ -449,7 +456,7 @@ declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: string 
  * @param s - The raw string to escape
  * @returns The escaped string safe for use in new RegExp()
  */
-declare function escapeRegExp(s: string): string;
+export declare function escapeRegExp(s: string): string;
 /**
  * Parses a raw request URL against a fixed base without ever throwing.
  * Malformed request-targets (e.g. `/\`, `//`, `/\/`) make the WHATWG URL
@@ -463,10 +470,10 @@ declare function escapeRegExp(s: string): string;
  * @param base - Optional base URL, defaults to a fixed localhost origin
  * @returns A URL object; never throws
  */
-declare const safeURL: (rawUrl: string, base?: string) => URL;
+export declare const safeURL: (rawUrl: string, base?: string) => URL;
 /** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
-declare const getGlobalPrefix: () => string | undefined;
-declare const setGlobalPrefix: (prefix: string | undefined) => void;
+export declare const getGlobalPrefix: () => string | undefined;
+export declare const setGlobalPrefix: (prefix: string | undefined) => void;
 //#endregion
 //#region src/context.d.ts
 /**
@@ -484,7 +491,7 @@ declare const setGlobalPrefix: (prefix: string | undefined) => void;
  * - Hono: `c` (the Hono `Context`) plus `nativeEvent = c`
  * - h3: `event` (the h3 `H3Event`) plus `nativeEvent = event`
  */
-interface RequestEvent {
+export interface RequestEvent {
   /** Adapter-specific native event kept for deep framework access */
   nativeEvent?: unknown;
   /** Adapter request object */
@@ -541,13 +548,13 @@ interface RequestEvent {
  * @param init - The request context for the duration of `cb`
  * @param cb - The work that needs access to the request context
  */
-declare const provideRequestContext: <T>(init: RequestEvent, cb: () => T) => T;
+export declare const provideRequestContext: <T>(init: RequestEvent, cb: () => T) => T;
 /**
  * Returns the current request context, or throws when called outside of a
  * request (e.g. module scope or a background task).
  * @throws When no request context is established
  */
-declare const getRequestContext: () => RequestEvent;
+export declare const getRequestContext: () => RequestEvent;
 /**
  * Redirects the current request to `location`. Reads the adapter-bound
  * `redirect` from the current request context — callable from anywhere inside
@@ -556,7 +563,7 @@ declare const getRequestContext: () => RequestEvent;
  * @param status - HTTP status code, defaults to `303 See Other`
  * @throws When called outside of a request
  */
-declare const redirect: (location: string, status?: number) => void;
+export declare const redirect: (location: string, status?: number) => void;
 /**
  * Sends a raw JSON response for the current request, bypassing the standard
  * `{ data }` shape. Reads the adapter-bound `send` from the current request
@@ -568,14 +575,14 @@ declare const redirect: (location: string, status?: number) => void;
  * @param headers - Optional response headers
  * @throws When called outside of a request
  */
-declare const sendResponse: (status: number, body: JsonValue, headers?: Record<string, string>) => void;
+export declare const sendResponse: (status: number, body: JsonValue, headers?: Record<string, string>) => void;
 /**
  * Normalized, adapter-agnostic view of the current request. Reads the request
  * object off the current request context and normalizes it across the five
  * adapter request shapes (Express `req`, Fastify `req`, Koa `ctx.req`,
  * Hono `c.req`, h3 `event.req`) so middleware can be written once.
  */
-interface RequestMeta {
+export interface RequestMeta {
   /** HTTP method, upper-cased (e.g. "GET", "POST") */
   method: string;
   /** URL pathname (e.g. "/__rpc/greet") */
@@ -601,13 +608,12 @@ interface RequestMeta {
  * @param event - The request context to read, typically the result of
  *   {@link getRequestContext}
  */
-declare const getRequestMeta: (event: RequestEvent) => RequestMeta;
+export declare const getRequestMeta: (event: RequestEvent) => RequestMeta;
 //#endregion
 //#region src/options.d.ts
-declare const defaultServerFnOptions: ServerFunctionOptions;
-declare const defaultPrefix = "__rpc";
-declare const defaultRPCOptions: RpcPluginOptions;
-declare const defaultMiddlewareOptions: MiddlewareOptions;
+export declare const defaultServerFnOptions: ServerFunctionOptions;
+export declare const defaultPrefix = "__rpc";
+export declare const defaultRPCOptions: RpcPluginOptions;
+export declare const defaultMiddlewareOptions: MiddlewareOptions;
 //#endregion
-export { CreateServerFunctionOptions, RPCError, RequestEvent, RequestMeta, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
 //# sourceMappingURL=server.d.mts.map

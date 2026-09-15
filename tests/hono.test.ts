@@ -421,7 +421,7 @@ describe("Hono createRPCMiddleware", () => {
     createServerFunction(
       "hono-send",
       vi.fn().mockImplementation(async () => {
-        getRequestContext().send(429, { error: "Rate limit exceeded" }, {
+        getRequestContext().send?.(429, { error: "Rate limit exceeded" }, {
           "retry-after": "30",
         });
         return "ignored";

@@ -15,6 +15,7 @@ import {
   attachVite,
   readBody,
   redirect,
+  viteMiddleware,
 } from "../src/fastify/helpers.ts";
 import {
   createMiddleware,
@@ -241,6 +242,50 @@ describe("Fastify helpers", () => {
         request.raw,
         reply.raw,
         expect.any(Function),
+      );
+    });
+  });
+
+  describe("viteMiddleware", () => {
+    it("should return a function with correct signature", () => {
+      const vite = { middlewares: vi.fn() };
+      const handler = viteMiddleware(vite as unknown as ViteDevServer);
+      expect(typeof handler).toBe("function");
+    });
+
+    it("should call reply.hijack and vite.middlewares with raw objects", async () => {
+      const vite = {
+        middlewares: vi.fn((_req: any, _reply: any, cb: any) => cb()),
+      };
+      const handler = viteMiddleware(vite as unknown as ViteDevServer);
+      const request = { raw: { method: "GET", url: "/test" } };
+      const reply = {
+        hijack: vi.fn(),
+        raw: { statusCode: 200 },
+      };
+      await handler(request as any, reply as any);
+      expect(reply.hijack).toHaveBeenCalledOnce();
+      expect(vite.middlewares).toHaveBeenCalledWith(
+        request.raw,
+        reply.raw,
+        expect.any(Function),
+      );
+    });
+
+    it("should reject when vite.middlewares passes an error", async () => {
+      const vite = {
+        middlewares: vi.fn((_req: any, _reply: any, cb: any) =>
+          cb(new Error("vite failed"))
+        ),
+      };
+      const handler = viteMiddleware(vite as unknown as ViteDevServer);
+      const request = { raw: { method: "GET", url: "/test" } };
+      const reply = {
+        hijack: vi.fn(),
+        raw: { statusCode: 200 },
+      };
+      await expect(handler(request as any, reply as any)).rejects.toThrow(
+        "vite failed",
       );
     });
   });
@@ -548,7 +593,7 @@ describe("Fastify createRPCMiddleware", () => {
     createServerFunction(
       "fastify-send",
       vi.fn().mockImplementation(async () => {
-        getRequestContext().send(429, { error: "Rate limit exceeded" }, {
+        getRequestContext().send?.(429, { error: "Rate limit exceeded" }, {
           "retry-after": "30",
         });
         return "ignored";
@@ -573,7 +618,7 @@ describe("Fastify createRPCMiddleware", () => {
     createServerFunction(
       "fastify-send-no-headers",
       vi.fn().mockImplementation(async () => {
-        getRequestContext().send(204, null);
+        getRequestContext().send?.(204, null);
         return "ignored";
       }),
     );

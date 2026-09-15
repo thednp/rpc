@@ -90,6 +90,39 @@ const { data } = uploadFile(form); // → POST /__rpc/upload-file (multipart/for
 
 Server-side, the body must be parsed before your handler sees it (Node has no built-in multipart parser): register your framework's parser (`multer`, `@fastify/multipart`, `koa-body`, Hono's `formData` helpers) **before** the RPC middleware — the adapter then forwards the parsed fields object as the function's first argument. Without a parser, the handler receives `{ raw: <string> }`, which you parse with `busboy`/`formidable` inside the function. See [Wire Protocol — Multipart](./wire-protocol.md#post--multipartform-data).
 
+## Native HTTP Clients / `unwrapEnvelope<T>`
+
+When building native clients or non-Vite toolchains that don't use the auto-generated fetch stubs, use `unwrapEnvelope<T>` to parse the wire protocol response:
+
+```ts
+import { unwrapEnvelope } from '@thednp/rpc/helpers';
+
+const res = await fetch('http://localhost:3000/__rpc/say-hi', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(['World']),
+});
+const json = await res.json();
+const result = unwrapEnvelope<string>(json); // "Hello World!"
+```
+
+If the server returns an `{ error }` response, `unwrapEnvelope` throws a plain `Error` with the error string. For typed errors (e.g. `RPCError`), catch the rejection and inspect the message:
+
+```ts
+import { unwrapEnvelope, RPCError } from '@thednp/rpc/helpers';
+
+try {
+  const result = unwrapEnvelope<string>(json);
+} catch (err) {
+  if (err instanceof RPCError) {
+    err.code;  // 400
+    err.data;  // optional extra payload
+  }
+}
+```
+
+> This is the same unwrapping that auto-generated client stubs perform internally. Use it when you need to call RPC endpoints from a native HTTP client (Deno, Bun, curl-equivalent, mobile) without the plugin's module substitution.
+
 ## @tanstack/react-query Integration
 
 `@thednp/rpc` is a transport pipe — it handles serialization and transport only. For client-side caching, data invalidation, and stale-while-revalidate patterns, use `@tanstack/react-query`:

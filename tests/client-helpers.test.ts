@@ -3,6 +3,7 @@ import {
   getClientStub,
   handleResponse,
   innerModule,
+  unwrapEnvelope,
 } from "../src/client-helpers.ts";
 
 describe("handleResponse", () => {
@@ -269,5 +270,38 @@ describe("getClientStub", () => {
       expect.any(String),
       expect.objectContaining({ headers: {} }),
     );
+  });
+});
+
+describe("unwrapEnvelope", () => {
+  it("should extract data from { data } envelope", () => {
+    expect(unwrapEnvelope<string>({ data: "hello" })).toBe("hello");
+  });
+
+  it("should extract nested data from { data } envelope", () => {
+    const obj = { data: { name: "artae", count: 42 } };
+    expect(unwrapEnvelope<typeof obj.data>(obj)).toEqual({
+      name: "artae",
+      count: 42,
+    });
+  });
+
+  it("should return the input as-is when no data property", () => {
+    expect(unwrapEnvelope<string>("just a string")).toBe("just a string");
+  });
+
+  it("should return the input as-is for primitive values", () => {
+    expect(unwrapEnvelope<number>(42)).toBe(42);
+    expect(unwrapEnvelope<boolean>(true)).toBe(true);
+    expect(unwrapEnvelope<null>(null)).toBe(null);
+  });
+
+  it("should handle undefined data property", () => {
+    const obj = { data: undefined };
+    expect(unwrapEnvelope<undefined>(obj)).toBeUndefined();
+  });
+
+  it("should handle data property with null value", () => {
+    expect(unwrapEnvelope<null>({ data: null })).toBeNull();
   });
 });

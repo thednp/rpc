@@ -37,7 +37,7 @@ type HonoMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "hono">(initial
  * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
  * @returns A Hono middleware function
  */
-declare const createMiddleware: HonoMiddlewareFn;
+export declare const createMiddleware: HonoMiddlewareFn;
 /**
  * Creates the Hono RPC middleware that routes incoming requests to registered server functions.
  * Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
@@ -45,7 +45,7 @@ declare const createMiddleware: HonoMiddlewareFn;
  * @param initialOptions - Options including rpcPrefix for URL routing
  * @returns A Hono middleware function
  */
-declare const createRPCMiddleware: HonoMiddlewareFn;
+export declare const createRPCMiddleware: HonoMiddlewareFn;
 //#endregion
 //#region src/hono/helpers.d.ts
 /**
@@ -53,14 +53,14 @@ declare const createRPCMiddleware: HonoMiddlewareFn;
  * Dynamically imports loadRPCConfig and registers the middleware.
  * @param app - Hono application instance
  */
-declare function attachRPC(app: Hono$1): Promise<void>;
+export declare function attachRPC(app: Hono$1): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to a Hono app for development mode.
  * Uses the viteMiddleware wrapper to bridge Vite's Connect-compatible stack into Hono.
  * @param app - Hono application instance
  * @param vite - Running Vite dev server
  */
-declare const attachVite: (app: Hono$1, vite: ViteDevServer) => void;
+export declare const attachVite: (app: Hono$1, vite: ViteDevServer) => void;
 /**
  * Creates a Hono-compatible middleware from a Vite dev server middleware stack.
  * Bridges the Connect/Express middleware interface to Hono's context-based request/response model.
@@ -69,7 +69,7 @@ declare const attachVite: (app: Hono$1, vite: ViteDevServer) => void;
  * @returns A Hono middleware function
  * @see https://github.com/honojs/hono/issues/3162#issuecomment-2331118049
  */
-declare const viteMiddleware: (vite: ViteDevServer) => ReturnType<typeof createMiddleware$1<{
+export declare const viteMiddleware: (vite: ViteDevServer) => ReturnType<typeof createMiddleware$1<{
   Bindings: HttpBindings;
 }>>;
 /**
@@ -78,7 +78,7 @@ declare const viteMiddleware: (vite: ViteDevServer) => ReturnType<typeof createM
  * @param c - Hono request context
  * @returns A promise resolving to the parsed body with its content type
  */
-declare const readBody: (c: Context) => Promise<BodyResult>;
+export declare const readBody: (c: Context) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Hono context. Hono's `c.redirect(location,
  * status)` returns a `Response` object that the handler must return (it never
@@ -89,7 +89,7 @@ declare const readBody: (c: Context) => Promise<BodyResult>;
  * @param status - HTTP status code, defaults to 303
  * @returns A Hono `Response` to return from the handler
  */
-declare const redirect: (c: Context, location: string, status?: RedirectStatusCode) => Response;
+export declare const redirect: (c: Context, location: string, status?: RedirectStatusCode) => Response;
 //#endregion
-export { type Hono, type HonoContext, type HonoMiddlewareFn, type HonoMiddlewareHandler, type HonoMiddlewareHooks, type HonoMiddlewareOptions, type IncomingWithBody, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
+export type { Hono, HonoContext, HonoMiddlewareFn, HonoMiddlewareHandler, HonoMiddlewareHooks, HonoMiddlewareOptions, IncomingWithBody };
 //# sourceMappingURL=hono.d.mts.map

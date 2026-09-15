@@ -88,6 +88,32 @@ function attachVite(app, vite) {
 	});
 }
 /**
+* Creates a Fastify `onRequest` hook handler that delegates to Vite's
+* connect-compatible middleware stack. Use with `app.addHook("onRequest", ...)`.
+*
+* @example
+* ```ts
+* import Fastify from "fastify";
+* import { createServer } from "vite";
+* import { viteMiddleware } from "@thednp/rpc/fastify";
+*
+* const app = Fastify();
+* const vite = await createServer({ server: { middlewareMode: true } });
+* app.addHook("onRequest", viteMiddleware(vite));
+* ```
+* @param vite - Running Vite dev server
+* @returns A Fastify `onRequest` hook handler
+*/
+function viteMiddleware(vite) {
+	return async (request, reply) => {
+		reply.hijack();
+		await new Promise((resolve, reject) => {
+			const next = (err) => err ? reject(err) : resolve();
+			vite.middlewares(request.raw, reply.raw, next);
+		});
+	};
+}
+/**
 * Reads and parses the HTTP request body from a Fastify request.
 * If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
 * @param req - Fastify request object
@@ -298,6 +324,6 @@ const createRPCMiddleware = (initialOptions = {}) => {
 	});
 };
 //#endregion
-export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
+export { attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect, viteMiddleware };
 
 //# sourceMappingURL=fastify.mjs.map

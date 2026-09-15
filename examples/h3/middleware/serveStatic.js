@@ -38,7 +38,7 @@ const MIME = {
  *   file contents, or `undefined` to fall through to the next middleware
  */
 export async function serveStatic(event) {
-  const { pathname } = event.url;
+  const pathname = decodeURIComponent(event.url.pathname);
   if (pathname === "/" || pathname === base) return undefined;
 
   return serveStaticH3(event, {

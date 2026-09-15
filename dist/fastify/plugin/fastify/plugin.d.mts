@@ -137,6 +137,13 @@ interface RpcPluginOptions {
    * @default "exact"
    */
   serverFiles?: "exact" | "glob";
+  /**
+   * Suppress the "no RPC config found" warning when no config file is
+   * discovered. Useful when the plugin is wrapped by another tool that
+   * provides configuration externally (e.g. a meta-framework adapter).
+   * @default false
+   */
+  silent?: boolean;
 }
 interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
   /**

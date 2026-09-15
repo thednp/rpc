@@ -163,7 +163,7 @@ export type ServerFnArgs = [...JsonArray];
  */
 export type ServerFunction<
   TArgs extends JsonArray = JsonArray,
-  TResult extends JsonValue = JsonValue,
+  TResult = JsonValue,
 > = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 
 /**
@@ -172,7 +172,7 @@ export type ServerFunction<
  */
 export type ServerFunctionInit<
   TArgs extends FormData | JsonArray = JsonArray,
-  TResult extends JsonValue = JsonValue,
+  TResult = JsonValue,
 > = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
 
 /**
@@ -182,7 +182,7 @@ export type ServerFunctionInit<
  */
 export type ClientFunction<
   TArgs extends JsonArray = JsonArray,
-  TResult extends JsonValue = JsonValue,
+  TResult = JsonValue,
 > = (...args: TArgs) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
@@ -280,6 +280,14 @@ export interface RpcPluginOptions {
    * @default "exact"
    */
   serverFiles?: "exact" | "glob";
+
+  /**
+   * Suppress the "no RPC config found" warning when no config file is
+   * discovered. Useful when the plugin is wrapped by another tool that
+   * provides configuration externally (e.g. a meta-framework adapter).
+   * @default false
+   */
+  silent?: boolean;
 }
 
 export interface MiddlewareOptions<

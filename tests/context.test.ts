@@ -8,12 +8,15 @@ import {
   sendResponse,
 } from "../src/context.ts";
 
+const noopSend = vi.fn();
+
 describe("provideRequestContext", () => {
   it("should provide the context inside the callback", () => {
     const init: RequestEvent = {
       request: { id: "req1" },
       response: { id: "res1" },
       redirect: () => undefined,
+      send: noopSend,
       locals: { user: "alice" },
     };
     provideRequestContext(init, () => {
@@ -24,7 +27,13 @@ describe("provideRequestContext", () => {
 
   it("should propagate locals mutated in the callback", () => {
     provideRequestContext(
-      { request: {}, response: {}, redirect: () => undefined, locals: {} },
+      {
+        request: {},
+        response: {},
+        redirect: () => undefined,
+        send: noopSend,
+        locals: {},
+      },
       () => {
         getRequestContext().locals.user = "bob";
         expect(getRequestContext().locals.user).toBe("bob");
@@ -37,6 +46,7 @@ describe("provideRequestContext", () => {
       request: {},
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
     };
     provideRequestContext(outer, () => {
@@ -44,6 +54,7 @@ describe("provideRequestContext", () => {
         request: {},
         response: {},
         redirect: () => undefined,
+        send: noopSend,
         locals: {},
       };
       provideRequestContext(inner, () => {
@@ -58,6 +69,7 @@ describe("provideRequestContext", () => {
       request: {},
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
     };
     await provideRequestContext(init, async () => {
@@ -83,6 +95,7 @@ describe("redirect", () => {
         request: {},
         response: {},
         redirect: ctxRedirect,
+        send: noopSend,
         locals: {},
       },
       () => {
@@ -148,8 +161,9 @@ describe("getRequestMeta", () => {
       },
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.method).toBe("POST");
     expect(meta.pathname).toBe("/__rpc/greet");
     expect(meta.search).toBe("?x=1");
@@ -173,8 +187,9 @@ describe("getRequestMeta", () => {
       },
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.method).toBe("GET");
     expect(meta.pathname).toBe("/__rpc/greet");
     expect(meta.searchParams.get("x")).toBe("1");
@@ -193,8 +208,9 @@ describe("getRequestMeta", () => {
       },
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.ip).toBe("203.0.113.7");
     expect(meta.protocol).toBe("https");
   });
@@ -204,8 +220,9 @@ describe("getRequestMeta", () => {
       request: {},
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.method).toBe("GET");
     expect(meta.pathname).toBe("/");
     expect(meta.search).toBe("");
@@ -220,10 +237,53 @@ describe("getRequestMeta", () => {
       },
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.pathname).toBe("/__rpc/greet");
     expect(meta.headers).toMatchObject({ host: "example.com" });
+  });
+
+  it("should fall back to req.raw.headers for Hono-style requests", () => {
+    const headers = new Headers();
+    headers.set("host", "example.com");
+    headers.set("x-custom", "value");
+    const meta = getRequestMeta({
+      request: {
+        method: "GET",
+        url: "/__rpc/greet",
+        raw: { headers },
+      },
+      response: {},
+      redirect: () => undefined,
+      send: noopSend,
+      locals: {},
+    });
+    expect(meta.method).toBe("GET");
+    expect(meta.pathname).toBe("/__rpc/greet");
+    expect(meta.headers).toMatchObject({
+      host: "example.com",
+      "x-custom": "value",
+    });
+    expect(meta.host).toBe("example.com");
+  });
+
+  it("should prefer req.headers over req.raw.headers when both exist", () => {
+    const rawHeaders = new Headers();
+    rawHeaders.set("host", "raw.example.com");
+    const meta = getRequestMeta({
+      request: {
+        method: "GET",
+        url: "/__rpc/greet",
+        headers: { host: "direct.example.com" },
+        raw: { headers: rawHeaders },
+      },
+      response: {},
+      redirect: () => undefined,
+      send: noopSend,
+      locals: {},
+    });
+    expect(meta.host).toBe("direct.example.com");
   });
 
   it("should pick the first value from array headers", () => {
@@ -235,8 +295,9 @@ describe("getRequestMeta", () => {
       },
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.host).toBe("first.example.com");
   });
 
@@ -249,8 +310,9 @@ describe("getRequestMeta", () => {
       },
       response: {},
       redirect: () => undefined,
+      send: noopSend,
       locals: {},
-    } as RequestEvent);
+    });
     expect(meta.protocol).toBe("https");
     expect(meta.pathname).toBe("/__rpc/greet");
   });
@@ -264,6 +326,7 @@ describe("functionName on RequestEvent", () => {
         request: {},
         response: {},
         redirect: () => undefined,
+        send: noopSend,
         functionName: "greet",
         locals: {},
       },

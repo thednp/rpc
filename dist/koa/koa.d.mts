@@ -40,7 +40,7 @@ type KoaMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "koa">(initialOp
  * @param initialOptions - Options for rpcPrefix, path matching, and the handler function
  * @returns A Koa middleware function
  */
-declare const createMiddleware: KoaMiddlewareFn;
+export declare const createMiddleware: KoaMiddlewareFn;
 /**
  * Creates the Koa RPC middleware that routes incoming requests to registered server functions.
  * Wraps the generic createMiddleware with the RPC handler that reads the body, dispatches
@@ -48,7 +48,7 @@ declare const createMiddleware: KoaMiddlewareFn;
  * @param initialOptions - Options including rpcPrefix for URL routing
  * @returns A Koa middleware function
  */
-declare const createRPCMiddleware: KoaMiddlewareFn;
+export declare const createRPCMiddleware: KoaMiddlewareFn;
 //#endregion
 //#region src/koa/helpers.d.ts
 /**
@@ -56,7 +56,7 @@ declare const createRPCMiddleware: KoaMiddlewareFn;
  * Dynamically imports loadRPCConfig and registers the middleware.
  * @param app - Koa application instance
  */
-declare function attachRPC(app: Koa): Promise<void>;
+export declare function attachRPC(app: Koa): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to a Koa app for development mode.
  * Bridges Koa's context-based middleware to Vite's Connect-compatible middleware stack
@@ -64,7 +64,7 @@ declare function attachRPC(app: Koa): Promise<void>;
  * @param app - Koa application instance
  * @param vite - Running Vite dev server
  */
-declare function attachVite(app: Koa, vite: ViteDevServer): void;
+export declare function attachVite(app: Koa, vite: ViteDevServer): void;
 /**
  * Reads and parses the HTTP request body from a Koa context.
  * If koa-body or another body parser already consumed the stream,
@@ -72,7 +72,7 @@ declare function attachVite(app: Koa, vite: ViteDevServer): void;
  * @param ctx - Koa context
  * @returns A promise resolving to the parsed body with its content type
  */
-declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
+export declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Koa context. Koa's `ctx.redirect(location)`
  * defaults to `302` and sets the `Location` header; the status code must be
@@ -83,7 +83,7 @@ declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
  * @param location - The URL to redirect to
  * @param status - HTTP status code, defaults to 303
  */
-declare const redirect: (ctx: KoaContext, location: string, status?: number) => void;
+export declare const redirect: (ctx: KoaContext, location: string, status?: number) => void;
 //#endregion
-export { type Koa, type KoaContext, type KoaMiddlewareFn, type KoaMiddlewareHooks, type KoaMiddlewareOptions, type KoaNext, attachRPC, attachVite, createMiddleware, createRPCMiddleware, readBody, redirect };
+export type { Koa, KoaContext, KoaMiddlewareFn, KoaMiddlewareHooks, KoaMiddlewareOptions, KoaNext };
 //# sourceMappingURL=koa.d.mts.map

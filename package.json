@@ -1,7 +1,7 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.3.2",
-  "license": "MIT",
+  "version": "0.3.3",
+  "license": "MIT", 
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
   "homepage": "https://github.com/thednp/rpc#readme",
@@ -85,24 +85,24 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.4",
     "fastify-plugin": "^6.0.0",
-    "h3": "2.0.1-rc.29",
-    "hono": "^4.13.4",
+    "h3": "2.0.1-rc.31",
+    "hono": "^4.13.8",
     "koa": "^3.2.1",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   },
   "devDependencies": {
     "@hono/node-server": "^2.1.1",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
-    "@types/node": "^26.3.0",
-    "@vitest/coverage-istanbul": "^4.1.11",
-    "@vitest/ui": "^4.1.11",
-    "tsdown": "^0.22.14",
+    "@types/node": "^26.5.1",
+    "@vitest/coverage-istanbul": "^5.0.1",
+    "@vitest/ui": "^5.0.1",
+    "tsdown": "^0.23.0",
     "typescript": "^7.0.2",
     "vite-plugin-strip-comments": "^0.0.10",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   },
   "packageManager": "pnpm@11.22.0"
 }

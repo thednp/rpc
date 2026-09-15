@@ -39,6 +39,7 @@ export default defineConfig({
 | `adapter`    | `string` | `'express'` | Target adapter (`'express'`, `'fastify'`, `'hono'`, `'koa'`) |
 | `serverFiles` | `'exact'` \| `'glob'` | `'exact'` | Server file matching mode: `'exact'` for the classic `server.ts\|js\|mjs\|mts` names, `'glob'` to recursively match `*.server.{ts,js,mjs,mts}` under the scan root |
 | `scanRoot` | `string` | `undefined` | Directory to scan for server files, relative to the project root. Defaults to `<root>/src/api`. Useful in monorepos where server files live in a shared package |
+| `silent` | `boolean` | `false` | Suppress the `NO_CONFIG_FOUND` warning when no config file is found. Useful for wrapper plugins that define server functions directly without a config file |
 
 ## Config File Discovery
 
@@ -82,6 +83,12 @@ console.log(config.adapter);    // 'express'
 ```
 
 `loadRPCConfig` also calls `setGlobalPrefix(config.rpcPrefix)` internally — any `createServerFunction` calls that follow will automatically register under the configured prefix. This makes it the recommended bootstrap step for regular SSR servers (Express, Fastify, Hono, Koa, h3).
+
+Pass `{ silent: true }` to suppress the `NO_CONFIG_FOUND` warning when no config file is found — useful for wrapper plugins that define server functions directly without a config file:
+
+```ts
+const config = await loadRPCConfig({ silent: true });
+```
 
 > **Note for serverless environments:** In serverless (Netlify, Vercel, etc.), call `setGlobalPrefix` directly before importing your server files or before defining your server functions — see [Adapters — Serverless](./adapters.md#serverless).
 

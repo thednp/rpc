@@ -23,8 +23,8 @@ const INVALID_IDENTIFIER = (label, name) => `Invalid ${label}: "${name}" must ma
 const INVALID_PATH_SEGMENT = (label, segment) => `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/`;
 /** Warning message when a specified RPC config file cannot be resolved on disk. @param configFile - The requested config filename. @param configFilePath - The resolved absolute path */
 const CONFIG_FILE_NOT_FOUND = (configFile, configFilePath) => `  ⚠︎ The specified RPC config file ${configFile} cannot be found at ${configFilePath}, loading the defaults..`;
-const NO_CONFIG_FOUND = ` ⚡︎ No RPC config found, loading the defaults..`;
-const FAILED_LOAD_CONFIG = ` ⚠︎ Failed to load RPC config:`;
+const NO_CONFIG_FOUND = `  ⚡︎ No RPC config found, loading the defaults..`;
+const FAILED_LOAD_CONFIG = `  ⚠︎ Failed to load RPC config:`;
 /** Error template for duplicate server function names across files. @param name - The duplicate registered name */
 const DUPLICATE_FUNCTION_NAME = (name) => `Duplicate server function "${name}" detected. Each server function must have a unique name. Remove or rename the duplicate.`;
 //#endregion
@@ -323,9 +323,10 @@ let RPCConfig;
 * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
 * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
 * @param configFile - Optional explicit config file path; skips file search when provided
+* @param opts - Optional settings; `silent` suppresses the "no config found" warning
 * @returns Resolved RPC plugin options
 */
-const loadRPCConfig = async (configFile) => {
+const loadRPCConfig = async (configFile, opts) => {
 	try {
 		const env = {
 			command: "serve",
@@ -376,7 +377,7 @@ const loadRPCConfig = async (configFile) => {
 			}
 		}
 		RPCConfig = defaultRPCOptions;
-		console.warn(NO_CONFIG_FOUND);
+		if (!opts?.silent) console.warn(NO_CONFIG_FOUND);
 	} catch (error) {
 		RPCConfig = defaultRPCOptions;
 		console.warn(FAILED_LOAD_CONFIG, error);
@@ -400,7 +401,7 @@ function rpcPlugin(devOptions = {}) {
 		name: "vite-plugin-universal-rpc",
 		enforce: "pre",
 		async configResolved(resolvedConfig) {
-			const uniConfig = await loadRPCConfig();
+			const uniConfig = await loadRPCConfig(void 0, { silent: devOptions.silent });
 			options = mergeConfig(uniConfig, devOptions);
 			config = resolvedConfig;
 		},

@@ -210,12 +210,13 @@ export const getRequestMeta = (event: RequestEvent): RequestMeta => {
     ip?: string;
     protocol?: string;
     socket?: { remoteAddress?: string };
+    raw?: { headers?: unknown };
   } | undefined;
 
   const method = (req?.method ?? "GET").toUpperCase();
   const rawUrl = req?.originalUrl ?? req?.url ?? req?.path ?? "";
   const url = safeURL(rawUrl);
-  const headers = toHeaderRecord(req?.headers);
+  const headers = toHeaderRecord(req?.headers ?? req?.raw?.headers);
   const hostHeader = pickHeader(headers, "host");
 
   return {

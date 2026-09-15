@@ -157,6 +157,17 @@ A successful call always returns `{ "data": <result> }`:
 
 The generated client unwraps it — `await data` resolves to `<result>`.
 
+For native HTTP clients (Deno, Bun, curl-equivalent), use the `unwrapEnvelope<T>` helper from `@thednp/rpc/helpers` to parse the response:
+
+```ts
+import { unwrapEnvelope } from '@thednp/rpc/helpers';
+
+const json = await res.json();
+const result = unwrapEnvelope<string>(json);
+```
+
+See [Client Usage — Native HTTP Clients](./client-usage.md#native-http-clients--unwrap envelopet) for the full pattern.
+
 ## Error Responses
 
 | Status | Meaning                                    | Body                              |

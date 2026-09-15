@@ -93,6 +93,20 @@ describe("loadRPCConfig", () => {
     expect(cfg.adapter).toBe("express");
   });
 
+  it("should suppress NO_CONFIG_FOUND warning with silent option", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { loadRPCConfig: freshLoad } = await import("../src/index.ts");
+      await freshLoad(undefined, { silent: true });
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("No RPC config found"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("should work with valid path", async () => {
     const cfg = await loadRPCConfig("tests/fixtures/good.config.ts");
     expect(cfg.rpcPrefix).toBe("_sv");
@@ -285,6 +299,28 @@ describe("createServerFunction", () => {
     const { data } = wrapped();
     await expect(data).resolves.toBe("no-args-result");
     expect(fn).toHaveBeenCalledOnce();
+  });
+
+  it("should accept non-JSON return types without casting", async () => {
+    const dateResult = new Date("2026-01-15T00:00:00Z");
+    const wrapped = createServerFunction(
+      "date-fn",
+      vi.fn().mockResolvedValue(dateResult),
+    );
+    const { data } = wrapped();
+    await expect(data).resolves.toBe(dateResult);
+  });
+
+  it("should accept non-JSON argument types without casting", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    const wrapped = createServerFunction(
+      "obj-fn",
+      fn as unknown as ServerFunctionInit,
+    );
+    const input = { nested: { value: 42 } };
+    const { data } = wrapped(input);
+    await data;
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), input);
   });
 });
 
