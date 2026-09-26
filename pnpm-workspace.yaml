@@ -4,7 +4,7 @@ packages:
   - "experiments/json-db/cms"
 minimumReleaseAgeExclude:
   - '@thednp/rpc@0.0.13 || 0.1.0 || 0.1.1 || 0.2.0 || 0.3.0 || 0.3.1'
-  - '@types/node@26.3.0'
+  - '@types/node@26.3.0 || 26.6.3'
   - '@vitest/coverage-istanbul@5.0.1'
   - '@vitest/mocker@5.0.1'
   - '@vitest/pretty-format@5.0.1'

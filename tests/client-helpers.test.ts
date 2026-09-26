@@ -318,7 +318,9 @@ describe("unwrapEnvelope", () => {
   });
 
   it("should stringify a non-string top-level error", () => {
-    expect(() => unwrapEnvelope({ error: { code: 401 } })).toThrow("[object Object]");
+    expect(() => unwrapEnvelope({ error: { code: 401 } })).toThrow(
+      "[object Object]",
+    );
   });
 
   it("should NOT throw for validation-as-data ({ data: { error } })", () => {
