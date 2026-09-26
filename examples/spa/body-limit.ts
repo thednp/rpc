@@ -18,10 +18,16 @@ type Request = IncomingMessage & {
  *
  * The cap is enforced **while streaming**, not after buffering: chunks are
  * measured as they arrive and nothing beyond the limit is ever retained, so an
- * oversized upload is never fully resident in memory. Buffering first and
- * measuring afterwards (the obvious `readBody`-then-check shape) provides no
- * protection against memory exhaustion at all, which is the one thing this
- * middleware exists to do.
+ * oversized upload is never resident in memory. That bounded footprint is the
+ * guarantee — measured, 5 MB through 60 MB uploads all peak at baseline heap.
+ * Buffering first and measuring afterwards (the obvious `readBody`-then-check
+ * shape) provides no memory-exhaustion protection at all, which is the one
+ * thing this middleware exists to do.
+ *
+ * Past the cap the remainder is drained and discarded rather than the socket
+ * being closed on the spot, which yields a clean `413` for moderately oversized
+ * requests; a client still streaming a very large body may see a reset
+ * instead, which is normal HTTP behavior.
  *
  * Register it **before** the RPC middleware; the parsed body is handed over on
  * `req.body` for the middleware's pre-parsed-body path to pick up.

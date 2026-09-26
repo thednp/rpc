@@ -193,95 +193,82 @@ app.use(createRPCMiddleware(options));
 
 > A complete, extracted implementation lives in the [h3 example](../examples/h3/middleware/bodyLimit.js) (`middleware/bodyLimit.js`). Do **not** iterate `for await over event.req` to count bytes before forwarding — that consumes the request stream and the RPC `readBody` will then fail with `Body is unusable`.
 
-In other cases, your custom [server app](../examples/ssr/http-express.ts) can use something like this. Enforce the cap **while the stream is being read** — reading the whole body with `readBody` first and then checking the size still buffers an oversized body in memory, which is exactly what a body limit should prevent:
+In other cases, your custom [server app](../examples/ssr/http-express.ts) can use the middleware below. A working implementation ships in the [SPA example](../examples/spa/body-limit.ts) (`body-limit.ts`) — treat it as the reference.
+
+Enforce the cap **while the stream is being read**. Reading the whole body with `readBody` first and then checking the size still buffers an oversized body in memory, which is exactly what a body limit should prevent. Three details matter, and each one is a bug if you skip it:
+
+1. **Stop buffering the moment the cap is crossed.** This is the guarantee that matters: nothing past the cap is retained, so memory stays bounded no matter how large the upload. Don't `res.end()` + `req.destroy()` on the spot and consider it done — a client that is still streaming isn't reading your response, so closing the socket with unread request data makes Node emit `RST` and the client never learns why. Draining the remainder before responding gets a clean `413` across for moderately oversized requests; a very large upload may still see a reset, which is normal and acceptable (the client learns the upload failed either way). Bound the discard with a ceiling so it can't become an unbounded slowloris.
+2. **Parse the body before handing it on.** `req.body` must hold what the adapter's `readBody` would have produced, or every JSON function receives a raw string instead of parsed arguments.
+3. **Don't treat `content-length` as the gate.** It is attacker-controlled and absent entirely under `Transfer-Encoding: chunked`, so it is only a cheap early reject. The running byte total is the actual enforcement.
+
 ```ts
-// SSR (custom node:http server with Vite middleware mode)
-import { createMiddleware } from "@thednp/rpc/express";
-import { loadRPCConfig } from "@thednp/rpc";
-
-const config = await loadRPCConfig();
-const MAX_BODY_SIZE = 1024 * 1024;
-
-app.use(createMiddleware({
-  rpcPrefix: config.rpcPrefix,
-  handler: (req, res, next) => {
-    const contentLength = Number(req.headers["content-length"]);
-    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
-      res.statusCode = 413;
-      res.end("Payload Too Large");
-      return;
-    }
-    let size = 0;
-    let capped = false;
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => {
-      if (capped) return;
-      size += chunk.length;
-      if (size > MAX_BODY_SIZE) {
-        capped = true;
-        chunks.length = 0;
-        req.removeAllListeners("data");
-        res.statusCode = 413;
-        res.end("Payload Too Large");
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => {
-      if (capped) return;
-      const body = Buffer.concat(chunks).toString();
-      const contentType = req.headers["content-type"]?.toLowerCase() || "";
-      const isUrlEncoded = contentType.includes("urlencoded");
-      req.body = isUrlEncoded
-        ? Object.fromEntries(new URLSearchParams(body))
-        : body;
-      next();
-    });
-  },
-}));
-```
-
-For SPA you can make use of the vite runtime [proxy](../examples/spa/vite.config.ts)
-```ts
-// SPA (dedicated RPC proxy server)
-const MAX_BODY_SIZE = 1024 * 1024;
+// SSR (custom node:http server with Vite middleware mode) and SPA proxy alike
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+const MAX_DRAIN_SIZE = MAX_BODY_SIZE * 32; // ceiling on the post-reject discard
 
 const bodyLimit = (req, res, next) => {
-  const contentLength = Number(req.headers["content-length"]);
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
+  // Cheap early reject only — absent for chunked requests, and client-supplied.
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > MAX_BODY_SIZE) {
     res.statusCode = 413;
     res.end("Payload Too Large");
     return;
   }
+
+  const chunks = [];
   let size = 0;
-  let capped = false;
-  const chunks: Buffer[] = [];
+  let drained = 0;
+  let tooLarge = false;
+
   req.on("data", (chunk) => {
-    if (capped) return;
+    drained += chunk.length;
+    if (tooLarge) {
+      // Past the cap: keep draining so the 413 is deliverable, but not forever.
+      if (drained > MAX_DRAIN_SIZE) req.destroy();
+      return;
+    }
     size += chunk.length;
     if (size > MAX_BODY_SIZE) {
-      capped = true;
-      chunks.length = 0;
-      req.removeAllListeners("data");
-      res.statusCode = 413;
-      res.end("Payload Too Large");
-      req.destroy();
+      tooLarge = true;
+      chunks.length = 0; // release what we hold; the verdict is already decided
       return;
     }
     chunks.push(chunk);
   });
+
   req.on("end", () => {
-    if (capped) return;
-    const body = Buffer.concat(chunks).toString();
+    if (tooLarge) {
+      res.statusCode = 413;
+      res.end("Payload Too Large", () => req.destroy());
+      return;
+    }
+    const raw = Buffer.concat(chunks).toString();
     const contentType = req.headers["content-type"]?.toLowerCase() || "";
-    const isUrlEncoded = contentType.includes("urlencoded");
-    req.body = isUrlEncoded
-      ? Object.fromEntries(new URLSearchParams(body))
-      : body;
+    // Mirror the adapters' readBody so the RPC middleware gets the same shape.
+    if (contentType.includes("multipart/form-data")) {
+      req.body = { raw };
+    } else if (contentType.includes("urlencoded")) {
+      req.body = Object.fromEntries(new URLSearchParams(raw));
+    } else if (contentType.includes("json")) {
+      try {
+        req.body = JSON.parse(raw);
+      } catch {
+        req.body = raw;
+      }
+    } else {
+      req.body = raw;
+    }
     next();
   });
 };
+```
+
+For SPA you can make use of the vite runtime [proxy](../examples/spa/vite.config.ts) — mount the middleware above ahead of the RPC middleware:
+
+```ts
+// SPA (dedicated RPC proxy server)
+app.use(bodyLimit);
+app.use(createRPCMiddleware(options));
 ```
 
 ## Rate Limiting
