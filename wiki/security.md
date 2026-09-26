@@ -17,14 +17,17 @@ rpcPrefix = '__rpc'
 
 Using `startsWith` would incorrectly match paths like `/__rpc-evil/foo`, which could route to unintended handlers. The regex ensures the prefix is a standalone path segment.
 
-## Koa URL Normalization
+## URL Normalization (all adapters)
 
-The Koa adapter parses `ctx.url` through `new URL()` before prefix checking. This strips query strings and normalizes encoding, preventing query-string injection attacks:
+Every adapter parses the request URL through the shared `safeURL()` helper (`src/server-helpers.ts`) before any prefix matching. It strips query strings and normalizes encoding, preventing query-string injection into the function-name lookup:
 
 ```ts
-const url = new URL(ctx.url, 'http://localhost');
-const pathname = url.pathname; // clean, no query string
+const { pathname, search, searchParams } = safeURL(rawUrl);
 ```
+
+`safeURL` never throws. Malformed request-targets (`/\`, `//`, `/\/`) make the WHATWG URL parser raise `TypeError: Invalid URL`, and the adapters parse the URL *before* their dispatch `try` block — so an unguarded throw became an unhandled rejection that crashes raw `node:http` hosts (and Express 4) on a single unauthenticated request. On failure `safeURL` falls back to the base root, so the pathname never matches the prefix and the request is treated as non-RPC and falls through to `next()` / 404.
+
+This applies to Express, Fastify, Koa, Hono, h3, and `getRequestMeta` in the request context.
 
 ## Generic 404 Responses
 
@@ -49,6 +52,24 @@ Handler errors always produce `500 Internal Server Error`, but the response body
 
 **Never set `NODE_ENV=production` implicitly** in dev tooling — the switch is driven by the environment variable alone, so a misconfigured deployment cannot leak internals accidentally. The client's `handleResponse` rejects on any `{ error }` envelope regardless of environment, so error handling code does not need to branch on `NODE_ENV`.
 
+### Native Clients: `unwrapEnvelope`
+
+Native HTTP clients (Deno, Bun, curl-equivalents) that do not use the generated stubs can unwrap the envelope with `unwrapEnvelope` from `@thednp/rpc/helpers`. It follows the same error contract as `handleResponse`:
+
+```ts
+import { unwrapEnvelope } from "@thednp/rpc/helpers";
+
+const res = await fetch("/__rpc/get-user", { method: "POST", /* ... */ });
+const body = await res.json();
+if (!res.ok) throw new Error(body.error);   // transport-level failure
+const user = unwrapEnvelope<User>(body);   // 200 → { data: <result> }
+```
+
+- A **top-level** `error` key (which the server emits only for `400`/`404`/`405`/`415`/`500`) **throws**.
+- A `{ data: { error } }` body **resolves normally** — that is the documented validation-as-data contract, where a `200` carries the validation outcome as its result. Do not "fix" this by throwing on any nested `error`.
+
+`unwrapEnvelope` is status-code agnostic, so keep the `res.ok` check: it is what distinguishes a genuine `200` from a body that happens to parse. Note that `RPCError` is **not** exported from `@thednp/rpc/helpers` — it is a server-side export (`@thednp/rpc/server`) and its `code`/`data` are never re-exposed to clients in production anyway.
+
 ## Duplicate Function Names
 
 Each server function name must be unique — the registration map is keyed by name. During scanning:
@@ -67,12 +88,16 @@ POST /__rpc/do-stuff  →  200
 
 This blocks the simplest CSRF vector: an attacker page embedding `<img src="/__rpc/do-stuff">` or a form `GET` that would otherwise trigger side effects. Functions that opt into `method: "GET"` (via `createServerFunction(name, handler, { method: 'GET' })`) receive their arguments as an `?args=` JSON query parameter. Reserve `GET` for side-effect-free functions only. See [Server Functions Guide](./server-functions.md) for details, and [Wire Protocol](./wire-protocol.md) for the exact request/response encodings.
 
+### `?args=` Must Be a JSON Array
+
+For `GET` functions the `?args=` value is parsed and checked with `Array.isArray` before dispatch; anything else is rejected with `400 Bad Request`. Without the guard, `?args={"a":1}` would spread an object into `handler(...args)` and throw a `TypeError`, and `?args="abc"` would spread a string into individual characters — both surfacing as confusing `500`s and burning server CPU on attacker-controlled input.
+
 ## Content-Type Enforcement
 
 The middleware checks the request's `Content-Type` against the function's declared `contentType` **before** reading the body, rejecting mismatches with `415 Unsupported Media Type` (see [Wire Protocol — Content-Type Enforcement](./wire-protocol.md#content-type-enforcement)):
 
-- **JSON and text functions are strict**: the header must match the declared type (case-insensitive, after stripping `charset`/`boundary`). This keeps a body from being parsed with the wrong encoding — e.g. a urlencoded body fed to a JSON-declared function fails loudly instead of mis-parsing.
-- **Form functions are lenient between the two encodings**: `multipart/form-data` and `application/x-www-form-urlencoded` are interchangeable, so native urlencoded `<form>` submissions work on multipart-declared functions (the nojs progressive-enhancement flow).
+- **JSON and text functions are strict**: the header must match the declared type (case-insensitive, after stripping `charset`/`boundary`). This keeps a body from being parsed with the wrong encoding — e.g. a urlencoded body fed to a JSON-declared function fails loudly instead of mis-parsing. A JSON-declared function therefore does **not** accept form bodies; the leniency below runs only in the other direction.
+- **Form functions are lenient between the two encodings**: `multipart/form-data` and `application/x-www-form-urlencoded` are interchangeable, so native urlencoded `<form>` submissions work on multipart-declared functions (the nojs progressive-enhancement flow). A form-declared function still rejects `application/json`.
 - **Requests without a `Content-Type` header are exempt** (url bar, `GET`, legacy clients) — the check only applies when the header is present, preserving curl/native compatibility.
 
 The comparison normalizes the header (lowercased, parameters stripped) before matching, so `multipart/form-data; boundary=----xyz` matches `multipart/form-data`, and casing is ignored. See [Server Functions Guide](./server-functions.md) for the strict/lenient rules per content type.
@@ -86,6 +111,24 @@ app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
 ```
 
 When set, any request carrying an `Origin` header that does not match the configured origin is rejected with `403 Forbidden`. Requests **without** an `Origin` header (curl, native clients) pass through — the check only rejects when the browser-provided header disagrees. This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives.
+
+### Residual Gaps
+
+Two limits worth knowing before you rely on `origin` alone:
+
+- **`Sec-Fetch-Site` is not consulted.** It is a stronger, unforgeable signal than `Origin` (non-browser clients cannot set it). If you want to close the headerless-`Origin` hole for browsers while still allowing curl and native clients, add your own middleware before `createRPCMiddleware()`:
+
+  ```ts
+  app.use((req, res, next) => {
+    const site = req.headers["sec-fetch-site"];
+    if (site && site !== "same-origin" && site !== "none") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  });
+  ```
+
+- **Top-level `GET` navigations send no `Origin` header**, so a cross-site `<a href>` or `<img>` pointing at a `GET` function passes the `origin` check even when one is configured. This is the reason `GET` functions must be side-effect-free — the method check does not help there, because the request genuinely is a `GET`.
 
 ## Multi-Prefix Client Isolation
 

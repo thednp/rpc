@@ -304,4 +304,31 @@ describe("unwrapEnvelope", () => {
   it("should handle data property with null value", () => {
     expect(unwrapEnvelope<null>({ data: null })).toBeNull();
   });
+
+  it("should unwrap falsy data values", () => {
+    expect(unwrapEnvelope<boolean>({ data: false })).toBe(false);
+    expect(unwrapEnvelope<number>({ data: 0 })).toBe(0);
+    expect(unwrapEnvelope<string>({ data: "" })).toBe("");
+  });
+
+  it("should throw on a top-level error body", () => {
+    expect(() => unwrapEnvelope({ error: "Function not found" })).toThrow(
+      "Function not found",
+    );
+  });
+
+  it("should stringify a non-string top-level error", () => {
+    expect(() => unwrapEnvelope({ error: { code: 401 } })).toThrow("[object Object]");
+  });
+
+  it("should NOT throw for validation-as-data ({ data: { error } })", () => {
+    const result = unwrapEnvelope<{ error: string }>({
+      data: { error: "a is required" },
+    });
+    expect(result).toEqual({ error: "a is required" });
+  });
+
+  it("should return non-envelope objects as-is", () => {
+    expect(unwrapEnvelope<{ foo: number }>({ foo: 1 })).toEqual({ foo: 1 });
+  });
 });

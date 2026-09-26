@@ -163,10 +163,13 @@ For native HTTP clients (Deno, Bun, curl-equivalent), use the `unwrapEnvelope<T>
 import { unwrapEnvelope } from '@thednp/rpc/helpers';
 
 const json = await res.json();
+if (!res.ok) throw new Error(json.error);  // transport-level failure
 const result = unwrapEnvelope<string>(json);
 ```
 
-See [Client Usage — Native HTTP Clients](./client-usage.md#native-http-clients--unwrap envelopet) for the full pattern.
+`unwrapEnvelope` also throws on a top-level `error` body (the shape returned for `400`/`404`/`405`/`415`/`500`), but resolves normally for `{ data: { error } }` — a `200` carrying a validation outcome as its result.
+
+See [Client Usage — Native HTTP Clients](./client-usage.md#native-http-clients-unwrapenvelopet) for the full pattern.
 
 ## Error Responses
 

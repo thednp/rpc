@@ -125,7 +125,7 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
-  const prefix = rpcPrefix || defaultPrefix;
+  const prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
   const prefixRegex = rpcPrefix
     ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
     : /* istanbul ignore next */ null;

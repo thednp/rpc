@@ -204,7 +204,7 @@ const createMiddleware = (initialOptions = {}) => {
 const createRPCMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
 	const rpcPrefix = options.rpcPrefix;
-	const prefix = rpcPrefix || "__rpc";
+	const prefix = rpcPrefix || getGlobalPrefix() || "__rpc";
 	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
 	const prefixReplace = `/${prefix}/`;
 	return createMiddleware({

@@ -94,10 +94,19 @@ type InnerModReturn<T extends JsonValue> = {
 export declare const handleResponse: <R extends JsonValue>(response: Response) => Promise<R | void>;
 /**
  * Unwraps the `{ data }` envelope from a parsed RPC response body.
- * When the input is an object with a `data` property, returns `data`.
- * Otherwise returns the input as-is (for direct responses without the envelope).
+ *
+ * Error handling matches `handleResponse` so both helpers in this module agree
+ * on the contract: a **top-level** `error` key (which the server only emits for
+ * 404/405/415/400/500) throws, while a `{ data: { error } }` body resolves
+ * normally — that shape is the documented "validation-as-data" contract where a
+ * 200 carries the validation outcome as its result.
+ *
+ * Discriminating on `error` present **and** `data` absent is what keeps those
+ * two cases apart. Checking `res.ok` first is still recommended, since this
+ * helper is status-code agnostic by design.
  * @param json - Parsed JSON response body
  * @returns The unwrapped response data
+ * @throws When the body carries a top-level `error` and no `data`
  * @example
  * ```ts
  * const response = await fetch("/__rpc/greet", { method: "POST", ... });

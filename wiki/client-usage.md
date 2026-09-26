@@ -103,25 +103,28 @@ const res = await fetch('http://localhost:3000/__rpc/say-hi', {
   body: JSON.stringify(['World']),
 });
 const json = await res.json();
+if (!res.ok) throw new Error(json.error);  // transport-level failure
 const result = unwrapEnvelope<string>(json); // "Hello World!"
 ```
 
-If the server returns an `{ error }` response, `unwrapEnvelope` throws a plain `Error` with the error string. For typed errors (e.g. `RPCError`), catch the rejection and inspect the message:
+`unwrapEnvelope` throws when the body carries a **top-level** `error` — the shape the server returns for `400`/`404`/`405`/`415`/`500`:
 
 ```ts
-import { unwrapEnvelope, RPCError } from '@thednp/rpc/helpers';
+import { unwrapEnvelope } from '@thednp/rpc/helpers';
 
 try {
-  const result = unwrapEnvelope<string>(json);
+  unwrapEnvelope(await res.json());
 } catch (err) {
-  if (err instanceof RPCError) {
-    err.code;  // 400
-    err.data;  // optional extra payload
-  }
+  (err as Error).message; // "Function not found"
 }
 ```
 
-> This is the same unwrapping that auto-generated client stubs perform internally. Use it when you need to call RPC endpoints from a native HTTP client (Deno, Bun, curl-equivalent, mobile) without the plugin's module substitution.
+Two things it deliberately does **not** do:
+
+- **It does not throw for `{ data: { error } }`.** That is a `200` carrying a validation outcome as its result — the validation-as-data contract — and it resolves normally. Only a top-level `error` with no `data` aborts.
+- **It is status-code agnostic.** Keep the `res.ok` check; that is what distinguishes a real `200` from a body that merely parses.
+
+> `RPCError` is a **server-side** export (`@thednp/rpc/server`), not a client one — it is not available from `@thednp/rpc/helpers`, and its `code`/`data` are stripped from responses in production regardless. This is the same unwrapping the auto-generated stubs perform internally via `handleResponse`.
 
 ## @tanstack/react-query Integration
 

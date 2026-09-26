@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.4] - 2026-09-26
+
+### Fixed
+
+- **`unwrapEnvelope` now honors the error contract it was documented as having** (`src/client-helpers.ts`, exported from `@thednp/rpc/helpers`): the helper added in 0.3.3 was a pure property accessor — it returned `json.data` when present and otherwise passed the input through **unchanged**, with no `error` check and no status-code awareness. Given a 403 or 500 body it returned the error object as though it were a result, so a native client that checked the unwrapped value but not `res.ok` treated an authorization failure as a success — a fail-open error swallow in a helper whose entire purpose is native-client ergonomics. It now throws on a **top-level** `error` key (which the server emits only for `400`/`404`/`405`/`415`/`500`), matching the sibling `handleResponse` in the same module, which always checked `result.error`. Discriminating on *error present **and** data absent* preserves the validation-as-data contract: `{ data: { error } }` is a `200` carrying a validation outcome and still resolves normally. Falsy-value unwrapping is preserved because the test is `"data" in envelope`, not truthiness. It remains status-code agnostic, so the `res.ok` check is still required and is now documented
+- **h3 adapter now honors the global prefix fallback** (`src/h3/createMiddleware.ts:128`): `createRPCMiddleware` resolved its dispatch prefix as `rpcPrefix || defaultPrefix` while the other four adapters — and h3's own outer gate at line 88 — use `rpcPrefix || getGlobalPrefix() || defaultPrefix`. With a global prefix set and no explicit middleware option, h3 matched the prefix in the outer gate but then looked the function up in the `__rpc` map and returned 404. Fail-closed (a wrong prefix yields 404, never a cross-prefix dispatch), so this was an availability bug rather than an authorization bypass — but a real trap for multi-prefix setups on h3
+- **SPA example enforces its body cap while streaming** (`examples/spa/body-limit.ts`): the middleware called `readBody` — fully buffering the request — and only then measured the result, so its 1 MB limit provided no protection against memory exhaustion, despite `wiki/security.md` prescribing enforcement *while streaming*. An unauthenticated client could stream an arbitrarily large body and the server would accumulate all of it before rejecting. The rewrite measures each chunk as it arrives, retains nothing past the cap, and drains-and-discards the remainder so the `413` is actually deliverable — closing a socket that still has unread request data makes Node emit `RST`, and the client never learns why it failed — with a drain ceiling so the discard cannot become an unbounded slowloris. Verified: 20 MB and 50 MB uploads now peak at baseline heap instead of buffering their full payload, and 1.5 MB/20 MB submissions receive a clean `413`
+
+### Docs
+
+- **`unwrapEnvelope` documentation corrected** (`CHANGELOG.md`, `llms.txt`, `wiki/client-usage.md`, `wiki/security.md`, `wiki/wire-protocol.md`): the 0.3.3 docs claimed the helper "re-throws `RPCError` on `{ error }` bodies" and shipped an example importing `RPCError` from `@thednp/rpc/helpers`, where it does not exist — that entry ships only `getClientStub`, `handleResponse`, `innerModule`, and `unwrapEnvelope`. The documented snippet degraded to `err instanceof undefined`, i.e. `TypeError: Right-hand side of 'instanceof' is not callable`, throwing a confusing `TypeError` precisely when handling a failure. `RPCError` is a **server-side** export (`@thednp/rpc/server`) and its `code`/`data` are stripped from production responses regardless; all docs now say so
+- `wiki/security.md` — Koa-only "URL Normalization" section generalized to all adapters and the shared `safeURL()` helper, including why it must never throw; new `?args=` Must Be a JSON Array section; new "Native Clients: `unwrapEnvelope`" contract section; Origin Validation gains a "Residual Gaps" subsection covering the unconsulted `Sec-Fetch-Site` header (with a drop-in middleware snippet) and why top-level `GET` navigations bypass the check entirely; Content-Type Enforcement now states explicitly that a JSON-declared function does **not** accept form bodies — the leniency is one-directional, and the previous wording overstated it in both directions
+- Fixed a broken anchor link to the `unwrapEnvelope` section in `wiki/wire-protocol.md`
+- `AGENTS.md` — security posture section updated: `safeURL` normalization (all adapters), `?args=` array validation, one-directional content-type strictness, the shared client error contract, the streaming body-limit requirement, and a prefix-parity note to keep the five adapters in sync; threat-model table row corrected
+- `llms.txt` — `unwrapEnvelope` contract, `400` added to the status-code list, content-type leniency direction
+
+### Tests
+
+- `unwrapEnvelope` gains coverage for the error contract: top-level `error` throws, non-string `error` stringifies, `{ data: { error } }` resolves (the validation-as-data regression guard), falsy `data` values (`false`/`0`/`""`) unwrap, and non-envelope objects pass through — **447 tests, 100% on all metrics**
+
+### Chores
+
+- Bump version to `0.3.4` (`package.json`, `deno.json`)
+
 ## [0.3.3] - 2026-09-15
 
 ### Features
@@ -7,7 +31,7 @@
 - **Relaxed `JsonValue` constraint on `createServerFunction`** (`src/types.d.ts`, `src/createFunction.ts`): the generic `TResult` parameter of `ClientFunction`, `ServerFunction`, `ServerFunctionInit`, and `createServerFunction` no longer requires `extends JsonValue`. Only `getClientStub` and the internal `innerModule` retain the constraint for wire protocol safety. This eliminates double-casts and `LooseClientFunction` workarounds in wrapper libraries that define server functions with non-JSON return types
 - **Hono header fallback in `getRequestMeta`** (`src/context.ts:218`): `getRequestMeta` now reads `req?.raw?.headers` as a fallback when `req?.headers` is undefined, matching Hono's internal request structure where native `Headers` live on `req.raw`. All other adapters pass headers via `req.headers` and are unaffected
 - **`viteMiddleware` for Fastify** (`src/fastify/helpers.ts:40-68`): new `viteMiddleware(vite)` export returning an `onRequest` hook handler with `reply.hijack()` for streaming. Consistent with h3 and Hono's `viteMiddleware` — all three adapters now export a standalone middleware factory for custom Vite setups
-- **`unwrapEnvelope<T>(json)` client helper** (`src/client-helpers.ts:44-55`, exported from `@thednp/rpc/helpers`): typed helper to unwrap `{ data }` wire protocol responses. For native HTTP clients or non-Vite toolchains that don't use the auto-generated fetch stubs. Re-throws `RPCError` on `{ error }` bodies
+- **`unwrapEnvelope<T>(json)` client helper** (`src/client-helpers.ts:44-55`, exported from `@thednp/rpc/helpers`): typed helper to unwrap `{ data }` wire protocol responses. For native HTTP clients or non-Vite toolchains that don't use the auto-generated fetch stubs. Added as a pure envelope accessor with no error handling — the fail-open error swallow and the accompanying documentation error were corrected in [0.3.4](#034---2026-09-26)
 - **`silent` option on `loadRPCConfig` / `rpcPlugin`** (`src/config.ts:45`, `src/types.d.ts:239`, `src/index.ts:166`): new `silent?: boolean` suppresses the `NO_CONFIG_FOUND` warning. The plugin passes `devOptions.silent` through to `loadRPCConfig`, allowing wrapper plugins to define server functions directly without a config file
 
 ### Chores
