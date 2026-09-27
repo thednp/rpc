@@ -1,6 +1,7 @@
 import fp from "fastify-plugin";
-import { FastifyInstance, FastifyInstance as Fastify, FastifyReply, FastifyReply as FastifyReply$1, FastifyRequest, FastifyRequest as FastifyRequest$1, HookHandlerDoneFunction } from "fastify";
+import { FastifyInstance, FastifyInstance as Fastify, FastifyInstance as FastifyApp, FastifyReply, FastifyReply as FastifyReply$1, FastifyReply as FastifyResponse, FastifyRequest, FastifyRequest as FastifyRequest$1, HookHandlerDoneFunction, HookHandlerDoneFunction as FastifyNext } from "fastify";
 import { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { IncomingHttpHeaders } from "node:http";
 import { ViteDevServer } from "vite";
 import "express";
 import "hono";
@@ -9,6 +10,82 @@ import "hono/utils/http-status";
 import "hono/factory";
 import "koa";
 import "h3";
+//#region src/types.d.ts
+/**
+ * Parsed request body result discriminated by content type.
+ */
+type BodyResult = {
+  contentType: "application/json";
+  data: JsonValue;
+} | {
+  contentType: "text/plain";
+  data: string;
+} | {
+  contentType: "application/x-www-form-urlencoded";
+  data: Record<string, unknown>;
+} | {
+  contentType: "multipart/form-data";
+  data: Record<string, unknown>;
+};
+// primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
+type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
+type JsonObject = {
+  [key: string]: JsonValue | JsonArray;
+};
+/**
+ * A JSON array of JSON values.
+ */
+type JsonArray = (FormData | JsonValue)[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
+type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+//#endregion
+//#region src/adapter-types.d.ts
+/**
+ * Wraps a server response to normalize status, header, and send operations
+ * across Node `ServerResponse` and framework response objects.
+ *
+ * Re-exported from every adapter (`@thednp/rpc/express`, `/fastify`, `/hono`,
+ * `/koa`, `/h3`) so a consumer can name the shape without importing from the
+ * express adapter specifically.
+ */
+type ResponseDetails = {
+  /** Whether the response was already sent */
+  isResponseSent: boolean;
+  /** Sets a response header */
+  setHeader: (name: string, value: string) => void;
+  /** Current response status code */
+  statusCode: number;
+  /** Sets the response status code */
+  setStatusCode: (code: number) => void;
+  /** Sends a JSON response with the given status code and output */
+  sendResponse: (code: number, output: JsonValue) => void;
+};
+/**
+ * Normalized view of an incoming request: URL parts, headers, and method.
+ *
+ * Re-exported from every adapter, for the same reason as {@link ResponseDetails}.
+ */
+type RequestDetails = {
+  /** Full request URL (path + query string) */
+  url: string;
+  /** Query string including the leading `?` */
+  search: string;
+  /** Parsed query string parameters */
+  searchParams: URLSearchParams;
+  /** Raw request headers */
+  headers: IncomingHttpHeaders;
+  /** HTTP method (GET, POST, etc.) */
+  method: string | undefined;
+};
+//#endregion
 //#region src/fastify/types.d.ts
 /**
  * Fastify RPC plugin signature: registers the middleware as a preHandler hook.
@@ -68,43 +145,6 @@ export declare const createMiddleware: FastifyMiddlewareFn;
  */
 export declare const createRPCMiddleware: FastifyMiddlewareFn;
 //#endregion
-//#region src/types.d.ts
-/**
- * Parsed request body result discriminated by content type.
- */
-type BodyResult = {
-  contentType: "application/json";
-  data: JsonValue;
-} | {
-  contentType: "text/plain";
-  data: string;
-} | {
-  contentType: "application/x-www-form-urlencoded";
-  data: Record<string, unknown>;
-} | {
-  contentType: "multipart/form-data";
-  data: Record<string, unknown>;
-};
-// primitives and their compositions
-/**
- * Primitive JSON values, including `undefined` for optional parameters.
- */
-type JsonPrimitive = string | number | boolean | null | undefined;
-/**
- * A JSON object whose values are JSON values or arrays.
- */
-type JsonObject = {
-  [key: string]: JsonValue | JsonArray;
-};
-/**
- * A JSON array of JSON values.
- */
-type JsonArray = (FormData | JsonValue)[];
-/**
- * Any JSON-serializable value: primitive, array, or object.
- */
-type JsonValue = JsonPrimitive | JsonArray | JsonObject;
-//#endregion
 //#region src/fastify/helpers.d.ts
 /**
  * Convenience function to load RPC config and register the RPC plugin to a Fastify instance.
@@ -155,5 +195,5 @@ export declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
  */
 export declare const redirect: (reply: FastifyReply$1, location: string, status?: number) => void;
 //#endregion
-export type { Fastify, FastifyMiddlewareFn, FastifyMiddlewareHooks, FastifyMiddlewareOptions, FastifyPlugin, FastifyRPCPlugin, FastifyReply, FastifyRequest, RegisteredFastifyRPCPlugin, RpcFastifyPluginOptions };
+export type { Fastify, FastifyApp, FastifyMiddlewareFn, FastifyMiddlewareHooks, FastifyMiddlewareOptions, FastifyNext, FastifyPlugin, FastifyRPCPlugin, FastifyReply, FastifyRequest, FastifyResponse, RegisteredFastifyRPCPlugin, RequestDetails, ResponseDetails, RpcFastifyPluginOptions };
 //# sourceMappingURL=fastify.d.mts.map

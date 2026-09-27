@@ -20,7 +20,7 @@
     "noFallthroughCasesInSwitch": true,
     "allowJs": true
   },
-  "include": ["src"],
+  "include": ["src"]
   // "files": [
   //   "src/express/types.d.ts",
   //   "src/fastify/types.d.ts",

@@ -256,7 +256,7 @@ describe("Koa helpers", () => {
       const nextSpy = vi.fn().mockResolvedValue(undefined);
       const app: any = { use: vi.fn() };
       const vite = {
-        middlewares: vi.fn((req: any, res: any, cb: any) => {
+        middlewares: vi.fn((_req: any, res: any, cb: any) => {
           res.end("some content");
           cb();
         }),
@@ -281,11 +281,11 @@ describe("Koa helpers", () => {
       const nextSpy = vi.fn().mockResolvedValue(undefined);
       const app: any = { use: vi.fn() };
       const vite = {
-        middlewares: vi.fn((req: any, _res: any, cb: any) => {
+        middlewares: vi.fn((_req: any, _res: any, cb: any) => {
           cb();
         }),
       };
-      await attachVite(app as any, vite as unknown as ViteDevServer);
+      attachVite(app as any, vite as unknown as ViteDevServer);
       const middlewareFn = app.use.mock.calls[0][0];
       const req = new EventEmitter() as any;
       const ctx = {
@@ -302,7 +302,7 @@ describe("Koa helpers", () => {
       const nextSpy = vi.fn().mockResolvedValue(undefined);
       const app: any = { use: vi.fn() };
       const vite = {
-        middlewares: vi.fn((req: any, res: any, cb: any) => {
+        middlewares: vi.fn((_req: any, res: any, cb: any) => {
           res.statusCode = 404;
           res.end();
           cb();
@@ -904,6 +904,61 @@ describe("Koa createRPCMiddleware", () => {
       method: "POST",
       headers: {
         origin: "https://app.example.com",
+        "content-type": "application/json",
+      },
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
+  });
+
+  it("should return 403 when Origin is absent and Sec-Fetch-Site is cross-site", async () => {
+    createServerFunction("koa-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { "sec-fetch-site": "cross-site" },
+    });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(403);
+    expect(ctx.body).toEqual({ error: "Forbidden" });
+  });
+
+  it("should pass when Origin is absent and Sec-Fetch-Site is same-origin", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: {
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+      },
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
+  });
+
+  it("sibling subdomain survives: allowlisted Origin + same-site passes", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: {
+        origin: "https://admin.example.com",
+        "sec-fetch-site": "same-site",
         "content-type": "application/json",
       },
     });

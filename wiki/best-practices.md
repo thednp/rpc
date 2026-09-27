@@ -334,13 +334,15 @@ A single string still works and is equivalent to a one-element array:
 app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
 ```
 
-Requests are rejected with `403 Forbidden` only when they carry an `Origin` header matching **none** of the entries. Requests without an `Origin` header (curl, native apps) pass through unchecked, and leaving `origin` unset performs no validation at all. Matching is exact, so a lookalike host such as `https://app.example.com.evil.com` is rejected.
+Requests are rejected with `403 Forbidden` unless they carry an `Origin` header matching one of the entries. When `Origin` is absent, the middleware falls back to `Sec-Fetch-Site` and allows only `same-origin` or `none` — so a proxy or CDN that strips `Origin` cannot silently turn the check into a no-op. Requests carrying **neither** header (curl, native apps) pass through. Matching is exact, so a lookalike host such as `https://app.example.com.evil.com` is rejected.
+
+No new option is involved: setting `origin` is the opt-in, and it is the only condition under which the `Sec-Fetch-Site` fallback can fire.
 
 > `SameSite=Lax` cookies already block cross-site `POST` from HTML forms; the `origin` option closes the remaining "sibling subdomain" case. See [Security — Origin Validation](./security.md#origin-validation) for the full rule table.
 
 ### Option B: custom middleware
 
-Check `Sec-Fetch-Site` (Fetch Metadata) or `Origin` yourself before the RPC middleware:
+Only needed if you want `Sec-Fetch-Site` enforcement **without** setting an `origin` allowlist (Option A already does both, in one). Check `Sec-Fetch-Site` (Fetch Metadata) or `Origin` yourself before the RPC middleware:
 
 ```ts
 // Express

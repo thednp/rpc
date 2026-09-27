@@ -1,6 +1,75 @@
-import Koa, { Context, Next, Next as KoaNext } from "koa";
+import Koa, { Context, Context as KoaRequest, Next, Next as KoaNext } from "koa";
 import { BodyResult, JsonValue, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { IncomingHttpHeaders, ServerResponse as KoaResponse } from "node:http";
 import { ViteDevServer } from "vite";
+import "express";
+import "hono";
+import "@hono/node-server";
+import "hono/utils/http-status";
+import "hono/factory";
+import "fastify";
+import "fastify-plugin";
+import "h3";
+//#region src/types.d.ts
+// primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
+type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
+type JsonObject = {
+  [key: string]: JsonValue$1 | JsonArray;
+};
+/**
+ * A JSON array of JSON values.
+ */
+type JsonArray = (FormData | JsonValue$1)[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
+type JsonValue$1 = JsonPrimitive | JsonArray | JsonObject;
+//#endregion
+//#region src/adapter-types.d.ts
+/**
+ * Wraps a server response to normalize status, header, and send operations
+ * across Node `ServerResponse` and framework response objects.
+ *
+ * Re-exported from every adapter (`@thednp/rpc/express`, `/fastify`, `/hono`,
+ * `/koa`, `/h3`) so a consumer can name the shape without importing from the
+ * express adapter specifically.
+ */
+type ResponseDetails = {
+  /** Whether the response was already sent */
+  isResponseSent: boolean;
+  /** Sets a response header */
+  setHeader: (name: string, value: string) => void;
+  /** Current response status code */
+  statusCode: number;
+  /** Sets the response status code */
+  setStatusCode: (code: number) => void;
+  /** Sends a JSON response with the given status code and output */
+  sendResponse: (code: number, output: JsonValue$1) => void;
+};
+/**
+ * Normalized view of an incoming request: URL parts, headers, and method.
+ *
+ * Re-exported from every adapter, for the same reason as {@link ResponseDetails}.
+ */
+type RequestDetails = {
+  /** Full request URL (path + query string) */
+  url: string;
+  /** Query string including the leading `?` */
+  search: string;
+  /** Parsed query string parameters */
+  searchParams: URLSearchParams;
+  /** Raw request headers */
+  headers: IncomingHttpHeaders;
+  /** HTTP method (GET, POST, etc.) */
+  method: string | undefined;
+};
+//#endregion
 //#region src/koa/types.d.ts
 /**
  * Koa-specific middleware options, constrained to the `"koa"` adapter.
@@ -85,5 +154,5 @@ export declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
  */
 export declare const redirect: (ctx: KoaContext, location: string, status?: number) => void;
 //#endregion
-export type { Koa, KoaContext, KoaMiddlewareFn, KoaMiddlewareHooks, KoaMiddlewareOptions, KoaNext };
+export type { Koa, Koa as KoaApp, KoaContext, KoaMiddlewareFn, KoaMiddlewareHooks, KoaMiddlewareOptions, KoaNext, KoaRequest, KoaResponse, RequestDetails, ResponseDetails };
 //# sourceMappingURL=koa.d.mts.map

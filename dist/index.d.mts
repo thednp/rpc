@@ -385,13 +385,24 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * (e.g. `"https://example.com"` or
    * `["https://example.com", "https://admin.example.com"]`).
    *
-   * When set, any request carrying an `Origin` header that matches none of the
-   * entries is rejected with a 403 Forbidden response. Requests without an
-   * `Origin` header (curl, native clients) pass through unchecked.
-   * When unset (default), no origin validation is performed.
+   * Setting this option is the opt-in for origin validation. When set, a request
+   * is rejected with `403 Forbidden` according to four tiers:
    *
-   * `Origin: null` (sandboxed iframes, `file://`, extension pages) never
-   * equals a real origin, so it is rejected whenever an allowlist is set.
+   * 1. `Origin` present → the allowlist decides. It must match one of the
+   *    entries exactly; `Origin: null` (sandboxed iframes, `file://`, browser
+   *    extensions) never equals a real origin, so it is rejected.
+   * 2. `Origin` absent but `Sec-Fetch-Site` present → allow only `same-origin`
+   *    and `none`. Anything else, including an unrecognised value, is rejected.
+   *    Browsers never strip `Origin` themselves, so reaching this tier means
+   *    something in the chain (a proxy, a sanitising middleware, a CDN) removed
+   *    it — at which point the check fails closed rather than silently becoming
+   *    a no-op.
+   * 3. Both headers absent → the request passes. This is the deliberate
+   *    curl/native-client hole: non-browser clients send neither header.
+   *
+   * When unset (default), no origin validation is performed at all.
+   *
+   * @see `isOriginRequestAllowed` in `@thednp/rpc/server` for the exact rule.
    */
   origin?: string | string[];
   /**

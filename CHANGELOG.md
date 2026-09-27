@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.3.6] - 2026-09-27
+
+Two independent changes: a **behaviour change** to origin validation, and an
+additive expansion of the adapter type exports.
+
+### ⚠️ Behaviour change — `Sec-Fetch-Site` fallback under `origin`
+
+- **`isOriginRequestAllowed(allowed, origin, site)`** (`src/server-helpers.ts`, exported from `@thednp/rpc/server`): the origin check now consults `Sec-Fetch-Site` when `Origin` is missing, instead of treating a headerless request as an unchecked pass. Previously anything in the chain that stripped `Origin` — a proxy, a sanitising middleware, a misconfigured CDN — turned a precise allowlist check into a **no-op**. Four tiers, first signal wins:
+  1. `origin` option unset → everything passes (unchanged; the check is opt-in)
+  2. `Origin` present → the allowlist decides, exactly as before
+  3. `Origin` absent, `Sec-Fetch-Site` present → allow only `same-origin` and `none`; anything else, including an unrecognised value, is **403**
+  4. Both absent → passes. This is the deliberate, documented curl/native-client hole and it stays
+- **All five adapters now pass both headers.** `Origin` still short-circuits ahead of `Sec-Fetch-Site`, and it has to: the allowlist exists precisely to admit a sibling subdomain, whose browser request carries `Sec-Fetch-Site: same-site` — a value tier 3 alone would reject. `Sec-Fetch-Site` is a coarse enum that cannot name a host, so it only earns a vote once the precise signal is gone, at which point it fails closed. A regression test pins the ordering
+- **What changes:** only requests that (a) lack `Origin`, (b) carry `Sec-Fetch-Site`, and (c) claim anything other than `same-origin`/`none` move from *pass* to *403*. That class was the bug. Browsers never strip `Origin` themselves, so tier 3 only fires when something removed it — **no legitimate browser request can regress**
+- **`isOriginAllowed` is unchanged and still exported** (public API since 0.3.5); it is now an internal building block
+- **No new option.** Setting `origin` remains the only opt-in, so the surface is frozen — the plan's stated default. An app with `origin` set gets the stronger check by upgrading, with no code change
+- **Empty header values count as absent.** Adapters disagree on what their accessor returns for a missing header (Node yields `undefined`, Hono's `c.req.header()` yields `""`), and an empty `Sec-Fetch-Site` is not a real browser signal. Normalising in the shared helper keeps all five behaving identically instead of inheriting each framework's convention
+- `origin` JSDoc in `MiddlewareOptions` rewritten — it no longer promises unconditional headerless passthrough
+
+### Added — adapter type exports for wrappers
+
+Wrapper libraries must be able to annotate apps, requests, responses, `next` functions and middleware **without depending on the framework**. The 0.3.2 re-exports were incomplete and irregular, so each adapter exposed a different shape. Now uniform and additive:
+
+| Adapter  | App (new)   | Request (new)             | Response (new)                | `next` (new)                       |
+| -------- | ----------- | ------------------------- | ----------------------------- | ---------------------------------- |
+| express  | `ExpressApp` | — (`ExpressRequest`)       | — (`ExpressResponse`)         | — (`ExpressNext`)                  |
+| fastify  | `FastifyApp` | — (`FastifyRequest`)      | `FastifyResponse`             | `FastifyNext`                      |
+| hono     | `HonoApp`    | `HonoRequest`             | `HonoResponse`                | `HonoNext`                         |
+| koa      | `KoaApp`     | `KoaRequest`              | `KoaResponse`                 | — (`KoaNext`)                      |
+| h3       | — (`H3App`) | `H3Request`               | `H3Response`                  | `H3Next`                           |
+
+- **`next` was missing on 3 of 5 adapters** — `createMiddleware` accepts a `HookHandlerDoneFunction` (Fastify), a `Next` (Hono) and a `next` callback (h3), and none of those types were exported, so a wrapper could not type a composed handler
+- **Hono had no request type.** Only `HonoContext` was exported, forcing consumers to cast the request object structurally
+- **`RequestDetails` / `ResponseDetails` were express-only** despite containing no Express-specific types. They now live in `src/adapter-types.ts` and are re-exported from **all five** adapters, so one helper can be written across all frameworks. Still importable from `@thednp/rpc/express`
+- **`Koa` re-export moved** from `src/koa/index.ts` into `src/koa/types.d.ts` beside its siblings (it is the only type that lived in a barrel). `src/koa/helpers.ts` now takes the type from `types.d.ts` instead of the barrel, removing an index→helpers import cycle
+- **Purely additive.** No existing export renamed, removed or narrowed — `Express`, `Fastify`, `Hono`, `Koa`, `H3Event`, `HonoContext`, `KoaContext` all keep working. Type-only, so emitted `.mjs` is unchanged
+
+### Tests
+
+- **Adapter export-surface contract suite** (`tests/adapter-exports.test.ts`): asserts every adapter's emitted declaration exports the full required name set, plus a back-compat assertion for the pre-0.3.6 names. Type-only exports are erased from the `.mjs`, so the suite parses `dist/<adapter>/<adapter>.d.mts` — the thing a consumer actually resolves. Verified non-vacuous: renaming any required name in a copy makes it fail
+- `isOriginRequestAllowed`: every row of the behaviour matrix verbatim, the sibling-subdomain ordering regression, the empty/whitespace-value normalisation, and case-sensitivity
+- Per adapter: `Sec-Fetch-Site: cross-site` with no `Origin` → `403`, `same-origin` → `200`, and the sibling-subdomain regression (`allowlisted Origin` + `same-site` → `200`)
+- Fixed a fidelity bug in the Hono test fixture — `header()` returned `""` for a missing header where real Hono returns `undefined`, which had masked the empty-value normalisation
+- **556 tests, 100% on all metrics**
+
+### Chores
+
+- Bump version to `0.3.6` (`package.json`, `deno.json`)
+
 ## [0.3.5] - 2026-09-26
 
 ### Features

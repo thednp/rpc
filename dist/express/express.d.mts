@@ -1,7 +1,75 @@
 import { Connect, ViteDevServer } from "vite";
-import { BodyResult, JsonValue, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
 import { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
-import { Express, Express as Express$1, NextFunction, NextFunction as ExpressNext, Request, Request as ExpressRequest, Response, Response as ExpressResponse } from "express";
+import { Express, Express as Express$1, Express as ExpressApp, NextFunction, NextFunction as ExpressNext, Request, Request as ExpressRequest, Response as ExpressResponse, Response as Response$1 } from "express";
+import "hono";
+import "@hono/node-server";
+import "hono/utils/http-status";
+import "hono/factory";
+import "fastify";
+import "fastify-plugin";
+import "koa";
+import "h3";
+//#region src/types.d.ts
+// primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
+type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
+type JsonObject = {
+  [key: string]: JsonValue | JsonArray;
+};
+/**
+ * A JSON array of JSON values.
+ */
+type JsonArray = (FormData | JsonValue)[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
+type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+//#endregion
+//#region src/adapter-types.d.ts
+/**
+ * Wraps a server response to normalize status, header, and send operations
+ * across Node `ServerResponse` and framework response objects.
+ *
+ * Re-exported from every adapter (`@thednp/rpc/express`, `/fastify`, `/hono`,
+ * `/koa`, `/h3`) so a consumer can name the shape without importing from the
+ * express adapter specifically.
+ */
+type ResponseDetails = {
+  /** Whether the response was already sent */
+  isResponseSent: boolean;
+  /** Sets a response header */
+  setHeader: (name: string, value: string) => void;
+  /** Current response status code */
+  statusCode: number;
+  /** Sets the response status code */
+  setStatusCode: (code: number) => void;
+  /** Sends a JSON response with the given status code and output */
+  sendResponse: (code: number, output: JsonValue) => void;
+};
+/**
+ * Normalized view of an incoming request: URL parts, headers, and method.
+ *
+ * Re-exported from every adapter, for the same reason as {@link ResponseDetails}.
+ */
+type RequestDetails = {
+  /** Full request URL (path + query string) */
+  url: string;
+  /** Query string including the leading `?` */
+  search: string;
+  /** Parsed query string parameters */
+  searchParams: URLSearchParams;
+  /** Raw request headers */
+  headers: IncomingHttpHeaders;
+  /** HTTP method (GET, POST, etc.) */
+  method: string | undefined;
+};
+//#endregion
 //#region src/express/types.d.ts
 /**
  * Express-specific middleware options, constrained to the `"express"` adapter.
@@ -22,39 +90,8 @@ interface ExpressMiddlewareHooks {
    * @param res - Node or Express response object
    * @param next - Connect or Express next function
    */
-  handler: (req: IncomingMessage | Request, res: ServerResponse | Response, next: Connect.NextFunction | NextFunction) => Promise<void>;
+  handler: (req: IncomingMessage | Request, res: ServerResponse | Response$1, next: Connect.NextFunction | NextFunction) => Promise<void>;
 }
-/**
- * Wraps a server response to normalize status, header, and send operations
- * across Node `ServerResponse` and Express `Response` objects.
- */
-type ResponseDetails = {
-  /** Whether the response was already sent */
-  isResponseSent: boolean;
-  /** Sets a response header */
-  setHeader: (name: string, value: string) => void;
-  /** Current response status code */
-  statusCode: number;
-  /** Sets the response status code */
-  setStatusCode: (code: number) => void;
-  /** Sends a JSON response with the given status code and output */
-  sendResponse: (code: number, output: JsonValue) => void;
-};
-/**
- * Normalized view of an incoming request: URL parts, headers, and method.
- */
-type RequestDetails = {
-  /** Full request URL (path + query string) */
-  url: string;
-  /** Query string including the leading `?` */
-  search: string;
-  /** Parsed query string parameters */
-  searchParams: URLSearchParams;
-  /** Raw request headers */
-  headers: IncomingHttpHeaders;
-  /** HTTP method (GET, POST, etc.) */
-  method: string | undefined;
-};
 //#endregion
 //#region src/express/createMiddleware.d.ts
 /**
@@ -108,7 +145,7 @@ export declare const isExpressRequest: (req: IncomingMessage | Request) => req i
  * @param res - A Node ServerResponse or Express Response
  * @returns True if the response is an Express Response
  */
-export declare const isExpressResponse: (res: ServerResponse | Response) => res is Response;
+export declare const isExpressResponse: (res: ServerResponse | Response$1) => res is Response$1;
 /**
  * Issues an HTTP redirect on an Express or raw Node ServerResponse.
  * Uses Express's native `res.redirect(status, location)` when an Express
@@ -120,7 +157,7 @@ export declare const isExpressResponse: (res: ServerResponse | Response) => res 
  * @param location - The URL to redirect to
  * @param status - HTTP status code, defaults to 303
  */
-export declare const redirect: (res: ServerResponse | Response, location: string, status?: number) => void;
+export declare const redirect: (res: ServerResponse | Response$1, location: string, status?: number) => void;
 /**
  * Type guard that checks whether a request has a pre-parsed body (`body` property).
  * Used to detect if a body-parser middleware already consumed the stream.
@@ -141,7 +178,7 @@ export declare const getRequestDetails: (request: Request | IncomingMessage) => 
  * @param response - Express or Node.js server response object
  * @returns A ResponseDetails object with setHeader, setStatusCode, and sendResponse helpers
  */
-export declare const getResponseDetails: (response: Response | ServerResponse) => ResponseDetails;
+export declare const getResponseDetails: (response: Response$1 | ServerResponse) => ResponseDetails;
 //#endregion
-export type { Express, ExpressMiddlewareFn, ExpressMiddlewareHooks, ExpressMiddlewareOptions, ExpressNext, ExpressRequest, ExpressResponse, RequestDetails, ResponseDetails };
+export type { Express, ExpressApp, ExpressMiddlewareFn, ExpressMiddlewareHooks, ExpressMiddlewareOptions, ExpressNext, ExpressRequest, ExpressResponse, RequestDetails, ResponseDetails };
 //# sourceMappingURL=express.d.mts.map

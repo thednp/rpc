@@ -8,7 +8,7 @@ import {
   formatError,
   getGlobalPrefix,
   hasContentTypeMismatch,
-  isOriginAllowed,
+  isOriginRequestAllowed,
   provideRequestContext,
   safeURL,
   scanForServerFiles,
@@ -148,10 +148,16 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
         return;
       }
 
-      // Optional origin check: reject requests whose Origin header is not in
-      // the configured allowlist. Requests without an Origin header
-      // (curl, native clients) pass through unchecked.
-      if (!isOriginAllowed(options.origin, ctx.headers.origin)) {
+      // Optional origin check. When Origin survives, the allowlist decides;
+      // when it has been stripped, Sec-Fetch-Site is consulted instead and
+      // fails closed. See `isOriginRequestAllowed` for the four tiers.
+      if (
+        !isOriginRequestAllowed(
+          options.origin,
+          ctx.headers.origin,
+          ctx.headers["sec-fetch-site"],
+        )
+      ) {
         ctx.status = 403;
         ctx.body = { error: REQUEST_FORBIDDEN };
         return;

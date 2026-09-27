@@ -4,6 +4,7 @@ import {
   hasContentTypeMismatch,
   isFormContentType,
   isOriginAllowed,
+  isOriginRequestAllowed,
   RPCError,
   safeURL,
   walkGlobFiles,
@@ -80,6 +81,97 @@ describe("isOriginAllowed", () => {
   it("should be exported from the server barrel", async () => {
     const barrel = await import("../src/server.ts");
     expect(typeof barrel.isOriginAllowed).toBe("function");
+  });
+});
+
+describe("isOriginRequestAllowed", () => {
+  // The behaviour matrix from the change request, verbatim.
+  const ALLOW = ["https://example.com", "https://admin.example.com"];
+
+  it("tier 1 — unset allowlist passes everything", () => {
+    expect(isOriginRequestAllowed(undefined, "https://evil.com", "cross-site"))
+      .toBe(true);
+    expect(isOriginRequestAllowed(undefined, undefined, undefined)).toBe(true);
+    expect(isOriginRequestAllowed(undefined, "null", "same-origin")).toBe(true);
+  });
+
+  it("tier 2 — Origin in the allowlist passes, whatever Sec-Fetch-Site says", () => {
+    expect(isOriginRequestAllowed(ALLOW, "https://example.com", undefined))
+      .toBe(true);
+    expect(
+      isOriginRequestAllowed(ALLOW, "https://admin.example.com", "same-site"),
+    )
+      .toBe(true);
+  });
+
+  it("tier 2 — Origin not in the allowlist is rejected", () => {
+    expect(isOriginRequestAllowed(ALLOW, "https://evil.com", "same-origin"))
+      .toBe(false);
+  });
+
+  it('tier 2 — Origin: "null" is rejected', () => {
+    expect(isOriginRequestAllowed(ALLOW, "null", "same-origin")).toBe(false);
+    expect(isOriginRequestAllowed("https://example.com", "null", undefined))
+      .toBe(false);
+  });
+
+  it("tier 3 — Origin absent, Sec-Fetch-Site: same-origin passes", () => {
+    expect(isOriginRequestAllowed(ALLOW, undefined, "same-origin")).toBe(true);
+  });
+
+  it("tier 3 — Origin absent, Sec-Fetch-Site: none passes", () => {
+    expect(isOriginRequestAllowed(ALLOW, undefined, "none")).toBe(true);
+  });
+
+  it("tier 3 — Origin absent, Sec-Fetch-Site: same-site is rejected", () => {
+    expect(isOriginRequestAllowed(ALLOW, undefined, "same-site")).toBe(false);
+  });
+
+  it("tier 3 — Origin absent, Sec-Fetch-Site: cross-site is rejected", () => {
+    expect(isOriginRequestAllowed(ALLOW, undefined, "cross-site")).toBe(false);
+  });
+
+  it("tier 3 — Origin absent, an unrecognised Sec-Fetch-Site value is rejected", () => {
+    expect(isOriginRequestAllowed(ALLOW, undefined, "nonsense")).toBe(false);
+    expect(isOriginRequestAllowed(ALLOW, undefined, "SAME-ORIGIN")).toBe(false);
+    expect(isOriginRequestAllowed(ALLOW, undefined, " same-origin ")).toBe(
+      false,
+    );
+  });
+
+  it("tier 4 — both headers absent passes (curl / native client)", () => {
+    expect(isOriginRequestAllowed(ALLOW, undefined, undefined)).toBe(true);
+  });
+
+  it("treats an empty or whitespace-only header value as absent", () => {
+    // Adapters disagree on what a missing header yields (Node: undefined,
+    // Hono's c.req.header(): ""), so the helper normalises both.
+    expect(isOriginRequestAllowed(ALLOW, "", "")).toBe(true);
+    expect(isOriginRequestAllowed(ALLOW, "   ", "\t")).toBe(true);
+    expect(isOriginRequestAllowed(ALLOW, "", "cross-site")).toBe(false);
+  });
+
+  it("sibling subdomain survives: allowlisted Origin + same-site passes", () => {
+    // The regression guard for the tier order — if tier 3 ran first, this
+    // legitimate request from an allowlisted sibling would be rejected.
+    expect(
+      isOriginRequestAllowed(ALLOW, "https://admin.example.com", "same-site"),
+    )
+      .toBe(true);
+  });
+
+  it("keeps working for a single-string allowlist", () => {
+    expect(
+      isOriginRequestAllowed(
+        "https://example.com",
+        "https://example.com",
+        undefined,
+      ),
+    ).toBe(true);
+    expect(
+      isOriginRequestAllowed("https://example.com", undefined, "cross-site"),
+    )
+      .toBe(false);
   });
 });
 

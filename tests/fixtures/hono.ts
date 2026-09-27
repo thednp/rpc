@@ -34,7 +34,7 @@ function makeHonoContext(opts: {
     req: {
       path: rawPath.split("?")[0],
       method: opts.method ?? "GET",
-      header: (name: string) => opts.headers?.[name.toLowerCase()] ?? "",
+      header: (name: string) => opts.headers?.[name.toLowerCase()],
       query: (name: string) => {
         const qs = rawPath.split("?")[1];
         return qs ? new URLSearchParams(qs).get(name) ?? "" : "";

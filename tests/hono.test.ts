@@ -351,7 +351,7 @@ describe("Hono createRPCMiddleware", () => {
       body: JSON.stringify(["arg1"]),
     });
     const next = makeHonoNext();
-    const result = await mw(c, next);
+    await mw(c, next);
     expect(c.json).toHaveBeenCalledWith({ data: "hello hono" }, 200);
   });
 
@@ -781,6 +781,60 @@ describe("Hono createRPCMiddleware", () => {
       method: "POST",
       headers: {
         origin: "https://app.example.com",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(["x"]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should return 403 when Origin is absent and Sec-Fetch-Site is cross-site", async () => {
+    createServerFunction("hono-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { "sec-fetch-site": "cross-site" },
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith({ error: "Forbidden" }, 403);
+  });
+
+  it("should pass when Origin is absent and Sec-Fetch-Site is same-origin", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: {
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(["x"]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("sibling subdomain survives: allowlisted Origin + same-site passes", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: {
+        origin: "https://admin.example.com",
+        "sec-fetch-site": "same-site",
         "content-type": "application/json",
       },
       body: JSON.stringify(["x"]),

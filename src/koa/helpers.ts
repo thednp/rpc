@@ -3,8 +3,7 @@ import type { Buffer } from "node:buffer";
 import type { ViteDevServer } from "vite";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { BodyResult } from "@thednp/rpc";
-import type { Koa } from "./index.ts";
-import type { KoaContext } from "./types.d.ts";
+import type { Koa, KoaContext } from "./types.d.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to a Koa app.

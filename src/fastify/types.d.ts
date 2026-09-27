@@ -71,6 +71,20 @@ export interface FastifyMiddlewareHooks {
  * instances, requests, and replies without a direct dependency on fastify
  * types.
  */
+import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
+
+/**
+ * Normalized request/response shapes, shared with every adapter so a wrapper
+ * can write one helper across all five frameworks.
+ */
+export type { RequestDetails, ResponseDetails };
+
 export type { FastifyInstance as Fastify } from "fastify";
+/** Canonical app-type name, matching the `<Fw>App` convention across adapters. */
+export type { FastifyInstance as FastifyApp } from "fastify";
 export type { FastifyRequest } from "fastify";
 export type { FastifyReply } from "fastify";
+/** Canonical response-type name, matching the `<Fw>Response` convention. */
+export type { FastifyReply as FastifyResponse } from "fastify";
+/** The `done` callback a Fastify hook receives — the `next` equivalent. */
+export type { HookHandlerDoneFunction as FastifyNext } from "fastify";

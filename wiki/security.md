@@ -116,44 +116,58 @@ app.use(createRPCMiddleware({
 }));
 ```
 
-The rule, shared by all five adapters via the `isOriginAllowed` helper (`src/server-helpers.ts`):
+The rule, shared by all five adapters via the `isOriginRequestAllowed` helper (`src/server-helpers.ts`). Three tiers, first signal wins:
 
-| `origin` option | Request `Origin` header | Result |
-|---|---|---|
-| unset (default) | anything | **passes** — no validation performed |
-| set | absent | **passes** — keeps curl and native clients working |
-| `"https://app.example.com"` | `https://app.example.com` | passes |
-| `"https://app.example.com"` | `https://evil.com` | `403 Forbidden` |
-| `["https://app.example.com", "https://admin.example.com"]` | `https://admin.example.com` | passes |
-| `["https://app.example.com", "https://admin.example.com"]` | `https://evil.com` | `403 Forbidden` |
-| any allowlist | `null` | `403 Forbidden` |
+1. **`origin` unset** → everything passes. No validation is performed.
+2. **`Origin` present** → the allowlist decides, exactly as before.
+3. **`Origin` absent but `Sec-Fetch-Site` present** → allow only `same-origin` and `none`; anything else, including an unrecognised value, is `403`.
+4. **Both absent** → passes. This is the deliberate curl/native-client hole, and it stays.
 
-Two properties worth relying on:
+Full matrix (allowlist = `["https://app.example.com", "https://admin.example.com"]`):
+
+| `origin` option | `Origin` | `Sec-Fetch-Site` | Result |
+|---|---|---|---|
+| unset | anything | anything | **passes** |
+| set | in allowlist | anything | passes |
+| set | not in allowlist | anything | **403** |
+| set | `null` | anything | **403** |
+| set | absent | absent | passes (curl) |
+| set | absent | `same-origin` | passes |
+| set | absent | `none` | passes |
+| set | absent | `same-site` | **403** |
+| set | absent | `cross-site` | **403** |
+| set | absent | unrecognised | **403** |
+
+Why `Origin` is consulted first: the allowlist exists precisely to admit a sibling subdomain, and that request carries `Sec-Fetch-Site: same-site` — which tier 3 alone would reject. `Sec-Fetch-Site` is a coarse four-value enum that cannot name a host, so it only earns a vote once the precise signal has been stripped away, at which point there is nothing left to trust and it fails closed.
+
+Two more properties worth relying on:
 
 - **A string and a one-element array are equivalent**, so widening the option is backward compatible — existing single-origin configurations behave exactly as before.
 - **Matching is exact, never a prefix or substring test.** `https://app.example.com.evil.com` and `https://app.example.com:443` are both rejected, so a lookalike host cannot ride in on a partial match.
 
 `Origin: null` is sent by sandboxed iframes, `file://` pages, and browser extensions. Because it never equals a real origin, it is rejected whenever an allowlist is set.
 
+An empty or whitespace-only header value counts as **absent**, not as an unrecognised signal — no browser emits an empty `Sec-Fetch-Site`.
+
 This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives.
 
 ### Residual Gaps
 
-Two limits worth knowing before you rely on `origin` alone:
-
-- **`Sec-Fetch-Site` is not consulted.** It is a stronger, unforgeable signal than `Origin` (non-browser clients cannot set it). If you want to close the headerless-`Origin` hole for browsers while still allowing curl and native clients, add your own middleware before `createRPCMiddleware()`:
-
-  ```ts
-  app.use((req, res, next) => {
-    const site = req.headers["sec-fetch-site"];
-    if (site && site !== "same-origin" && site !== "none") {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    next();
-  });
-  ```
+One limit worth knowing before you rely on `origin` alone:
 
 - **Top-level `GET` navigations send no `Origin` header**, so a cross-site `<a href>` or `<img>` pointing at a `GET` function passes the `origin` check even when one is configured. This is the reason `GET` functions must be side-effect-free — the method check does not help there, because the request genuinely is a `GET`.
+
+> **Closed in 0.3.6.** `Sec-Fetch-Site` used to be unconsulted, which meant anything stripping `Origin` turned the check into a no-op. It is now the tier-3 fallback: when `Origin` is gone but `Sec-Fetch-Site` survives, the request must claim `same-origin` or `none` or it is rejected. The snippet that used to live here is only needed if you want `Sec-Fetch-Site` enforcement **without** setting an origin allowlist — in which case mount it before `createRPCMiddleware()`:
+>
+> ```ts
+> app.use((req, res, next) => {
+>   const site = req.headers["sec-fetch-site"];
+>   if (site && site !== "same-origin" && site !== "none") {
+>     return res.status(403).json({ error: "Forbidden" });
+>   }
+>   next();
+> });
+> ```
 
 ## Multi-Prefix Client Isolation
 

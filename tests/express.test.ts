@@ -958,6 +958,63 @@ describe("Express createRPCMiddleware handler", () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
+  it("should return 403 when Origin is absent and Sec-Fetch-Site is cross-site", async () => {
+    createServerFunction("fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        "sec-fetch-site": "cross-site",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it("should pass when Origin is absent and Sec-Fetch-Site is same-origin", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("sibling subdomain survives: allowlisted Origin + same-site passes", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        origin: "https://admin.example.com",
+        "sec-fetch-site": "same-site",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it("should pass requests whose Origin matches one entry of an allowlist array", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
     createServerFunction("fn", fn);

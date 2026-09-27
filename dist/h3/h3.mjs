@@ -1,4 +1,4 @@
-import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, isOriginAllowed, provideRequestContext, scanForServerFiles } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, isOriginRequestAllowed, provideRequestContext, scanForServerFiles } from "@thednp/rpc/server";
 import { HTTPResponse, redirect as redirect$1 } from "h3";
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -212,7 +212,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 		handler: async (event, _next) => {
 			const url = event.url.pathname;
 			if (prefixRegex && !prefixRegex.test(url)) return;
-			if (!isOriginAllowed(options.origin, event.req.headers.get("origin") ?? void 0)) {
+			if (!isOriginRequestAllowed(options.origin, event.req.headers.get("origin") ?? void 0, event.req.headers.get("sec-fetch-site") ?? void 0)) {
 				event.res.status = 403;
 				return { error: REQUEST_FORBIDDEN };
 			}

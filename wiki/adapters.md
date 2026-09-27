@@ -6,6 +6,28 @@ All adapters dispatch requests against the **prefix-scoped** function map: `crea
 
 All adapters have an example each, feel free to explore [examples](../examples).
 
+## Re-exported Framework Types
+
+Every adapter re-exports its framework's types so a **wrapper library** can annotate apps, requests, responses, `next` functions and middleware **without a direct dependency** on `express` / `fastify` / `hono` / `koa` / `h3`. Type-only — nothing is added to the emitted bundle.
+
+The contract is uniform across all five:
+
+| Adapter  | App         | Request         | Response          | `next`         | Middleware       | Options / Hooks                  |
+| -------- | ----------- | --------------- | ----------------- | -------------- | ---------------- | -------------------------------- |
+| express  | `ExpressApp` | `ExpressRequest` | `ExpressResponse` | `ExpressNext`  | `ExpressMiddlewareFn` | `ExpressMiddlewareOptions` / `ExpressMiddlewareHooks` |
+| fastify  | `FastifyApp` | `FastifyRequest` | `FastifyReply`    | `FastifyNext`  | `FastifyMiddlewareFn` | `FastifyMiddlewareOptions` / `FastifyMiddlewareHooks` |
+| hono     | `HonoApp`    | `HonoRequest`    | `HonoResponse`    | `HonoNext`     | `HonoMiddlewareFn`    | `HonoMiddlewareOptions` / `HonoMiddlewareHooks` |
+| koa      | `KoaApp`     | `KoaRequest`     | `KoaResponse`     | `KoaNext`      | `KoaMiddlewareFn`     | `KoaMiddlewareOptions` / `KoaMiddlewareHooks` |
+| h3       | `H3App`      | `H3Request`      | `H3Response`      | `H3Next`       | `H3MiddlewareFn`      | `H3MiddlewareOptions` / `H3MiddlewareHooks` |
+
+`RequestDetails` and `ResponseDetails` — the normalized request/response shapes the adapters use internally — are exported from **every** adapter, so one helper can be written across all five frameworks.
+
+Earlier names still resolve and are not deprecated: `Express`, `Fastify`, `Hono`, `Koa`, `H3Event`, `HonoContext`, `HonoMiddlewareHandler`, `KoaContext`, `H3Middleware`. `H3App` predates the convention and is the canonical name for h3; `Express`/`Fastify`/`Hono`/`Koa` are the original names, kept alongside the newer `<Fw>App` aliases.
+
+> Frameworks do not line up one-to-one, so a few entries are aliases of the same underlying type: h3's request *is* its event (`H3Request` = `H3Event`), Koa's request is reached through its context (`KoaRequest` = `KoaContext`), and `FastifyResponse` is an alias of `FastifyReply`.
+
+`tests/adapter-exports.test.ts` guards this contract by asserting the required names are present in each adapter's emitted declaration — type-only exports are erased from the `.mjs`, so a runtime check cannot see them.
+
 ## Common Pattern
 
 All adapters share the same two-function API:

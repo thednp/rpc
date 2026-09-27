@@ -164,6 +164,47 @@ const hasContentTypeMismatch = (declared, rawHeader) => {
 	return incomingType !== declared;
 };
 /**
+* Decides whether a request may proceed, given the configured origin allowlist
+* and the two headers a browser can be made to reveal.
+*
+* Three tiers, evaluated in order — the first tier with a signal decides:
+*
+* 1. `origin` option unset → everything passes. No validation is performed.
+* 2. `Origin` present → the allowlist decides, exactly as {@link isOriginAllowed}.
+* 3. `Origin` absent but `Sec-Fetch-Site` present → allow only `same-origin`
+*    and `none`; anything else (including an unrecognised value) is rejected.
+* 4. Both absent → passes. This is the deliberate, documented curl/native hole.
+*
+* Tier 2 must short-circuit ahead of tier 3. `Sec-Fetch-Site` is a coarse
+* four-value enum that cannot name a host, so on its own it would reject a
+* legitimate request from an allowlisted sibling subdomain (`same-site`). The
+* allowlist exists precisely to admit that case, and it can only do so while
+* `Origin` survives. `Sec-Fetch-Site` earns a vote only once the precise signal
+* has been stripped away by something in the chain — at which point there is
+* nothing left to trust, so it fails closed.
+*
+* Browsers never strip `Origin` themselves, so tier 3 can only fire when a
+* proxy, sanitising middleware, or misconfigured CDN removed it. No legitimate
+* browser request can regress.
+*
+* An empty (or whitespace-only) header value counts as **absent**, not as an
+* unrecognised signal. No browser emits an empty `Sec-Fetch-Site`, and adapters
+* disagree on what their header accessor returns for a missing header (Node's
+* `req.headers` yields `undefined`, Hono's `c.req.header()` may yield `""`).
+* Normalising here keeps all five adapters behaving identically instead of
+* inheriting whichever convention their framework happens to use.
+* @param allowed - The configured `origin` option, if any
+* @param origin - The raw `Origin` request header, if present
+* @param site - The raw `Sec-Fetch-Site` request header, if present
+* @returns `true` when the request may proceed
+*/
+const isOriginRequestAllowed = (allowed, origin, site) => {
+	if (!allowed) return true;
+	if (origin?.trim()) return isOriginAllowed(allowed, origin);
+	if (!site?.trim()) return true;
+	return site === "same-origin" || site === "none";
+};
+/**
 * Escapes special regex metacharacters in a string.
 * Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
 * preventing ReDoS and regex injection attacks.
@@ -567,6 +608,6 @@ const getRequestMeta = (event) => {
 	};
 };
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, isOriginAllowed, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, isOriginAllowed, isOriginRequestAllowed, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

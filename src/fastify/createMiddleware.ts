@@ -15,7 +15,7 @@ import {
   formatError,
   getGlobalPrefix,
   hasContentTypeMismatch,
-  isOriginAllowed,
+  isOriginRequestAllowed,
   provideRequestContext,
   safeURL,
   scanForServerFiles,
@@ -169,10 +169,16 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         return;
       }
 
-      // Optional origin check: reject requests whose Origin header is not in
-      // the configured allowlist. Requests without an Origin header
-      // (curl, native clients) pass through unchecked.
-      if (!isOriginAllowed(options.origin, req.headers.origin)) {
+      // Optional origin check. When Origin survives, the allowlist decides;
+      // when it has been stripped, Sec-Fetch-Site is consulted instead and
+      // fails closed. See `isOriginRequestAllowed` for the four tiers.
+      if (
+        !isOriginRequestAllowed(
+          options.origin,
+          req.headers.origin,
+          req.headers["sec-fetch-site"],
+        )
+      ) {
         reply.status(403).send({ error: REQUEST_FORBIDDEN });
         return;
       }

@@ -8,7 +8,7 @@ import {
   formatError,
   getGlobalPrefix,
   hasContentTypeMismatch,
-  isOriginAllowed,
+  isOriginRequestAllowed,
   provideRequestContext,
   scanForServerFiles,
 } from "@thednp/rpc/server";
@@ -145,13 +145,14 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
         return undefined;
       }
 
-      // Optional origin check: reject requests whose Origin header is not in
-      // the configured allowlist. Requests without an Origin header
-      // (curl, native clients) pass through unchecked.
+      // Optional origin check. When Origin survives, the allowlist decides;
+      // when it has been stripped, Sec-Fetch-Site is consulted instead and
+      // fails closed. See `isOriginRequestAllowed` for the four tiers.
       if (
-        !isOriginAllowed(
+        !isOriginRequestAllowed(
           options.origin,
           event.req.headers.get("origin") ?? undefined,
+          event.req.headers.get("sec-fetch-site") ?? undefined,
         )
       ) {
         event.res.status = 403;

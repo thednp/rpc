@@ -1,6 +1,75 @@
-import { H3, H3 as H3$1, H3Event, H3Event as H3Event$1, HTTPResponse, Middleware, Middleware as H3Middleware } from "h3";
+import { EventHandler as H3Next, H3, H3 as H3$1, H3Event, H3Event as H3Event$1, H3Event as H3Request, H3Response, HTTPResponse, Middleware, Middleware as H3Middleware } from "h3";
 import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { IncomingHttpHeaders } from "node:http";
 import { ViteDevServer } from "vite";
+import "express";
+import "hono";
+import "@hono/node-server";
+import "hono/utils/http-status";
+import "hono/factory";
+import "fastify";
+import "fastify-plugin";
+import "koa";
+//#region src/types.d.ts
+// primitives and their compositions
+/**
+ * Primitive JSON values, including `undefined` for optional parameters.
+ */
+type JsonPrimitive = string | number | boolean | null | undefined;
+/**
+ * A JSON object whose values are JSON values or arrays.
+ */
+type JsonObject = {
+  [key: string]: JsonValue | JsonArray;
+};
+/**
+ * A JSON array of JSON values.
+ */
+type JsonArray = (FormData | JsonValue)[];
+/**
+ * Any JSON-serializable value: primitive, array, or object.
+ */
+type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+//#endregion
+//#region src/adapter-types.d.ts
+/**
+ * Wraps a server response to normalize status, header, and send operations
+ * across Node `ServerResponse` and framework response objects.
+ *
+ * Re-exported from every adapter (`@thednp/rpc/express`, `/fastify`, `/hono`,
+ * `/koa`, `/h3`) so a consumer can name the shape without importing from the
+ * express adapter specifically.
+ */
+type ResponseDetails = {
+  /** Whether the response was already sent */
+  isResponseSent: boolean;
+  /** Sets a response header */
+  setHeader: (name: string, value: string) => void;
+  /** Current response status code */
+  statusCode: number;
+  /** Sets the response status code */
+  setStatusCode: (code: number) => void;
+  /** Sends a JSON response with the given status code and output */
+  sendResponse: (code: number, output: JsonValue) => void;
+};
+/**
+ * Normalized view of an incoming request: URL parts, headers, and method.
+ *
+ * Re-exported from every adapter, for the same reason as {@link ResponseDetails}.
+ */
+type RequestDetails = {
+  /** Full request URL (path + query string) */
+  url: string;
+  /** Query string including the leading `?` */
+  search: string;
+  /** Parsed query string parameters */
+  searchParams: URLSearchParams;
+  /** Raw request headers */
+  headers: IncomingHttpHeaders;
+  /** HTTP method (GET, POST, etc.) */
+  method: string | undefined;
+};
+//#endregion
 //#region src/h3/types.d.ts
 /**
  * h3-specific middleware options, constrained to the `"h3"` adapter.
@@ -90,5 +159,5 @@ export declare const readBody: (event: H3Event$1) => Promise<BodyResult>;
  */
 export declare const redirect: (location: string, status?: number) => HTTPResponse;
 //#endregion
-export type { H3, H3App, H3Event, H3EventWithBody, H3Middleware, H3MiddlewareFn, H3MiddlewareHooks, H3MiddlewareOptions };
+export type { H3, H3App, H3Event, H3EventWithBody, H3Middleware, H3MiddlewareFn, H3MiddlewareHooks, H3MiddlewareOptions, H3Next, H3Request, H3Response, RequestDetails, ResponseDetails };
 //# sourceMappingURL=h3.d.mts.map

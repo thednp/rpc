@@ -95,14 +95,17 @@ The tsdown.config.ts produces multiple entries:
 | ---------------------------------| --------------------------------------------------------------------| -----|
 | `tests/plugin.test.ts`          | Plugin init, loadRPCConfig, createServerFunction, getClientModules |     |
 | `tests/scan.test.ts`            | scanForServerFiles (real scan, skip, devServer, error handling)    |     |
-| `tests/server-helpers.test.ts`  | RPCError, formatError, redirect, glob walking                       |     |
-| `tests/client-helpers.test.ts`  | Client fetch stubs and retrieval helpers                            |     |
+| `tests/server-helpers.test.ts`  | RPCError, formatError, redirect, glob walking, origin allowlist (`isOriginAllowed`) and the four-tier `isOriginRequestAllowed` behaviour matrix |     |
+| `tests/client-helpers.test.ts`  | Client fetch stubs, retrieval helpers, `unwrapEnvelope` error contract |     |
 | `tests/context.test.ts`         | provideRequestContext / getRequestContext (AsyncLocalStorage)       |     |
+| `tests/adapter-exports.test.ts` | Export-surface contract: asserts each adapter's emitted `.d.mts` exports the required type names (build-output test — run `pnpm build` first) |     |
 | `tests/express.test.ts`         | Express helpers, createMiddleware, createRPCMiddleware             |     |
 | `tests/fastify.test.ts`         | Fastify helpers, plugin, createMiddleware, createRPCMiddleware     |     |
 | `tests/h3.test.ts`              | h3 helpers, viteMiddleware, createMiddleware, createRPCMiddleware  |     |
 | `tests/hono.test.ts`            | Hono helpers, createMiddleware, createRPCMiddleware                |     |
 | `tests/koa.test.ts`             | Koa helpers, createMiddleware, createRPCMiddleware                 |     |
+
+Run `pnpm build` before `pnpm test` — `tests/adapter-exports.test.ts` reads the emitted declarations, and the adapters themselves import `@thednp/rpc/server` (aliased to `src/server.ts` under vitest, so only that one suite needs the build).
 
 ## Important Notes
 
@@ -119,7 +122,7 @@ The tsdown.config.ts produces multiple entries:
 - Framework-agnostic core with adapters for Express, Fastify, Hono, Koa, and h3
 - Client modules are auto-generated with `AbortController` support for cancellation
 - Server-side caching must be handled by third party tools (e.g. `@tanstack/react-query`)
-- **Multi-prefix support**: `createServerFunction(..., { rpcPrefix })` registers functions in a prefix-scoped map (`getFunctionsForPrefix`), so multiple RPC instances can coexist (versioned/namespaced APIs). All five adapters dispatch via `getFunctionsForPrefix(rpcPrefix || defaultPrefix)`; `serverFunctionsMap` is a backward-compatible proxy for the default `"__rpc"` prefix (`defaultPrefix`)
+- **Multi-prefix support**: `createServerFunction(..., { rpcPrefix })` registers functions in a prefix-scoped map (`getFunctionsForPrefix`), so multiple RPC instances can coexist (versioned/namespaced APIs). All five adapters dispatch via `getFunctionsForPrefix(prefix)` where `prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix`; `serverFunctionsMap` is a backward-compatible proxy for the default `"__rpc"` prefix (`defaultPrefix`)
 
 ## Security & Hardening
 
@@ -133,7 +136,8 @@ The tsdown.config.ts produces multiple entries:
 - **Content-type strictness is one-directional**: JSON- and text-declared functions are strict (a form body is rejected with `415`); form-declared functions accept either form encoding, which is what makes the nojs `<form>` fallback work. The leniency does not run the other way
 - **Generic 404 responses**: Error messages never echo the requested function name (no message-based function enumeration). Note the status code still distinguishes unknown (`404`/`400`) from known functions (`405`/`415`/`403`); function names ship in the client bundle so they are not secret — see `wiki/security.md`
 - **Client error contract is shared, not fail-open**: `handleResponse` (used by generated stubs) and `unwrapEnvelope` (exported for native clients) agree — a top-level `error` key throws, `{ data: { error } }` resolves normally so validation-as-data keeps working. `unwrapEnvelope` is status-code agnostic, so callers must keep the `res.ok` check. `RPCError` is server-side only (`@thednp/rpc/server`); it is not a client export and its `code`/`data` are stripped in production regardless
-- **Origin allowlist is shared, not copy-pasted**: the `origin` option accepts a single string **or an array** (`string | string[]`). The rule lives once in `isOriginAllowed(allowed, requestOrigin)` (`src/server-helpers.ts`), used by all five adapters — a request is `403` only when it carries an `Origin` header matching none of the entries. Headerless requests pass through; unset means no validation. Matching is exact, so `https://app.example.com.evil.com` and `https://app.example.com:443` are rejected. `Origin: null` (sandboxed iframes, `file://`, extensions) is rejected whenever an allowlist is set. A string and a one-element array are equivalent, so widening was backward compatible
+- **Origin allowlist is shared, not copy-pasted**: the `origin` option accepts a single string **or an array** (`string | string[]`). The rule lives once in `isOriginRequestAllowed(allowed, origin, site)` (`src/server-helpers.ts`), used by all five adapters. Four tiers, first signal wins: `origin` unset → pass; `Origin` present → the allowlist decides (exact match, so `https://app.example.com.evil.com` and `https://app.example.com:443` are rejected, and `Origin: null` never matches); `Origin` absent but `Sec-Fetch-Site` present → allow only `same-origin`/`none`; both absent → pass (the deliberate curl/native hole). `Origin` **must** short-circuit ahead of `Sec-Fetch-Site` — the allowlist exists to admit a sibling subdomain, whose request carries `Sec-Fetch-Site: same-site`, which tier 3 alone would reject. A regression test pins the ordering. Empty/whitespace header values count as absent, because adapters disagree on what a missing header yields (Node `undefined`, Hono `c.req.header()` `""`). `isOriginAllowed` is public API and unchanged — it is now the tier-2 building block. A string and a one-element array are equivalent
+- **Adapter type exports are uniform**: every adapter re-exports `<Fw>App` / `<Fw>Request` / `<Fw>Response` / `<Fw>Next` / `<Fw>MiddlewareFn` / `<Fw>MiddlewareOptions` / `<Fw>MiddlewareHooks`, plus the shared `RequestDetails` / `ResponseDetails` (defined once in `src/adapter-types.ts`, re-exported by all five), so a wrapper can annotate without depending on the framework. Additive only — legacy names (`Express`, `Fastify`, `Hono`, `Koa`, `H3Event`, `HonoContext`, `KoaContext`) still resolve. `tests/adapter-exports.test.ts` parses the emitted `dist/<adapter>/<adapter>.d.mts` to guard this, because type-only exports are erased from the `.mjs` and invisible to a runtime check
 - **Auth is middleware's responsibility**: Authentication should be handled by middleware registered before `createRPCMiddleware()`. The middleware chain naturally composes — no built-in auth hook is needed.
 - **No client-side secrets or stack traces**: Error responses always return `"Internal Server Error"` regardless of the underlying error; `console.error(String(err))` is server-side only for debugging and does not surface internals to the client
 - **Prefix parity across adapters**: all five resolve the dispatch prefix as `rpcPrefix || getGlobalPrefix() || defaultPrefix`. A mismatch here is fail-closed (404, never a cross-prefix dispatch) but still a bug — keep the five in sync
@@ -147,6 +151,7 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 | `rpcPrefix` (config) | `rpc.config.ts` / dev options | Developer-trusted   | Escaped before regex; validated before code gen                          |
 | Function export name  | `src/api/server.ts` exports   | Developer-trusted   | Validated against identifier regex before client codegen                 |
 | HTTP request URL      | Untrusted client              | Boundary-filtered   | Prefix regex (escaped, anchored, hoisted); non-throwing `safeURL()` normalization |
+| HTTP request headers (`Origin`, `Sec-Fetch-Site`) | Untrusted client | Boundary-filtered | Exact-match allowlist; `Origin` short-circuits ahead of `Sec-Fetch-Site`; fails closed when only the coarse signal survives; empty values treated as absent |
 | HTTP request body | Untrusted client | Capped by framework | Framework body parsers cap JSON and raw bodies |
 
 **Attackers cannot**:
@@ -154,6 +159,8 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 - Bypass the prefix via segment-prefixing tricks (anchored regex, not `startsWith`)
 - Trigger ReDoS via prefix metacharacters (escaped before compilation)
 - Exhaust memory via large raw text bodies (framework body parsers enforce limits)
+- Sneak past the origin allowlist with a lookalike host (`https://app.example.com.evil.com` is rejected — matching is exact, never a prefix test)
+- Downgrade the origin check by stripping `Origin` and leaving `Sec-Fetch-Site: cross-site` (that combination is `403`; only `same-origin`/`none` pass once the precise signal is gone)
 
 **Attackers are expected to**:
 - Be free to send as many requests as the host allows (no rate limiting — host's responsibility)
@@ -172,10 +179,12 @@ The framework's security boundary is the **RPC prefix-gated HTTP endpoint**. Inp
 - `wiki/getting-started.md` — Installation, project structure, auto-scanning, and your first function
 - `wiki/configuration.md` — Configuration reference (`rpc.config.ts`, `vite.config.ts`, options)
 - `wiki/server-functions.md` — `createServerFunction` API, methods, validation, **request context (`getRequestContext`/`provideRequestContext`)** for per-request data access across async call stacks
+- `wiki/multi-prefix-guide.md` — Parallel RPC instances: versioned/public/admin API layouts, per-prefix middleware, canary deployments, origin validation per instance
 - `wiki/middleware.md` — universal adapter-agnostic middleware via the request context (`locals` bridge, `getRequestMeta`, `sendResponse`, `functionName`)
 - `wiki/nojs-fallback.md` — native (no-JS) `<form>` fallback / progressive enhancement pattern
-- `wiki/client-usage.md` — Client-side usage, type safety, react-query integration
+- `wiki/client-usage.md` — Client-side usage, type safety, react-query integration, native clients via `unwrapEnvelope`
 - `wiki/wire-protocol.md` — HTTP contract, request/response bodies, curl debugging
-- `wiki/adapters.md` — Framework adapters (Express, Fastify, Hono, Koa, h3)
+- `wiki/adapters.md` — Framework adapters (Express, Fastify, Hono, Koa, h3) and the re-exported framework type contract
 - `wiki/security.md` — Security hardening
 - `wiki/best-practices.md` — Production patterns (auth, rate limiting, body limits, CSRF)
+- `wiki/index.md` — Documentation index / table of contents

@@ -284,13 +284,24 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * (e.g. `"https://example.com"` or
    * `["https://example.com", "https://admin.example.com"]`).
    *
-   * When set, any request carrying an `Origin` header that matches none of the
-   * entries is rejected with a 403 Forbidden response. Requests without an
-   * `Origin` header (curl, native clients) pass through unchecked.
-   * When unset (default), no origin validation is performed.
+   * Setting this option is the opt-in for origin validation. When set, a request
+   * is rejected with `403 Forbidden` according to four tiers:
    *
-   * `Origin: null` (sandboxed iframes, `file://`, extension pages) never
-   * equals a real origin, so it is rejected whenever an allowlist is set.
+   * 1. `Origin` present → the allowlist decides. It must match one of the
+   *    entries exactly; `Origin: null` (sandboxed iframes, `file://`, browser
+   *    extensions) never equals a real origin, so it is rejected.
+   * 2. `Origin` absent but `Sec-Fetch-Site` present → allow only `same-origin`
+   *    and `none`. Anything else, including an unrecognised value, is rejected.
+   *    Browsers never strip `Origin` themselves, so reaching this tier means
+   *    something in the chain (a proxy, a sanitising middleware, a CDN) removed
+   *    it — at which point the check fails closed rather than silently becoming
+   *    a no-op.
+   * 3. Both headers absent → the request passes. This is the deliberate
+   *    curl/native-client hole: non-browser clients send neither header.
+   *
+   * When unset (default), no origin validation is performed at all.
+   *
+   * @see `isOriginRequestAllowed` in `@thednp/rpc/server` for the exact rule.
    */
   origin?: string | string[];
   /**
@@ -455,6 +466,42 @@ export declare const isFormContentType: (contentType: string) => boolean;
  * @param rawHeader - The raw `Content-Type` request header, if present
  */
 export declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: string | undefined) => boolean;
+/**
+ * Decides whether a request may proceed, given the configured origin allowlist
+ * and the two headers a browser can be made to reveal.
+ *
+ * Three tiers, evaluated in order — the first tier with a signal decides:
+ *
+ * 1. `origin` option unset → everything passes. No validation is performed.
+ * 2. `Origin` present → the allowlist decides, exactly as {@link isOriginAllowed}.
+ * 3. `Origin` absent but `Sec-Fetch-Site` present → allow only `same-origin`
+ *    and `none`; anything else (including an unrecognised value) is rejected.
+ * 4. Both absent → passes. This is the deliberate, documented curl/native hole.
+ *
+ * Tier 2 must short-circuit ahead of tier 3. `Sec-Fetch-Site` is a coarse
+ * four-value enum that cannot name a host, so on its own it would reject a
+ * legitimate request from an allowlisted sibling subdomain (`same-site`). The
+ * allowlist exists precisely to admit that case, and it can only do so while
+ * `Origin` survives. `Sec-Fetch-Site` earns a vote only once the precise signal
+ * has been stripped away by something in the chain — at which point there is
+ * nothing left to trust, so it fails closed.
+ *
+ * Browsers never strip `Origin` themselves, so tier 3 can only fire when a
+ * proxy, sanitising middleware, or misconfigured CDN removed it. No legitimate
+ * browser request can regress.
+ *
+ * An empty (or whitespace-only) header value counts as **absent**, not as an
+ * unrecognised signal. No browser emits an empty `Sec-Fetch-Site`, and adapters
+ * disagree on what their header accessor returns for a missing header (Node's
+ * `req.headers` yields `undefined`, Hono's `c.req.header()` may yield `""`).
+ * Normalising here keeps all five adapters behaving identically instead of
+ * inheriting whichever convention their framework happens to use.
+ * @param allowed - The configured `origin` option, if any
+ * @param origin - The raw `Origin` request header, if present
+ * @param site - The raw `Sec-Fetch-Site` request header, if present
+ * @returns `true` when the request may proceed
+ */
+export declare const isOriginRequestAllowed: (allowed: string | string[] | undefined, origin: string | undefined, site: string | undefined) => boolean;
 /**
  * Escapes special regex metacharacters in a string.
  * Used to safely embed user-configurable values (like rpcPrefix) into regular expressions,
