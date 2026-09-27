@@ -104,13 +104,38 @@ The comparison normalizes the header (lowercased, parameters stripped) before ma
 
 ## Origin Validation
 
-`@thednp/rpc` performs no origin validation by default, but `createRPCMiddleware()` accepts an `origin` option:
+`@thednp/rpc` performs no origin validation by default, but `createRPCMiddleware()` accepts an `origin` option. It takes a single origin or an **allowlist array**:
 
 ```ts
+// one origin
 app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
+
+// several trusted origins
+app.use(createRPCMiddleware({
+  origin: ['https://app.example.com', 'https://admin.example.com'],
+}));
 ```
 
-When set, any request carrying an `Origin` header that does not match the configured origin is rejected with `403 Forbidden`. Requests **without** an `Origin` header (curl, native clients) pass through — the check only rejects when the browser-provided header disagrees. This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives.
+The rule, shared by all five adapters via the `isOriginAllowed` helper (`src/server-helpers.ts`):
+
+| `origin` option | Request `Origin` header | Result |
+|---|---|---|
+| unset (default) | anything | **passes** — no validation performed |
+| set | absent | **passes** — keeps curl and native clients working |
+| `"https://app.example.com"` | `https://app.example.com` | passes |
+| `"https://app.example.com"` | `https://evil.com` | `403 Forbidden` |
+| `["https://app.example.com", "https://admin.example.com"]` | `https://admin.example.com` | passes |
+| `["https://app.example.com", "https://admin.example.com"]` | `https://evil.com` | `403 Forbidden` |
+| any allowlist | `null` | `403 Forbidden` |
+
+Two properties worth relying on:
+
+- **A string and a one-element array are equivalent**, so widening the option is backward compatible — existing single-origin configurations behave exactly as before.
+- **Matching is exact, never a prefix or substring test.** `https://app.example.com.evil.com` and `https://app.example.com:443` are both rejected, so a lookalike host cannot ride in on a partial match.
+
+`Origin: null` is sent by sandboxed iframes, `file://` pages, and browser extensions. Because it never equals a real origin, it is rejected whenever an allowlist is set.
+
+This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives.
 
 ### Residual Gaps
 

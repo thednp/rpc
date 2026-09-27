@@ -957,6 +957,62 @@ describe("Express createRPCMiddleware handler", () => {
     expect(fn).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });
+
+  it("should pass requests whose Origin matches one entry of an allowlist array", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        origin: "https://admin.example.com",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should return 403 when Origin matches no entry of an allowlist array", async () => {
+    createServerFunction("fn", vi.fn());
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: {
+        origin: "https://evil.com",
+        "content-type": "application/json",
+      },
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(res.status).toHaveBeenCalledWith(403);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Forbidden" });
+  });
+
+  it('should return 403 for Origin: "null" when an allowlist is set', async () => {
+    createServerFunction("fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: ["https://app.example.com"] });
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: { origin: "null", "content-type": "application/json" },
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(res.status).toHaveBeenCalledWith(403);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ error: "Forbidden" });
+  });
 });
 
 // ─── Plugin lifecycle tests ───────────────────────────────────────────

@@ -173,6 +173,27 @@ const hasContentTypeMismatch = (declared, rawHeader) => {
 function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+/**
+* Decides whether a request's `Origin` header is allowed by the configured
+* allowlist. Shared by all five adapters so the rule lives in exactly one place.
+*
+* - No `allowed` value (option unset) → everything passes: no validation.
+* - No `requestOrigin` header → passes, preserving curl/native-client access.
+* - Otherwise the header must match one of the entries exactly.
+*
+* A single string and a one-element array behave identically, so widening
+* `origin` to `string | string[]` is backward compatible.
+*
+* `Origin: null` (sandboxed iframes, `file://`, extension pages) is rejected
+* whenever an allowlist is set, because it never equals a real origin.
+* @param allowed - The configured `origin` option, if any
+* @param requestOrigin - The raw `Origin` request header, if present
+* @returns `true` when the request may proceed
+*/
+const isOriginAllowed = (allowed, requestOrigin) => {
+	if (!allowed || !requestOrigin) return true;
+	return Array.isArray(allowed) ? allowed.includes(requestOrigin) : requestOrigin === allowed;
+};
 const SAFE_URL_BASE = "http://localhost";
 /**
 * Parses a raw request URL against a fixed base without ever throwing.
@@ -546,6 +567,6 @@ const getRequestMeta = (event) => {
 	};
 };
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
+export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, isOriginAllowed, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

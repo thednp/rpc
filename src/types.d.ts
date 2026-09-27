@@ -323,13 +323,19 @@ export interface MiddlewareOptions<
   rpcPrefix?: string | false;
 
   /**
-   * Allowed request origin (e.g. "https://example.com").
-   * When set, any request carrying an `Origin` header that does not match
-   * is rejected with a 403 Forbidden response. Requests without an `Origin`
-   * header (curl, native clients) pass through unchecked.
+   * Allowed request origin(s) — a single origin string or an allowlist of them
+   * (e.g. `"https://example.com"` or
+   * `["https://example.com", "https://admin.example.com"]`).
+   *
+   * When set, any request carrying an `Origin` header that matches none of the
+   * entries is rejected with a 403 Forbidden response. Requests without an
+   * `Origin` header (curl, native clients) pass through unchecked.
    * When unset (default), no origin validation is performed.
+   *
+   * `Origin: null` (sandboxed iframes, `file://`, extension pages) never
+   * equals a real origin, so it is rejected whenever an allowlist is set.
    */
-  origin?: string;
+  origin?: string | string[];
 
   /**
    * Server file matching mode. Use `"exact"` for `server.ts|js|mjs|mts`

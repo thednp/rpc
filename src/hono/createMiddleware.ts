@@ -13,6 +13,7 @@ import {
   formatError,
   getGlobalPrefix,
   hasContentTypeMismatch,
+  isOriginAllowed,
   provideRequestContext,
   safeURL,
   scanForServerFiles,
@@ -155,12 +156,10 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         return;
       }
 
-      // Optional origin check: reject requests whose Origin header does not
-      // match the configured origin. Requests without an Origin header
+      // Optional origin check: reject requests whose Origin header is not in
+      // the configured allowlist. Requests without an Origin header
       // (curl, native clients) pass through unchecked.
-      const origin = options.origin;
-      const requestOrigin = c.req.header("origin");
-      if (origin && requestOrigin && requestOrigin !== origin) {
+      if (!isOriginAllowed(options.origin, c.req.header("origin"))) {
         return c.json({ error: REQUEST_FORBIDDEN }, 403);
       }
 

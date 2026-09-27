@@ -1,4 +1,4 @@
-import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, provideRequestContext, safeURL, scanForServerFiles } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, isOriginAllowed, provideRequestContext, safeURL, scanForServerFiles } from "@thednp/rpc/server";
 import fp from "fastify-plugin";
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
@@ -249,9 +249,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 			const reqUrl = safeURL(req.url);
 			const url = reqUrl.pathname;
 			if (prefixRegex && !prefixRegex.test(url)) return;
-			const origin = options.origin;
-			const requestOrigin = req.headers.origin;
-			if (origin && requestOrigin && requestOrigin !== origin) {
+			if (!isOriginAllowed(options.origin, req.headers.origin)) {
 				reply.status(403).send({ error: REQUEST_FORBIDDEN });
 				return;
 			}

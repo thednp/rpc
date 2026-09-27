@@ -17,6 +17,7 @@ import {
   formatError,
   getGlobalPrefix,
   hasContentTypeMismatch,
+  isOriginAllowed,
   provideRequestContext,
   scanForServerFiles,
 } from "@thednp/rpc/server";
@@ -171,12 +172,10 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
         return;
       }
 
-      // Optional origin check: reject requests whose Origin header does not
-      // match the configured origin. Requests without an Origin header
+      // Optional origin check: reject requests whose Origin header is not in
+      // the configured allowlist. Requests without an Origin header
       // (curl, native clients) pass through unchecked.
-      const origin = options.origin;
-      const requestOrigin = req.headers.origin;
-      if (origin && requestOrigin && requestOrigin !== origin) {
+      if (!isOriginAllowed(options.origin, req.headers.origin)) {
         sendResponse(403, { error: REQUEST_FORBIDDEN });
         return;
       }

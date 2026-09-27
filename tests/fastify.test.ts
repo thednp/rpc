@@ -985,4 +985,72 @@ describe("Fastify createRPCMiddleware", () => {
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
     expect(reply.status).toHaveBeenCalledWith(200);
   });
+
+  it("should pass requests whose Origin matches the configured origin (single string, back-compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fastify-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-fn",
+      method: "POST",
+      headers: { origin: "https://app.example.com" },
+      body: JSON.stringify(["x"]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should pass requests whose Origin matches one entry of an allowlist array", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fastify-fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-fn",
+      method: "POST",
+      headers: { origin: "https://admin.example.com" },
+      body: JSON.stringify(["x"]),
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(reply.status).toHaveBeenCalledWith(200);
+  });
+
+  it("should return 403 when Origin matches no entry of an allowlist array", async () => {
+    createServerFunction("fastify-fn", vi.fn());
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com" },
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Forbidden" });
+  });
+
+  it('should return 403 for Origin: "null" when an allowlist is set', async () => {
+    createServerFunction("fastify-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: ["https://app.example.com"] });
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-fn",
+      method: "POST",
+      headers: { origin: "null" },
+    });
+    const reply = makeFastifyReply();
+    const done = makeFastifyDone();
+    await mw(req as never, reply as never, done);
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Forbidden" });
+  });
 });

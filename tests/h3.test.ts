@@ -845,6 +845,61 @@ describe("h3 createRPCMiddleware", () => {
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
   });
 
+  it("should pass requests whose Origin matches one entry of an allowlist array", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("h3-origin-array", fn);
+    const app = new H3();
+    app.use(
+      createRPCMiddleware({
+        origin: ["https://app.example.com", "https://admin.example.com"],
+      }),
+    );
+    const res = await app.fetch(
+      new Request(`${APP_HOST}/__rpc/h3-origin-array`, {
+        method: "POST",
+        headers: {
+          origin: "https://admin.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(["x"]),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+  });
+
+  it("should return 403 when Origin matches no entry of an allowlist array", async () => {
+    createServerFunction("h3-origin-array", vi.fn());
+    const app = new H3();
+    app.use(
+      createRPCMiddleware({
+        origin: ["https://app.example.com", "https://admin.example.com"],
+      }),
+    );
+    const res = await app.fetch(
+      new Request(`${APP_HOST}/__rpc/h3-origin-array`, {
+        method: "POST",
+        headers: { origin: "https://evil.com" },
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Forbidden" });
+  });
+
+  it('should return 403 for Origin: "null" when an allowlist is set', async () => {
+    createServerFunction("h3-origin-null", vi.fn());
+    const app = new H3();
+    app.use(createRPCMiddleware({ origin: ["https://app.example.com"] }));
+    const res = await app.fetch(
+      new Request(`${APP_HOST}/__rpc/h3-origin-null`, {
+        method: "POST",
+        headers: { origin: "null" },
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Forbidden" });
+  });
+
   it("should pass parsed urlencoded body as single object arg", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
     createServerFunction(

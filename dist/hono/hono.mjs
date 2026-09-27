@@ -1,5 +1,5 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
-import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, provideRequestContext, safeURL, scanForServerFiles } from "@thednp/rpc/server";
+import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, isOriginAllowed, provideRequestContext, safeURL, scanForServerFiles } from "@thednp/rpc/server";
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
 	adapter: "express",
@@ -206,9 +206,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 		handler: async (c, _next) => {
 			const { path: reqPath } = c.req;
 			if (prefixRegex && !prefixRegex.test(reqPath)) return;
-			const origin = options.origin;
-			const requestOrigin = c.req.header("origin");
-			if (origin && requestOrigin && requestOrigin !== origin) return c.json({ error: REQUEST_FORBIDDEN }, 403);
+			if (!isOriginAllowed(options.origin, c.req.header("origin"))) return c.json({ error: REQUEST_FORBIDDEN }, 403);
 			const functionName = reqPath.replace(prefixReplace, "");
 			const serverFunction = getFunctionsForPrefix(prefix).get(functionName);
 			if (!serverFunction) return c.json({ error: FUNCTION_NOT_FOUND }, 404);

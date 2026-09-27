@@ -772,6 +772,74 @@ describe("Hono createRPCMiddleware", () => {
     expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
   });
 
+  it("should pass requests whose Origin matches the configured origin (single string, back-compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: {
+        origin: "https://app.example.com",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(["x"]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should pass requests whose Origin matches one entry of an allowlist array", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: {
+        origin: "https://admin.example.com",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(["x"]),
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("should return 403 when Origin matches no entry of an allowlist array", async () => {
+    createServerFunction("hono-fn", vi.fn());
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com" },
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith({ error: "Forbidden" }, 403);
+  });
+
+  it('should return 403 for Origin: "null" when an allowlist is set', async () => {
+    createServerFunction("hono-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: ["https://app.example.com"] });
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { origin: "null" },
+    });
+    const next = makeHonoNext();
+    await mw(c, next);
+    expect(c.json).toHaveBeenCalledWith({ error: "Forbidden" }, 403);
+  });
+
   it("should not crash when env.incoming is missing", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
     createServerFunction("hono-bare", fn);

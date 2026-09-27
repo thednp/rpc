@@ -280,13 +280,19 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    */
   rpcPrefix?: string | false;
   /**
-   * Allowed request origin (e.g. "https://example.com").
-   * When set, any request carrying an `Origin` header that does not match
-   * is rejected with a 403 Forbidden response. Requests without an `Origin`
-   * header (curl, native clients) pass through unchecked.
+   * Allowed request origin(s) — a single origin string or an allowlist of them
+   * (e.g. `"https://example.com"` or
+   * `["https://example.com", "https://admin.example.com"]`).
+   *
+   * When set, any request carrying an `Origin` header that matches none of the
+   * entries is rejected with a 403 Forbidden response. Requests without an
+   * `Origin` header (curl, native clients) pass through unchecked.
    * When unset (default), no origin validation is performed.
+   *
+   * `Origin: null` (sandboxed iframes, `file://`, extension pages) never
+   * equals a real origin, so it is rejected whenever an allowlist is set.
    */
-  origin?: string;
+  origin?: string | string[];
   /**
    * Server file matching mode. Use `"exact"` for `server.ts|js|mjs|mts`
    * names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}` inside the
@@ -457,6 +463,24 @@ export declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: 
  * @returns The escaped string safe for use in new RegExp()
  */
 export declare function escapeRegExp(s: string): string;
+/**
+ * Decides whether a request's `Origin` header is allowed by the configured
+ * allowlist. Shared by all five adapters so the rule lives in exactly one place.
+ *
+ * - No `allowed` value (option unset) → everything passes: no validation.
+ * - No `requestOrigin` header → passes, preserving curl/native-client access.
+ * - Otherwise the header must match one of the entries exactly.
+ *
+ * A single string and a one-element array behave identically, so widening
+ * `origin` to `string | string[]` is backward compatible.
+ *
+ * `Origin: null` (sandboxed iframes, `file://`, extension pages) is rejected
+ * whenever an allowlist is set, because it never equals a real origin.
+ * @param allowed - The configured `origin` option, if any
+ * @param requestOrigin - The raw `Origin` request header, if present
+ * @returns `true` when the request may proceed
+ */
+export declare const isOriginAllowed: (allowed: string | string[] | undefined, requestOrigin: string | undefined) => boolean;
 /**
  * Parses a raw request URL against a fixed base without ever throwing.
  * Malformed request-targets (e.g. `/\`, `//`, `/\/`) make the WHATWG URL

@@ -3,10 +3,85 @@ import {
   formatError,
   hasContentTypeMismatch,
   isFormContentType,
+  isOriginAllowed,
   RPCError,
   safeURL,
   walkGlobFiles,
 } from "../src/server-helpers.ts";
+
+describe("isOriginAllowed", () => {
+  it("should allow everything when no allowlist is configured", () => {
+    expect(isOriginAllowed(undefined, "https://evil.com")).toBe(true);
+    expect(isOriginAllowed(undefined, undefined)).toBe(true);
+  });
+
+  it("should allow headerless requests when an allowlist is configured", () => {
+    expect(isOriginAllowed("https://app.example.com", undefined)).toBe(true);
+    expect(
+      isOriginAllowed(["https://app.example.com"], undefined),
+    ).toBe(true);
+  });
+
+  it("should match a single string exactly", () => {
+    expect(
+      isOriginAllowed("https://app.example.com", "https://app.example.com"),
+    )
+      .toBe(true);
+    expect(isOriginAllowed("https://app.example.com", "https://evil.com"))
+      .toBe(false);
+  });
+
+  it("should match any entry of an allowlist array", () => {
+    const allowed = ["https://app.example.com", "https://admin.example.com"];
+    expect(isOriginAllowed(allowed, "https://app.example.com")).toBe(true);
+    expect(isOriginAllowed(allowed, "https://admin.example.com")).toBe(true);
+    expect(isOriginAllowed(allowed, "https://evil.com")).toBe(false);
+  });
+
+  it("should treat a one-element array like the equivalent string", () => {
+    expect(
+      isOriginAllowed(["https://app.example.com"], "https://app.example.com"),
+    )
+      .toBe(true);
+  });
+
+  it('should reject Origin: "null" when an allowlist is set', () => {
+    expect(isOriginAllowed("https://app.example.com", "null")).toBe(false);
+    expect(isOriginAllowed(["https://app.example.com"], "null")).toBe(false);
+  });
+
+  it("should not match on prefix or substring", () => {
+    expect(
+      isOriginAllowed(
+        "https://app.example.com",
+        "https://app.example.com.evil.com",
+      ),
+    ).toBe(false);
+    expect(
+      isOriginAllowed("https://app.example.com", "https://app.example.com:443"),
+    ).toBe(false);
+  });
+
+  it("should be case-sensitive, matching the serialized Origin form", () => {
+    expect(
+      isOriginAllowed(
+        "https://app.example.com",
+        "HTTPS://APP.EXAMPLE.COM",
+      ),
+    ).toBe(false);
+  });
+
+  it("should deny any request carrying an Origin when given an empty allowlist", () => {
+    expect(isOriginAllowed([], "https://app.example.com")).toBe(false);
+    // …but headerless requests still pass, same as with any other allowlist
+    expect(isOriginAllowed([], undefined)).toBe(true);
+  });
+
+  it("should be exported from the server barrel", async () => {
+    const barrel = await import("../src/server.ts");
+    expect(typeof barrel.isOriginAllowed).toBe("function");
+  });
+});
 
 describe("formatError", () => {
   it("should return generic error in production", () => {

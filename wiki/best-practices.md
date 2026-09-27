@@ -317,17 +317,26 @@ app.use(rateLimit.middleware({ interval: { min: 1 }, max: 60 }));
 
 ### Option A: `origin` middleware option
 
-When your RPC endpoints sit behind a reverse proxy with multiple public origins (e.g. a sibling subdomain), pass the allowed origin to `createRPCMiddleware()`:
+When your RPC endpoints are reachable from more than one public origin (e.g. a sibling subdomain, or an app plus an admin panel), pass an **allowlist array** to `createRPCMiddleware()`:
 
 ```ts
 app.use(createRPCMiddleware({
-  origin: 'https://app.example.com',
+  origin: [
+    'https://app.example.com',
+    'https://admin.example.com',
+  ],
 }));
 ```
 
-Requests carrying an `Origin` header that does not match are rejected with `403 Forbidden`. Requests without an `Origin` header (curl, native apps) pass through unchecked.
+A single string still works and is equivalent to a one-element array:
 
-> `SameSite=Lax` cookies already block cross-site `POST` from HTML forms; the `origin` option closes the remaining "sibling subdomain" case.
+```ts
+app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
+```
+
+Requests are rejected with `403 Forbidden` only when they carry an `Origin` header matching **none** of the entries. Requests without an `Origin` header (curl, native apps) pass through unchecked, and leaving `origin` unset performs no validation at all. Matching is exact, so a lookalike host such as `https://app.example.com.evil.com` is rejected.
+
+> `SameSite=Lax` cookies already block cross-site `POST` from HTML forms; the `origin` option closes the remaining "sibling subdomain" case. See [Security — Origin Validation](./security.md#origin-validation) for the full rule table.
 
 ### Option B: custom middleware
 

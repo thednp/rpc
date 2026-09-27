@@ -894,4 +894,74 @@ describe("Koa createRPCMiddleware", () => {
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
     expect(ctx.status).toBe(200);
   });
+
+  it("should pass requests whose Origin matches the configured origin (single string, back-compat)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware({ origin: "https://app.example.com" });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: {
+        origin: "https://app.example.com",
+        "content-type": "application/json",
+      },
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
+  });
+
+  it("should pass requests whose Origin matches one entry of an allowlist array", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: {
+        origin: "https://admin.example.com",
+        "content-type": "application/json",
+      },
+    });
+    const next = makeKoaNext();
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    await mw(ctx, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
+  });
+
+  it("should return 403 when Origin matches no entry of an allowlist array", async () => {
+    createServerFunction("koa-fn", vi.fn());
+    const mw = createRPCMiddleware({
+      origin: ["https://app.example.com", "https://admin.example.com"],
+    });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com" },
+    });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(403);
+    expect(ctx.body).toEqual({ error: "Forbidden" });
+  });
+
+  it('should return 403 for Origin: "null" when an allowlist is set', async () => {
+    createServerFunction("koa-fn", vi.fn());
+    const mw = createRPCMiddleware({ origin: ["https://app.example.com"] });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { origin: "null" },
+    });
+    const next = makeKoaNext();
+    await mw(ctx, next);
+    expect(ctx.status).toBe(403);
+    expect(ctx.body).toEqual({ error: "Forbidden" });
+  });
 });

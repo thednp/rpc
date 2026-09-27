@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.5] - 2026-09-26
+
+### Features
+
+- **Multi-origin allowlist for the `origin` option**: `createRPCMiddleware({ origin })` now accepts a single origin string *or* an array of them, so a deployment can serve several trusted origins (e.g. `["https://app.example.com", "https://admin.example.com"]`) without a proxy in front. A request is rejected with `403` only when it carries an `Origin` header that matches **none** of the entries; headerless requests (curl, native clients) still pass through, and an unset `origin` still performs no validation. **Backward compatible** — a string behaves exactly as before, and a one-element array is equivalent to that string, so this is a minor rather than a breaking bump
+- **`isOriginAllowed(allowed, requestOrigin)` shared helper** (`src/server-helpers.ts`, exported from `@thednp/rpc/server`): the origin rule lived as a copy-pasted 6-line block in all five adapters; it now lives in one place, so the five can't drift. Non-exported from the client entry — it is server-side only
+- **Origin matching is exact, not prefix-based**: `https://app.example.com.evil.com` and `https://app.example.com:443` are both rejected, so a lookalike host cannot ride in on a substring match
+
+### Refactor
+
+- All five adapters (`src/{express,fastify,hono,koa,h3}/createMiddleware.ts`) call the shared `isOriginAllowed` instead of inlining the check; the per-adapter comment blocks shrank to a single line. Behavior is unchanged for existing single-string configurations
+
+### Tests
+
+- **Full 5-case × 5-adapter matrix** for the origin rule, per the BartJS change request: single-string match → `200` (back-compat), non-matching → `403`, headerless → passes, allowlist-array match → `200`, allowlist-array miss → `403`, plus `Origin: null` → `403`. Three adapters (Fastify, Hono, Koa) were missing the single-string back-compat case and now have it
+- `isOriginAllowed` unit suite: unset allowlist, headerless request, exact single-string match, multi-entry array match, one-element-array equivalence, `Origin: null` rejection, prefix/substring non-matching, case-sensitivity, empty-allowlist behavior, and an assertion that the helper is reachable from the `@thednp/rpc/server` barrel (which is how BartJS will import it)
+- **475 tests, 100% on all metrics**
+
+### Chores
+
+- Bump version to `0.3.5` (`package.json`, `deno.json`)
+
 ## [0.3.4] - 2026-09-26
 
 ### Fixed
