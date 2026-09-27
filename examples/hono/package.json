@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
-    "@thednp/rpc": "^0.3.4",
+    "@thednp/rpc": "^0.3.5",
     "hono": "^4.13.9",
     "vite": "^8.3.1"
   },
