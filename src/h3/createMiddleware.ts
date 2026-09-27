@@ -4,12 +4,15 @@ import type { H3MiddlewareFn, H3MiddlewareOptions } from "./types.d.ts";
 import type { JsonValue } from "@thednp/rpc";
 import type { RequestEvent } from "@thednp/rpc/server";
 import {
+  clientErrorMessage,
+  clientErrorStatus,
   escapeRegExp,
   formatError,
-  getGlobalPrefix,
   hasContentTypeMismatch,
+  isClientHttpError,
   isOriginRequestAllowed,
   provideRequestContext,
+  resolveRPCPrefix,
   scanForServerFiles,
 } from "@thednp/rpc/server";
 import { getFunctionsForPrefix } from "../functionsMap.ts";
@@ -22,11 +25,7 @@ import {
   REQUEST_FORBIDDEN,
   UNSUPPORTED_MEDIA_TYPE,
 } from "../constants.ts";
-import {
-  defaultMiddlewareOptions,
-  defaultPrefix,
-  defaultRPCOptions,
-} from "../options.ts";
+import { defaultMiddlewareOptions } from "../options.ts";
 import { readBody, redirect as h3Redirect } from "./helpers.ts";
 
 let middlewareCount = 0;
@@ -47,7 +46,7 @@ export const createMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
   ) as H3MiddlewareOptions;
 
   const middlewareName = options.name;
-  let rpcPrefix = options.rpcPrefix;
+  const rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -63,8 +62,15 @@ export const createMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
 
   // Hoist regex compilation out of per-request path. Escape the prefix to
   // prevent regex injection via metacharacters in the config string.
+  // Resolved once at creation time so the hoisted regex and the
+  // function-map lookup can never disagree. `createRPCMiddleware` hands
+  // over its already-resolved prefix, making this a no-op in that path.
+  const resolvedPrefix = resolveRPCPrefix(rpcPrefix);
+  // Gated only when an explicit prefix was supplied: a bare
+  // `createMiddleware({ path, handler })` has never prefix-gated.
+  // `createRPCMiddleware` always supplies one, so RPC dispatch does.
   const prefixRegex: RegExp | null = rpcPrefix
-    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
+    ? new RegExp(`^/${escapeRegExp(resolvedPrefix)}/`)
     : null;
   const pathMatcher: RegExp | null = path
     ? (typeof path === "string" ? new RegExp(path) : path)
@@ -86,12 +92,10 @@ export const createMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
       return next();
     }
 
-    rpcPrefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
-
     // When serving from production server, scan for server files
-    if (getFunctionsForPrefix(rpcPrefix).size === 0) {
+    if (getFunctionsForPrefix(resolvedPrefix).size === 0) {
       await scanForServerFiles({
-        rpcPrefix,
+        rpcPrefix: resolvedPrefix,
         serverFiles: (options as unknown as { serverFiles?: "exact" | "glob" })
           .serverFiles,
         scanRoot: (options as unknown as { scanRoot?: string }).scanRoot,
@@ -119,21 +123,20 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
     defaultMiddlewareOptions,
-    { rpcPrefix: defaultRPCOptions.rpcPrefix },
     initialOptions,
   ) as H3MiddlewareOptions;
 
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
-  const prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
-  const prefixRegex = rpcPrefix
-    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
-    : /* istanbul ignore next */ null;
+  const prefix = resolveRPCPrefix(rpcPrefix);
+  const prefixRegex = new RegExp(`^/${escapeRegExp(prefix)}/`);
   const prefixReplace = `/${prefix}/`;
 
   return createMiddleware({
     ...options,
+    // Hand the resolved prefix down so the gate and the dispatch agree.
+    rpcPrefix: prefix,
     handler: async (event: H3Event, _next?: () => unknown) => {
       const url = event.url.pathname;
 
@@ -178,7 +181,15 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
         if (method === "GET") {
           const raw = event.url.searchParams.get("args");
           if (raw) {
-            const parsed: unknown = JSON.parse(raw);
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              // A malformed `?args=` is a malformed request, not a server
+              // fault, so it answers 400 like the non-array case above.
+              event.res.status = 400;
+              return { error: BAD_REQUEST };
+            }
             if (!Array.isArray(parsed)) {
               event.res.status = 400;
               return { error: BAD_REQUEST };
@@ -251,10 +262,21 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
 
         return { data: result };
       } catch (err) {
+        // h3 enforces its body limit while the stream is *read*, so an
+        // oversized chunked request (one with no `Content-Length` to check up
+        // front) throws here — inside this try — as an h3 error carrying status
+        // 413. The other four adapters get their 413 from the host body parser
+        // before rpc is reached, so flattening this to 500 would make h3 the
+        // only adapter that reports an oversize body as a server fault. The
+        // same rule covers rpc's own 400s for a malformed body or `?args`.
+        if (isClientHttpError(err)) {
+          const status = clientErrorStatus(err);
+          event.res.status = status;
+          return { error: clientErrorMessage(status) };
+        }
         console.error(String(err));
         const isProduction = process.env.NODE_ENV === "production";
         event.res.status = 500;
-
         return formatError(err, isProduction);
       }
     },

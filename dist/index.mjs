@@ -1,3 +1,4 @@
+import * as vite from "vite";
 import { loadConfigFromFile, mergeConfig } from "vite";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -6,16 +7,27 @@ import { readdir } from "node:fs/promises";
 import { setGlobalPrefix } from "@thednp/rpc/server";
 import { createRPCMiddleware } from "@thednp/rpc/express";
 //#region src/options.ts
+/**
+* The built-in RPC endpoint prefix, used when neither an explicit prefix nor a
+* global one (`getGlobalPrefix`) is supplied. Kept for backward compatibility
+* with pre-multi-prefix setups, where every function lived under this one map.
+*/
 const defaultPrefix = "__rpc";
+/**
+* Baseline plugin options. `defineConfig` merges a user's partial config over
+* these, and `loadRPCConfig` merges a loaded config file over them, so every
+* option has a defined value even when a config file omits it.
+*/
 const defaultRPCOptions = {
 	rpcPrefix: defaultPrefix,
-	adapter: "express",
 	serverFiles: "exact",
 	scanRoot: void 0
 };
 //#endregion
 //#region src/constants.ts
+/** Warning logged when a scanned server module exports nothing. */
 const NO_SERVER_FUNCTION_FOUND = "No server function found.";
+/** Error logged when a server function file cannot be loaded by Vite's SSR loader. */
 const ERROR_LOADING_FILE = "Error loading file:";
 /** Error message when a value fails the safe-identifier validation. @param label - What kind of value was being validated. @param name - The rejected value */
 const INVALID_IDENTIFIER = (label, name) => `Invalid ${label}: "${name}" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/`;
@@ -23,7 +35,9 @@ const INVALID_IDENTIFIER = (label, name) => `Invalid ${label}: "${name}" must ma
 const INVALID_PATH_SEGMENT = (label, segment) => `Invalid ${label}: "${segment}" must match /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/`;
 /** Warning message when a specified RPC config file cannot be resolved on disk. @param configFile - The requested config filename. @param configFilePath - The resolved absolute path */
 const CONFIG_FILE_NOT_FOUND = (configFile, configFilePath) => `  ⚠︎ The specified RPC config file ${configFile} cannot be found at ${configFilePath}, loading the defaults..`;
+/** Warning logged when no config file is discovered and the defaults are used. */
 const NO_CONFIG_FOUND = `  ⚡︎ No RPC config found, loading the defaults..`;
+/** Warning logged when a config file exists but could not be loaded; the defaults are used. */
 const FAILED_LOAD_CONFIG = `  ⚠︎ Failed to load RPC config:`;
 /** Error template for duplicate server function names across files. @param name - The duplicate registered name */
 const DUPLICATE_FUNCTION_NAME = (name) => `Duplicate server function "${name}" detected. Each server function must have a unique name. Remove or rename the duplicate.`;
@@ -158,7 +172,10 @@ const getModule = (fnName, fnEntry, options) => {
 * Generates the complete client-side module bundle by iterating all registered server functions
 * for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
 * (or Oxc) during the dev server or production build.
-* @param initialOptions - Plugin options containing rpcPrefix and optional adapter
+*
+* The generated stubs are plain `fetch` calls, so they are adapter-agnostic —
+* only the prefix is needed.
+* @param initialOptions - Plugin options containing the rpcPrefix
 * @returns A string of JavaScript code with all client RPC modules and their import dependencies
 */
 const getClientModules = (initialOptions) => {
@@ -200,7 +217,17 @@ const walkGlobFiles = async (dir) => {
 };
 //#endregion
 //#region src/scanForServerFiles.ts
-let isScanned = false;
+/**
+* Scan targets already performed, so a lazy re-scan is not repeated.
+*
+* Keyed by everything that determines the outcome — the resolved scan root
+* (which files are read), the matching mode, and the prefix prefix-less
+* functions register under. A single process-wide boolean used to be enough
+* only while there was one prefix: the *first* scan suppressed every later
+* one, so a second RPC instance on a different prefix asked for a lazy scan,
+* got an early return, and answered 404 for every function it owned.
+*/
+const scannedTargets = /* @__PURE__ */ new Set();
 /** Absolute ids (normalized) of the scanned server function files. */
 const scannedServerFiles = /* @__PURE__ */ new Set();
 const EXACT_NAMES = [
@@ -221,7 +248,11 @@ const EXACT_NAMES = [
 * @param devServer - Optional running Vite dev server instance; when provided, skips creating a new one
 */
 const scanForServerFiles = async (initialCfg, devServer) => {
-	if (isScanned && !devServer) return;
+	const root = initialCfg?.root || process.cwd();
+	const resolvedScanRoot = resolve(root, initialCfg?.scanRoot ?? join(root, "src", "api"));
+	const serverFiles = initialCfg?.serverFiles ?? "exact";
+	const target = `${resolvedScanRoot}|${serverFiles}|${initialCfg?.rpcPrefix ?? "__rpc"}`;
+	if (scannedTargets.has(target) && !devServer) return;
 	let createServer;
 	let normalizePath;
 	try {
@@ -229,7 +260,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 	} catch {
 		return;
 	}
-	const config = !initialCfg && !devServer || !initialCfg ? {
+	const config = !initialCfg ? {
 		root: process.cwd(),
 		base: process.env.BASE || "/",
 		server: { middlewareMode: true }
@@ -247,9 +278,6 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 		optimizeDeps: { noDiscovery: true },
 		ssr: { optimizeDeps: { noDiscovery: true } }
 	});
-	const root = config.root || process.cwd();
-	const resolvedScanRoot = resolve(root, config.scanRoot ?? join(root, "src", "api"));
-	const serverFiles = config.serverFiles ?? "exact";
 	const seenNames = /* @__PURE__ */ new Set();
 	let files;
 	try {
@@ -271,7 +299,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 			const moduleEntries = Object.entries(moduleExports);
 			if (!moduleEntries.length) {
 				console.warn(NO_SERVER_FUNCTION_FOUND);
-				return;
+				continue;
 			}
 			for (const [exportName, exportValue] of moduleEntries) {
 				const registeredName = exportValue.name;
@@ -296,7 +324,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 		}
 	} finally {
 		if (!devServer && server) await server.close();
-		isScanned = true;
+		scannedTargets.add(target);
 	}
 };
 //#endregion
@@ -319,6 +347,20 @@ const loadConfigFile = async (env, file) => {
 };
 let RPCConfig;
 /**
+* Merges a loaded config file over the built-in defaults, recording the
+* resolved file path. Assigns the module-level `RPCConfig` cache.
+* @param config - The config object exported by the config file
+* @param configFilePath - Absolute path of the config file that was loaded
+* @returns The merged RPC plugin options
+*/
+const mergeLoaded = (config, configFilePath) => {
+	RPCConfig = mergeConfig({
+		...defaultRPCOptions,
+		configFile: configFilePath
+	}, config);
+	return RPCConfig;
+};
+/**
 * Loads the RPC configuration by searching for config files in the project root.
 * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
 * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
@@ -327,6 +369,10 @@ let RPCConfig;
 * @returns Resolved RPC plugin options
 */
 const loadRPCConfig = async (configFile, opts) => {
+	if (typeof configFile === "object" && configFile !== null) {
+		opts = configFile;
+		configFile = void 0;
+	}
 	try {
 		const env = {
 			command: "serve",
@@ -351,11 +397,7 @@ const loadRPCConfig = async (configFile, opts) => {
 			}
 			const result = await loadConfigFile(env, configFile);
 			if (result && typeof result === "object") {
-				RPCConfig = mergeConfig({
-					...defaultRPCOptions,
-					configFile: configFilePath
-				}, result.config);
-				setGlobalPrefix(RPCConfig.rpcPrefix);
+				setGlobalPrefix(mergeLoaded(result.config, configFilePath).rpcPrefix);
 				return RPCConfig;
 			}
 			RPCConfig = defaultRPCOptions;
@@ -369,10 +411,7 @@ const loadRPCConfig = async (configFile, opts) => {
 			if (!existsSync(configFilePath)) continue;
 			const result = await loadConfigFile(env, file);
 			if (result) {
-				RPCConfig = mergeConfig({
-					...defaultRPCOptions,
-					configFile: configFilePath
-				}, result.config);
+				setGlobalPrefix(mergeLoaded(result.config, configFilePath).rpcPrefix);
 				return RPCConfig;
 			}
 		}
@@ -407,7 +446,6 @@ function rpcPlugin(devOptions = {}) {
 		},
 		async configureServer(server) {
 			viteServer = server;
-			const { adapter: _adapter, ...rest } = options;
 			if (serverFunctionsMap.size === 0) {
 				const scanCfg = {
 					...config,
@@ -417,11 +455,11 @@ function rpcPlugin(devOptions = {}) {
 				};
 				await scanForServerFiles(scanCfg, viteServer);
 			}
-			server.middlewares.use(createRPCMiddleware(rest));
+			server.middlewares.use(createRPCMiddleware(options));
 		},
 		async buildStart() {
 			const viteVersion = this.meta?.viteVersion;
-			isOxc = Number(viteVersion[0]) >= 8;
+			isOxc = Number.parseInt(viteVersion, 10) >= 8;
 			if (!viteServer && config) {
 				const scanCfg = {
 					...config,
@@ -433,8 +471,7 @@ function rpcPlugin(devOptions = {}) {
 			}
 		},
 		async transform(code, id, ops) {
-			if (!code.includes("createServerFunction") || ops?.ssr || code.includes("createServerFunction") && typeof process === "undefined") return null;
-			const vite = await import("vite");
+			if (!code.includes("createServerFunction") || ops?.ssr) return null;
 			if (serverFunctionsMap.size === 0) {
 				const scanCfg = {
 					...config,
@@ -448,10 +485,7 @@ function rpcPlugin(devOptions = {}) {
 			if (!scannedServerFiles.has(idPath)) return null;
 			const transformer = isOxc ? "transformWithOxc" : "transformWithEsbuild";
 			const langProp = isOxc ? "lang" : "loader";
-			const source = getClientModules({
-				rpcPrefix: options.rpcPrefix,
-				adapter: options.adapter
-			});
+			const source = getClientModules({ rpcPrefix: options.rpcPrefix });
 			const result = await vite[transformer](source, id, {
 				[langProp]: "js",
 				sourcemap: true

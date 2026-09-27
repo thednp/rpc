@@ -44,17 +44,23 @@ jobs:
       # - name: Install doc dependencies
       #   run: cd demo && pnpm install --no-frozen-lockfile
 
-      - name: Make sure to format
-        run: pnpm format
+      - name: Make sure it is formatted
+        run: pnpm format:check
 
       - name: Typecheck & ESLint
         run: pnpm lint
 
-      # - name: Build
-      #   run: pnpm build
+      # Required, not optional: `tests/adapter-exports.test.ts` is a
+      # build-output test that parses the emitted `dist/<adapter>/*.d.mts`.
+      # `dist/` is committed, so without this step the suite silently
+      # validates the *last committed* bundle instead of the current source,
+      # and a type export removed or renamed in `src/` goes unnoticed.
+      - name: Build
+        run: pnpm build
 
       - name: Run Unit Tests
         run: pnpm test
+
 
       - name: Audit dependencies
         run: pnpm audit:src

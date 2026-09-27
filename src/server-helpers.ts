@@ -3,7 +3,13 @@ import type { ContentType, JsonObject, JsonValue } from "./types.d.ts";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { INTERNAL_SERVER_ERROR } from "./constants.ts";
+import {
+  BAD_REQUEST,
+  INTERNAL_SERVER_ERROR,
+  PAYLOAD_TOO_LARGE,
+  UNSUPPORTED_MEDIA_TYPE,
+} from "./constants.ts";
+import { defaultPrefix } from "./options.ts";
 
 const GLOB_REGEX = /^.+\.server\.(ts|js|mjs|mts)$/;
 
@@ -84,6 +90,82 @@ export const formatError = (
  * Form-declared functions accept either encoding so native browser
  * submissions (urlencoded) keep working without JavaScript.
  */
+/**
+ * An error carrying an HTTP status, so the dispatch can answer that status
+ * instead of flattening every failure to a `500`.
+ */
+export interface ClientHttpError extends Error {
+  status?: number;
+  statusCode?: number;
+}
+
+/**
+ * Tags an error with an HTTP status for the dispatch to surface.
+ *
+ * Used where a malformed *request* is the fault — a body that does not parse
+ * under a declared JSON `Content-Type`, a GET `?args=` value that is not valid
+ * JSON. Every host framework rpc supports answers `400` for these (Express
+ * `entity.parse.failed`, Fastify `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser,
+ * and h3's own `readBody`), and treating one as a server fault both misreports
+ * the fault and turns a trivial client mistake into a log entry.
+ * @param status - The HTTP status to answer with
+ * @param message - Internal diagnostic message; never sent to the client
+ * @returns An `Error` carrying `status`
+ */
+export const httpError = (status: number, message: string): ClientHttpError => {
+  const err = new Error(message) as ClientHttpError;
+  err.status = status;
+  return err;
+};
+
+/**
+ * Recognises an error that should produce a `4xx` response rather than a `500`.
+ *
+ * Matches the `status` / `statusCode` convention used by h3's `HTTPError`, the
+ * `http-errors` objects Express's `body-parser` throws, and anything else that
+ * carries a numeric 4xx. Shared by all five adapters so a host-framework
+ * signal and an rpc-raised one are handled by the same rule.
+ * @param err - The caught error
+ * @returns True when the error denotes a client (4xx) fault
+ */
+const readClientStatus = (err: unknown): number | undefined => {
+  const candidate = err as ClientHttpError | null | undefined;
+  // Reads both conventions: h3's `HTTPError` and rpc's `httpError` use
+  // `status`, while the `http-errors` objects Express's `body-parser` throws
+  // and Koa's `ctx.throw` use `statusCode`.
+  const status = candidate?.status ?? candidate?.statusCode;
+  return typeof status === "number" && status >= 400 && status < 500
+    ? status
+    : undefined;
+};
+
+/**
+ * Recognises an error that should produce a `4xx` response rather than a `500`.
+ * Matches the `status` / `statusCode` convention used by h3's `HTTPError`, the
+ * `http-errors` objects Express's `body-parser` throws, and anything else
+ * carrying a numeric 4xx. Shared by all five adapters so a host-framework
+ * signal and an rpc-raised one are handled by the same rule.
+ * @param err - The caught error
+ * @returns True when the error denotes a client (4xx) fault
+ */
+export const isClientHttpError = (err: unknown): boolean =>
+  readClientStatus(err) !== undefined;
+
+/**
+ * Reads the status to answer for a client error. Defaults to `400` rather than
+ * `500` so an unrecognised 4xx is never reported as a server fault.
+ * @param err - The caught error
+ * @returns The 4xx status to answer with
+ */
+export const clientErrorStatus = (err: unknown): number =>
+  readClientStatus(err) ?? 400;
+
+export const clientErrorMessage = (status: number): string => {
+  if (status === 413) return PAYLOAD_TOO_LARGE;
+  if (status === 415) return UNSUPPORTED_MEDIA_TYPE;
+  return BAD_REQUEST;
+};
+
 export const isFormContentType = (contentType: string): boolean =>
   contentType === "multipart/form-data" ||
   contentType === "application/x-www-form-urlencoded";
@@ -117,7 +199,7 @@ export const hasContentTypeMismatch = (
  * Decides whether a request may proceed, given the configured origin allowlist
  * and the two headers a browser can be made to reveal.
  *
- * Three tiers, evaluated in order — the first tier with a signal decides:
+ * Four tiers, evaluated in order — the first tier with a signal decides:
  *
  * 1. `origin` option unset → everything passes. No validation is performed.
  * 2. `Origin` present → the allowlist decides, exactly as {@link isOriginAllowed}.
@@ -229,6 +311,16 @@ export const getGlobalPrefix = (): string | undefined =>
     globalPrefixSymbol
   ];
 
+/**
+ * Publishes the global RPC prefix, consulted by `resolveRPCPrefix` whenever no
+ * explicit prefix is supplied. `loadRPCConfig` calls this on every return path
+ * so a loaded config is the fallback for later registrations and dispatches.
+ *
+ * Stored on a `Symbol.for` key on `globalThis` so it stays instance-stable
+ * across the bundled entry copies (`server.mjs`, `express.mjs`, ...) and dev
+ * server hot reloads — the same technique as the request-context storage.
+ * @param prefix - The prefix to publish, or `undefined` to clear it
+ */
 export const setGlobalPrefix = (prefix: string | undefined): void => {
   if (prefix) {
     (globalThis as unknown as Record<symbol, string | undefined>)[
@@ -240,3 +332,21 @@ export const setGlobalPrefix = (prefix: string | undefined): void => {
     ];
   }
 };
+
+/**
+ * Resolves the effective RPC prefix: the explicit one when given, otherwise
+ * the global prefix set by `setGlobalPrefix` / `loadRPCConfig`, otherwise the
+ * built-in default.
+ *
+ * Every adapter resolves its prefix through this single function — in both the
+ * outer `createMiddleware` gate and the `createRPCMiddleware` dispatch — so the
+ * two halves of a request can never disagree, and so a prefix registered by
+ * `createServerFunction` (which resolves the same way) is always the prefix the
+ * middleware looks up. Resolving the two sides independently is what allowed
+ * h3 to drift from the other four adapters, and what left the documented
+ * global-prefix flow returning 404 on all of them.
+ * @param rpcPrefix - Explicit prefix from config or middleware options
+ * @returns The prefix to gate on, look up in, and strip from the request path
+ */
+export const resolveRPCPrefix = (rpcPrefix?: string): string =>
+  rpcPrefix || getGlobalPrefix() || defaultPrefix;

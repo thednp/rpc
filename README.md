@@ -172,7 +172,6 @@ Create `rpc.config.ts` at your project root:
 import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
-  adapter: "express",
   rpcPrefix: "__rpc",
 });
 ```
@@ -262,7 +261,7 @@ pnpm test:watch   # Run tests in watch mode with coverage
 pnpm test:ui      # Run tests with UI
 ```
 
-Tests use **Vitest** with **Istanbul** coverage — 10 test files covering the plugin, scanning, server/client helpers, request context, and all five adapters, at 100% coverage.
+Tests use **Vitest** with **Istanbul** coverage — 11 test files covering the plugin, scanning, server/client helpers, request context, the adapter type-export surface, and all five adapters, at 100% coverage.
 
 ### Live Testing
 
@@ -353,6 +352,7 @@ The full threat model, including edge cases and configuration options for tighte
 - [Client Usage](./wiki/client-usage.md) — Client-side usage
 - [Wire Protocol](./wiki/wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./wiki/adapters.md) — Framework adapters
+- [Comparison](./wiki/comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./wiki/best-practices.md) — Tips and best practices
 - [Security](./wiki/security.md) — Security hardening
 

@@ -1,6 +1,11 @@
 /** @module Main entrypoint for the RPC Vite plugin. Exports `rpcPlugin` (default) and `loadRPCConfig`. For a Vite-free `defineConfig`, use `@thednp/rpc/config`. */
 import type { ConfigEnv, Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { loadConfigFromFile, mergeConfig } from "vite";
+// Namespace import: `transformWithOxc` only exists on Vite 8+, and the
+// `isOxc` version check exists precisely to stay compatible with older
+// resolutions. A namespace import keeps both members optional instead of
+// turning a missing named export into a module link-time error.
+import * as vite from "vite";
 import { resolve } from "node:path";
 import process from "node:process";
 import { existsSync } from "node:fs";
@@ -43,6 +48,24 @@ const loadConfigFile = async (env: ConfigEnv, file: string) => {
 let RPCConfig: RpcPluginOptions;
 
 /**
+ * Merges a loaded config file over the built-in defaults, recording the
+ * resolved file path. Assigns the module-level `RPCConfig` cache.
+ * @param config - The config object exported by the config file
+ * @param configFilePath - Absolute path of the config file that was loaded
+ * @returns The merged RPC plugin options
+ */
+const mergeLoaded = (
+  config: Partial<RpcPluginOptions>,
+  configFilePath: string,
+): RpcPluginOptions => {
+  RPCConfig = mergeConfig(
+    { ...defaultRPCOptions, configFile: configFilePath },
+    config,
+  ) as RpcPluginOptions;
+  return RPCConfig;
+};
+
+/**
  * Loads the RPC configuration by searching for config files in the project root.
  * Searches in order: `rpc.config.ts`, `rpc.config.js`, `rpc.config.mjs`, `rpc.config.mts`,
  * `.rpcrc.ts`, `.rpcrc.js`. Falls back to defaults if none found.
@@ -51,9 +74,17 @@ let RPCConfig: RpcPluginOptions;
  * @returns Resolved RPC plugin options
  */
 const loadRPCConfig: (
-  configFile?: string,
+  configFile?: string | { silent?: boolean },
   opts?: { silent?: boolean },
 ) => Promise<RpcPluginOptions> = async (configFile?, opts?) => {
+  // `loadRPCConfig({ silent: true })` is a documented call form. Without this
+  // normalisation the options object is treated as a config path, `resolve`
+  // throws on the non-string, and the catch below silently downgrades the
+  // resolved config to the defaults.
+  if (typeof configFile === "object" && configFile !== null) {
+    opts = configFile;
+    configFile = undefined;
+  }
   try {
     // istanbul ignore next
     const env: ConfigEnv & { root: string } = {
@@ -83,15 +114,9 @@ const loadRPCConfig: (
       const result = await loadConfigFile(env, configFile);
       // istanbul ignore else
       if (result && typeof result === "object") {
-        RPCConfig = mergeConfig(
-          {
-            ...defaultRPCOptions,
-            configFile: configFilePath,
-          },
-          result.config,
-        ) as RpcPluginOptions;
-
-        setGlobalPrefix(RPCConfig.rpcPrefix);
+        setGlobalPrefix(
+          mergeLoaded(result.config, configFilePath).rpcPrefix,
+        );
         return RPCConfig;
       }
       // istanbul ignore next - this is a necessary fallback here
@@ -115,14 +140,14 @@ const loadRPCConfig: (
       const result = await loadConfigFile(env, file);
       // istanbul ignore else
       if (result) {
-        RPCConfig = mergeConfig(
-          {
-            ...defaultRPCOptions,
-            configFile: configFilePath,
-          },
-          result.config,
-        ) as RpcPluginOptions;
-
+        // Every return path must publish the prefix, not just the explicit
+        // `configFile` and no-config ones: this discovery path is the common
+        // case (an `rpc.config.ts` exists), so skipping it left functions
+        // registering under the default while the middleware dispatched on
+        // the configured prefix.
+        setGlobalPrefix(
+          mergeLoaded(result.config, configFilePath).rpcPrefix,
+        );
         return RPCConfig;
       }
     }
@@ -130,6 +155,10 @@ const loadRPCConfig: (
     // Last call load defaults no matter what
     if (!opts?.silent) console.warn(NO_CONFIG_FOUND);
   } catch (error) {
+    // Falls back to the defaults. Note this also resets the cache, so a
+    // failed load downgrades a previously loaded config for the rest of the
+    // process — the documented contract (and the tests) require the fallback,
+    // so the stale value is not preserved here.
     RPCConfig = defaultRPCOptions;
     console.warn(FAILED_LOAD_CONFIG, error);
   }
@@ -149,7 +178,8 @@ const loadRPCConfig: (
 function rpcPlugin(
   devOptions: Partial<RpcPluginOptions> = {},
 ): Plugin {
-  // Internal type - adapters are handled at runtime
+  // `rpcPrefix` is required on RpcPluginOptions but defaulted here, so the
+  // resolved options always carry one for the scan and the client stubs.
   let options: RpcPluginOptions & { rpcPrefix: string } = mergeConfig(
     defaultRPCOptions,
     devOptions,
@@ -172,7 +202,6 @@ function rpcPlugin(
     },
     async configureServer(server) {
       viteServer = server;
-      const { adapter: _adapter, ...rest } = options;
       // istanbul ignore else
       if (serverFunctionsMap.size === 0) {
         const scanCfg: ScanConfig = {
@@ -184,13 +213,14 @@ function rpcPlugin(
         await scanForServerFiles(scanCfg, viteServer);
       }
 
-      // in dev mode we always use express/connect adapter
-      server.middlewares.use(createRPCMiddleware(rest));
+      // in dev mode we always use the express/connect middleware, since the
+      // Vite dev server is Connect-based — there is no adapter to select.
+      server.middlewares.use(createRPCMiddleware(options));
     },
 
     async buildStart() {
       const viteVersion = this.meta?.viteVersion;
-      isOxc = Number(viteVersion[0]) >= 8;
+      isOxc = Number.parseInt(viteVersion, 10) >= 8;
 
       // Prepare the server functions
       if (!viteServer && config) {
@@ -204,17 +234,12 @@ function rpcPlugin(
       }
     },
     async transform(code: string, id: string, ops?: { ssr?: boolean }) {
-      // Only transform files with server functions for client builds
-      if (
-        !code.includes("createServerFunction") || // any other file is unchanged
-        ops?.ssr || // file loaded on server remains unchanged
-        (code.includes("createServerFunction") &&
-          typeof process === "undefined") // file loaded in client IS CHANGED
-      ) {
+      // Only transform files with server functions for client builds: any
+      // other file is unchanged, and a file loaded on the server (SSR) is
+      // left as-is.
+      if (!code.includes("createServerFunction") || ops?.ssr) {
         return null;
       }
-
-      const vite = await import("vite");
 
       if (serverFunctionsMap.size === 0) {
         const scanCfg: ScanConfig = {
@@ -236,10 +261,7 @@ function rpcPlugin(
 
       const transformer = isOxc ? "transformWithOxc" : "transformWithEsbuild";
       const langProp = isOxc ? "lang" : "loader";
-      const source = getClientModules({
-        rpcPrefix: options.rpcPrefix,
-        adapter: options.adapter,
-      });
+      const source = getClientModules({ rpcPrefix: options.rpcPrefix });
 
       const result = await vite[transformer](source, id, {
         [langProp]: "js",

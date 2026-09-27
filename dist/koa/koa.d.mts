@@ -1,5 +1,5 @@
 import Koa, { Context, Context as KoaRequest, Next, Next as KoaNext } from "koa";
-import { BodyResult, JsonValue, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { AdapterName, BodyResult, JsonValue, MiddlewareOptions } from "@thednp/rpc";
 import { IncomingHttpHeaders, ServerResponse as KoaResponse } from "node:http";
 import { ViteDevServer } from "vite";
 import "express";
@@ -99,7 +99,7 @@ interface KoaMiddlewareHooks {
  * Koa middleware factory: takes optional initial options and returns
  * the Koa-compatible handler.
  */
-type KoaMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "koa">(initialOptions?: Partial<KoaMiddlewareOptions>) => KoaMiddlewareHooks["handler"];
+type KoaMiddlewareFn = <A extends AdapterName = "koa">(initialOptions?: Partial<KoaMiddlewareOptions>) => KoaMiddlewareHooks["handler"];
 //#endregion
 //#region src/koa/createMiddleware.d.ts
 /**
@@ -134,13 +134,6 @@ export declare function attachRPC(app: Koa): Promise<void>;
  * @param vite - Running Vite dev server
  */
 export declare function attachVite(app: Koa, vite: ViteDevServer): void;
-/**
- * Reads and parses the HTTP request body from a Koa context.
- * If koa-body or another body parser already consumed the stream,
- * uses the pre-parsed body from `ctx.request.body`.
- * @param ctx - Koa context
- * @returns A promise resolving to the parsed body with its content type
- */
 export declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Koa context. Koa's `ctx.redirect(location)`

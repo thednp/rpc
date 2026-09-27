@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientErrorMessage,
+  clientErrorStatus,
   formatError,
   hasContentTypeMismatch,
+  httpError,
+  isClientHttpError,
   isFormContentType,
   isOriginAllowed,
   isOriginRequestAllowed,
@@ -9,6 +13,65 @@ import {
   safeURL,
   walkGlobFiles,
 } from "../src/server-helpers.ts";
+
+describe("clientErrorMessage", () => {
+  it("maps 413 to Payload Too Large", () => {
+    expect(clientErrorMessage(413)).toBe("Payload Too Large");
+  });
+
+  it("maps 415 to Unsupported Media Type", () => {
+    expect(clientErrorMessage(415)).toBe("Unsupported Media Type");
+  });
+
+  it("falls back to Bad Request for every other client error", () => {
+    for (const s of [400, 401, 402, 403, 404, 409, 422, 499]) {
+      expect(clientErrorMessage(s)).toBe("Bad Request");
+    }
+  });
+});
+
+describe("isClientHttpError", () => {
+  it("accepts a numeric status in the 4xx range", () => {
+    expect(isClientHttpError(httpError(400, "x"))).toBe(true);
+    expect(isClientHttpError(httpError(413, "x"))).toBe(true);
+    expect(isClientHttpError(httpError(499, "x"))).toBe(true);
+  });
+
+  it("reads statusCode as well as status", () => {
+    // Express's http-errors objects and Koa's ctx.throw carry `statusCode`.
+    expect(isClientHttpError({ statusCode: 400 })).toBe(true);
+  });
+
+  it("reads a statusCode-only error, as Express http-errors and Koa throw", () => {
+    expect(clientErrorStatus({ statusCode: 413 })).toBe(413);
+    expect(clientErrorStatus({ statusCode: 415 })).toBe(415);
+    expect(clientErrorStatus({ statusCode: 418 })).toBe(418);
+  });
+
+  it("defaults to 400 for anything it cannot read", () => {
+    expect(clientErrorStatus(new Error("plain"))).toBe(400);
+    expect(clientErrorStatus({ status: 500 })).toBe(400);
+    expect(clientErrorStatus(undefined)).toBe(400);
+  });
+
+  it("rejects 5xx, non-numeric, and absent statuses", () => {
+    expect(isClientHttpError({ status: 500 })).toBe(false);
+    expect(isClientHttpError({ status: 399 })).toBe(false);
+    expect(isClientHttpError({ status: "400" })).toBe(false);
+    expect(isClientHttpError(new Error("plain"))).toBe(false);
+    expect(isClientHttpError(null)).toBe(false);
+    expect(isClientHttpError(undefined)).toBe(false);
+  });
+});
+
+describe("httpError", () => {
+  it("tags the error with the status and keeps a diagnostic message", () => {
+    const err = httpError(400, "Invalid JSON body");
+    expect(err).toBeInstanceOf(Error);
+    expect(err.status).toBe(400);
+    expect(err.message).toBe("Invalid JSON body");
+  });
+});
 
 describe("isOriginAllowed", () => {
   it("should allow everything when no allowlist is configured", () => {

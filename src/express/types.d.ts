@@ -1,5 +1,5 @@
 import type { Connect } from "vite";
-import type { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import type { AdapterName, MiddlewareOptions } from "@thednp/rpc";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { NextFunction, Request, Response } from "express";
 import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
@@ -21,7 +21,7 @@ export type ExpressMiddlewareOptions = MiddlewareOptions<"express">;
  * the Express/Connect-compatible handler.
  */
 export type ExpressMiddlewareFn = <
-  A extends RpcPluginOptions["adapter"] = "express",
+  A extends AdapterName = "express",
 >(
   initialOptions?: Partial<ExpressMiddlewareOptions>,
 ) => ExpressMiddlewareHooks["handler"];

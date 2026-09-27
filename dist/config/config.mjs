@@ -1,6 +1,10 @@
+/**
+* Baseline plugin options. `defineConfig` merges a user's partial config over
+* these, and `loadRPCConfig` merges a loaded config file over them, so every
+* option has a defined value even when a config file omits it.
+*/
 const defaultRPCOptions = {
 	rpcPrefix: "__rpc",
-	adapter: "express",
 	serverFiles: "exact",
 	scanRoot: void 0
 };

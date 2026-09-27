@@ -29,13 +29,6 @@ interface RpcPluginOptions {
    */
   rpcPrefix: "__rpc" | string;
   /**
-   * Option to set an adapter for the middleware connection. The default is _express_,
-   * which is the most popular and battle tested server app. The _express_ adapter is
-   * also compatible with the vite's Connect development server.
-   * @default express
-   */
-  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
-  /**
    * Root directory from which the plugin scans for server files.
    * Defaults to `<root>/src/api`. Use this in monorepos where server files
    * live in a shared package outside the current project root.

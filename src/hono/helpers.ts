@@ -10,6 +10,7 @@ import type {
 import type { BodyResult } from "@thednp/rpc";
 import type { IncomingWithBody } from "./types.d.ts";
 import { createMiddleware } from "hono/factory";
+import { httpError, isClientHttpError } from "../server-helpers.ts";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 
 /**
@@ -22,7 +23,7 @@ export async function attachRPC(app: Hono) {
   // imported lazily: function bundles that never call attachRPC (e.g.
   // serverless functions) keep Vite out of the bundle (or externalized).
   const { loadRPCConfig } = await import("@thednp/rpc");
-  const { adapter: _adapter, ...options } = await loadRPCConfig();
+  const options = await loadRPCConfig();
 
   app.use(createRPCMiddleware(options));
 }
@@ -54,6 +55,13 @@ export const viteMiddleware = (
       // @ts-expect-error - NodeJS is different
       // istanbul ignore if
       if (typeof Bun === "undefined") {
+        // Only a node-style runtime can hand Vite's Connect stack a raw
+        // IncomingMessage/ServerResponse. Everywhere else `c.env` is absent,
+        // so there is nothing to bridge and we fall through to the Bun path.
+        if (!c.env) {
+          resolve(next());
+          return;
+        }
         vite.middlewares(c.env.incoming, c.env.outgoing, () => resolve(next()));
         return;
       }
@@ -102,7 +110,14 @@ export const readBody = async (
   const isJSON = contentType.includes("json");
   const isMultipart = contentType.includes("multipart/form-data");
   const isUrlEncoded = contentType.includes("urlencoded");
-  const incoming = (c.env as HttpBindings).incoming as
+  // `c.env` is only populated by @hono/node-server. On every other runtime
+  // Hono supports — Cloudflare Workers, Bun, Deno, and Hono's own
+  // `app.fetch()` — it is undefined, and reading `.incoming` off it threw a
+  // TypeError that the dispatch reported as a 500 for *every* request,
+  // including well-formed ones. Optional chaining makes the pre-parsed path
+  // simply not apply there, which is correct: those runtimes have no
+  // node IncomingMessage to read a pre-parsed body from.
+  const incoming = (c.env as HttpBindings | undefined)?.incoming as
     | IncomingWithBody
     | undefined;
   if (incoming?.body !== undefined) {
@@ -125,11 +140,19 @@ export const readBody = async (
     } as BodyResult;
   }
   if (isJSON) {
-    const data = await c.req.json();
-    return {
-      contentType: "application/json",
-      data,
-    };
+    try {
+      const data = await c.req.json();
+      return {
+        contentType: "application/json",
+        data,
+      };
+    } catch (err) {
+      // Hono has no opinion here (its maintainers declined to own this in
+      // honojs/hono#578), so a malformed body arrived as a bare SyntaxError
+      // and was reported as a 500. Tag it so the dispatch answers 400, which
+      // is what every other supported host does.
+      throw isClientHttpError(err) ? err : httpError(400, "Invalid JSON body");
+    }
   }
 
   const text = await c.req.text();

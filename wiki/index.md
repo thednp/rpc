@@ -13,10 +13,11 @@ The pages below follow a natural learning sequence — each ends with a **Next**
 - [Configuration](./configuration.md) — Configuration reference
 - [Server Functions](./server-functions.md) — Creating server functions
 - [Multi-Prefix Support](./multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
-- [Middleware](./middleware.md) — Universal middleware via the request context
+- [Middleware](./middleware.md) — Universal middleware via the request context, and handler wrappers for adapter-agnostic `locals`
 - [Native Form Fallback](./nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action (progressive enhancement)
 - [Client Usage](./client-usage.md) — Client-side usage
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

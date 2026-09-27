@@ -1,5 +1,5 @@
 import { Connect, ViteDevServer } from "vite";
-import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { AdapterName, BodyResult, MiddlewareOptions } from "@thednp/rpc";
 import { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 import { Express, Express as Express$1, Express as ExpressApp, NextFunction, NextFunction as ExpressNext, Request, Request as ExpressRequest, Response as ExpressResponse, Response as Response$1 } from "express";
 import "hono";
@@ -79,7 +79,7 @@ type ExpressMiddlewareOptions = MiddlewareOptions<"express">;
  * Express middleware factory: takes optional initial options and returns
  * the Express/Connect-compatible handler.
  */
-type ExpressMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "express">(initialOptions?: Partial<ExpressMiddlewareOptions>) => ExpressMiddlewareHooks["handler"];
+type ExpressMiddlewareFn = <A extends AdapterName = "express">(initialOptions?: Partial<ExpressMiddlewareOptions>) => ExpressMiddlewareHooks["handler"];
 /**
  * Express/Connect middleware handler signature used by the RPC middleware.
  */
@@ -126,13 +126,6 @@ export declare function attachRPC(app: Express$1): Promise<void>;
  * @param vite - Running Vite dev server
  */
 export declare function attachVite(app: Express$1, vite: ViteDevServer): void;
-/**
- * Reads and parses the HTTP request body from an Express or Node IncomingMessage.
- * If a body parser middleware (e.g. express.json()) already consumed the stream,
- * uses the pre-parsed body from `req.body`.
- * @param req - Express or Node.js IncomingMessage
- * @returns A promise resolving to the parsed body with its content type
- */
 export declare const readBody: (req: Request | IncomingMessage) => Promise<BodyResult>;
 /**
  * Type guard that checks whether a request is an Express Request (has `originalUrl`).

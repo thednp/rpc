@@ -16,7 +16,7 @@ There are two places you can put logic, and they serve different purposes:
 
 **Recommended approach:** use your framework's **official** middleware for the heavy lifting (it's battle-tested and framework-idiomatic), then **wrap it** with a small universal adapter so your server functions can read the result from `locals` and short-circuit cleanly. `@thednp/rpc` gives you the structure (`locals`, `send`, `functionName`, `getRequestMeta`) and the docs to do this in ~10 lines per middleware.
 
-> This page assumes you're familiar with the [request context](./server-functions.md#request-context-provideRequestcontext-getrequestcontext).
+> This page assumes you're familiar with the [request context](./server-functions.md#request-context-providerequestcontext-getrequestcontext).
 
 ## The `locals` Bridge
 
@@ -30,7 +30,7 @@ Every adapter maps your framework's per-request storage onto `event.locals`, so 
 | Fastify | `{}` (see below) | `request.*` (via `decorateRequest`) | `@fastify/auth` → `request.user` |
 | Hono | `{}` (see below) | `c.set(...)` / `c.get(...)` | Hono `c.set("user", ...)` |
 
-> **Fastify & Hono**: these frameworks don't expose a framework-level "locals" object that `@thednp/rpc` can bridge directly, so `event.locals` starts empty for them. Read the values your middleware wrote through the native objects instead: Fastify `event.request.user` (see [types](./adapters.md#fastify)), Hono `(event.nativeEvent as import('hono').Context).get('user')`. Both adapters still expose the full native request via `event.request`/`event.nativeEvent`, so nothing is lost.
+> **Fastify & Hono**: these frameworks don't expose a framework-level "locals" object that `@thednp/rpc` can bridge directly, so `event.locals` starts empty for them. You have two options. Either read the values your middleware wrote through the native objects — Fastify `event.request.user` (see [types](./adapters.md#fastify)), Hono `(event.nativeEvent as import('hono').Context).get('user')` — or, better, skip the framework entirely and populate `event.locals` yourself from a [handler wrapper](#the-framework-agnostic-alternative-handler-wrappers), which behaves identically on all five adapters.
 
 ## Universal Middleware in Action
 
@@ -56,8 +56,11 @@ export const rateLimit = (opts: { max: number; windowMs: number }) => {
     const event = getRequestContext();
     const { ip } = getRequestMeta(event);
 
-    // Per-function keys: distinguish authorized vs anonymous via locals
-    const key = event.locals.user?.id ?? ip ?? 'anonymous';
+    // Per-function keys: distinguish authorized vs anonymous via locals.
+    // `locals` is `Record<string, unknown>`, so narrow it to your own shape
+    // before reaching in — reading `.user?.id` on it does not typecheck.
+    const user = event.locals.user as { id?: string } | undefined;
+    const key = user?.id ?? ip ?? 'anonymous';
 
     const now = Date.now();
     const bucket = buckets.get(key);
@@ -216,6 +219,89 @@ const { nativeEvent } = getRequestContext();
 const user = (nativeEvent as import('hono').Context).get('user');
 ```
 
+### The Framework-Agnostic Alternative: Handler Wrappers
+
+The per-adapter recipes above each read from *somewhere different*, which means
+five code paths to maintain and no coverage on Fastify/Hono. There is a better
+default, and it comes from the part of the contract that actually matters:
+
+> **`event.locals` is a mutable object that `@thednp/rpc` passes into the request
+> context.** Anything that can reach the context can use it as a bag.
+
+That holds identically on **all five adapters** — including Fastify, which has no
+per-request store at all. Bridging to `res.locals` / `ctx.state` / `event.context`
+is a convenience that makes *pre-dispatch framework middleware* visible for free
+on three adapters. It is a bonus, not the mechanism.
+
+So: run a small wrapper around your handlers that resolves the per-request data
+itself and stores it on `locals`. One implementation, no framework imports, and
+it does not care whether the framework has a storage primitive.
+
+```ts
+// session.ts — works unchanged on Express, Fastify, Hono, Koa and h3
+import { getRequestContext, getRequestMeta } from '@thednp/rpc/server';
+// Types come from the main entry — `@thednp/rpc/server` re-exports the
+// runtime surface, not `types.d.ts`, so `ServerFunctionInit` is not there.
+import type { ServerFunctionInit } from '@thednp/rpc';
+
+type Session = { id: string; role: 'admin' | 'user' } | null;
+
+/** Attach a session to `event.locals` before the handler runs. */
+export const withSession =
+  <TArgs extends unknown[], TResult>(
+    handler: (signal: AbortSignal, ...args: TArgs) => Promise<TResult>,
+  ) =>
+  async (signal: AbortSignal, ...args: TArgs): Promise<TResult> => {
+    const event = getRequestContext();
+    // `locals` is always present (every adapter sets it, and it is non-optional
+  // on RequestEvent), so there is nothing to guard here.
+  event.locals.session = session;
+
+    if (!event.locals.session) {
+      // `getRequestMeta` normalises headers across all five adapters, including
+      // Hono, whose native `Headers` live on `req.raw.headers`.
+      const raw = getRequestMeta(event).headers.cookie;
+      const cookie = Array.isArray(raw) ? raw.join('; ') : (raw ?? '');
+      const token = readCookie(cookie, 'sid');
+      event.locals.session = token ? await verifySession(token) : null;
+    }
+    return handler(signal, ...args);
+  };
+```
+
+```ts
+// server.ts — no framework import anywhere
+export const getProfile = createServerFunction(
+  'get-profile',
+  withSession(async (_signal, id: string) => {
+    const { locals } = getRequestContext();
+    const session = locals.session as Session;
+    if (!session) throw new RPCError('Unauthorized', 'UNAUTHORIZED');
+    return loadProfile(id, session);
+  }),
+);
+```
+
+Reading is identical everywhere too, because it goes through the context rather
+than the framework:
+
+```ts
+const user = getRequestContext().locals.session as Session;
+```
+
+**When to use which.** Keep using framework middleware when you already have
+one and want it bridged for free — that is the point of `express-session` →
+`res.locals`. Reach for a wrapper when you want **one** implementation across
+every adapter, when you are on Fastify or Hono, or when the value is derived
+rather than stored (a decoded JWT, a permissions lookup) and never existed as
+framework state to begin with.
+
+**The tradeoff to know about:** a wrapper runs *inside* the dispatch, so it
+executes per function call. Anything that must happen *before* routing —
+body parsing, CORS, rate limiting, request logging — still belongs in real
+framework middleware registered ahead of `createRPCMiddleware()`. Use both: the
+framework owns the request pipeline, the wrapper owns per-function data.
+
 ## Combinators
 
 Since universal middleware is just a function that reads the context, composing several is plain function composition:
@@ -251,4 +337,5 @@ Chain order matters: run **auth** before **rate limiting** so the rate limiter c
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

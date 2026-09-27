@@ -48,7 +48,7 @@ if (!isProduction) {
   const sirv = (await import("sirv")).default;
   // load RPC configuration
   const { loadRPCConfig } = await import("@thednp/rpc");
-  const { adapter, ...options } = await loadRPCConfig();
+  const options = await loadRPCConfig();
   app.use(createRPCMiddleware(options));
   app.use(adminMiddleware);
 

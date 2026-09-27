@@ -13,3 +13,12 @@ export const mockPlugin7Context = {
     rolldownVersion: "0.99.0",
   },
 };
+
+export const mockPlugin10Context = {
+  meta: {
+    // Double-digit major: the oxc/esbuild choice must be driven by the parsed
+    // major version, not by the first character of the version string.
+    viteVersion: "10.4.2",
+    rolldownVersion: "1.0.0",
+  },
+};

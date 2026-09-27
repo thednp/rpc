@@ -178,6 +178,20 @@ const app = new H3();
 // buffered in full) and the RPC `readBody` can still consume it afterwards.
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
+app.use(assertBodySizeMiddleware(MAX_BODY_SIZE));
+app.use(createRPCMiddleware(options));
+```
+
+`h3` exports `bodyLimit(limit)` as ready-made middleware — `app.use(bodyLimit(MAX_BODY_SIZE))` is equivalent and is what the example uses. It enforces the cap on two paths, and both now surface as **`413 Payload Too Large`**:
+
+| Request | When the limit trips | Response |
+| --- | --- | --- |
+| Sends an honest `Content-Length` over the cap | up front, before rpc runs | `413` |
+| Chunked / unknown length | mid-read, inside the RPC dispatch | `413` |
+
+That second path is why the try/catch below is only a belt-and-braces guard, and why the h3 adapter forwards h3's own `4xx` out of its dispatch `try` instead of flattening everything to a `500`. If you write your own wrapper, keep it — it is what covers the up-front case without depending on h3's own error type:
+
+```ts
 app.use(async (event, next) => {
   try {
     assertBodySize(event, MAX_BODY_SIZE);
@@ -187,8 +201,6 @@ app.use(async (event, next) => {
   }
   return next();
 });
-
-app.use(createRPCMiddleware(options));
 ```
 
 > A complete, extracted implementation lives in the [h3 example](../examples/h3/middleware/bodyLimit.js) (`middleware/bodyLimit.js`). Do **not** iterate `for await over event.req` to count bytes before forwarding — that consumes the request stream and the RPC `readBody` will then fail with `Body is unusable`.
@@ -393,4 +405,5 @@ export default { sayHi, add };
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

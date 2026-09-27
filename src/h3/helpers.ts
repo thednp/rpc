@@ -6,6 +6,7 @@ import type { ViteDevServer } from "vite";
 import type { BodyResult } from "@thednp/rpc";
 import type { H3App } from "./types.d.ts";
 import { createRPCMiddleware } from "./createMiddleware.ts";
+import { httpError } from "../server-helpers.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to an h3 app.
@@ -17,7 +18,7 @@ export async function attachRPC(app: H3App) {
   // imported lazily: function bundles that never call attachRPC (e.g.
   // serverless functions) keep Vite out of the bundle (or externalized).
   const { loadRPCConfig } = await import("@thednp/rpc");
-  const { adapter: _adapter, ...options } = await loadRPCConfig();
+  const options = await loadRPCConfig();
 
   app.use(createRPCMiddleware(options));
 }
@@ -122,11 +123,22 @@ export const readBody = async (event: H3Event): Promise<BodyResult> => {
   const isJSON = contentType.includes("json");
   const isMultipart = contentType.includes("multipart/form-data");
   const isUrlEncoded = contentType.includes("urlencoded");
+  // Note: `text()` stays outside the try below on purpose — h3's body limit
+  // throws its own 413 from here, and relabelling that as a 400 would
+  // misreport an oversize body as a malformed one.
   const text = await event.req.text();
   if (isJSON) {
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // h3's own `readBody` throws a 400 here; rpc parses the body itself and
+      // used to let the SyntaxError escape as a 500. Match the host.
+      throw httpError(400, "Invalid JSON body");
+    }
     return {
       contentType: "application/json",
-      data: JSON.parse(text),
+      data,
     } as BodyResult;
   }
   return {

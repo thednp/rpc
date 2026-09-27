@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// Resolves to the `vi.mock("vite", ...)` factory below, so the two
+// transformer mocks can be asserted on directly.
+import * as vite from "vite";
 
 import { default as rpcPlugin, loadRPCConfig } from "../src/index.ts";
 import type { ServerFnEntry, ServerFunctionInit } from "../src/types.d.ts";
 import { createServerFunction } from "../src/createFunction.ts";
+import { getGlobalPrefix, setGlobalPrefix } from "../src/server.ts";
 import { getClientModules } from "../src/getClientModules.ts";
 import {
   getFunctionsForPrefix,
@@ -22,6 +26,7 @@ import {
   defaultServerFnOptions,
 } from "../src/options.ts";
 import {
+  mockPlugin10Context,
   mockPlugin7Context,
   mockPlugin8Context,
 } from "./fixtures/vite-mock.ts";
@@ -34,6 +39,13 @@ beforeEach(() => {
   for (const map of serverFunctionsByPrefix.values()) {
     map.clear();
   }
+});
+
+// `loadRPCConfig` publishes the resolved prefix globally (F2), so any test
+// that loads a config leaks it into every later `createServerFunction` call.
+// Reset it between tests rather than relying on each one to clean up.
+afterEach(() => {
+  setGlobalPrefix(undefined);
 });
 
 vi.mock("vite", async (importOriginal) => {
@@ -76,8 +88,8 @@ describe("plugin initialization", () => {
 describe("loadRPCConfig", () => {
   it("should load default config", async () => {
     const cfg = await loadRPCConfig();
-    expect(cfg.adapter).toBe("express");
     expect(cfg.rpcPrefix).toBe("__rpc");
+    expect(cfg.serverFiles).toBe("exact");
   });
 
   // it("should load config from file", async () => {
@@ -90,7 +102,7 @@ describe("loadRPCConfig", () => {
 
   it("should fallback to defaults for missing file", async () => {
     const cfg = await loadRPCConfig("nonexistent/file.ts");
-    expect(cfg.adapter).toBe("express");
+    expect(cfg.rpcPrefix).toBe("__rpc");
   });
 
   it("should suppress NO_CONFIG_FOUND warning with silent option", async () => {
@@ -110,17 +122,67 @@ describe("loadRPCConfig", () => {
   it("should work with valid path", async () => {
     const cfg = await loadRPCConfig("tests/fixtures/good.config.ts");
     expect(cfg.rpcPrefix).toBe("_sv");
-    expect(cfg.adapter).toBe("hono");
+    expect(cfg.serverFiles).toBe("glob");
   });
 
   it("should fallback to defaults for invalid path", async () => {
     const cfg = await loadRPCConfig("tests/fixtures/dummy.config.ts");
-    expect(cfg.adapter).toBe("express");
+    // The default prefix proves the fallback happened, not the file's config.
+    expect(cfg.rpcPrefix).toBe("__rpc");
+    expect(cfg.serverFiles).toBe("exact");
   });
 
   it("should fallback to defaults when loadConfigFile returns falsy for explicit path (line 92)", async () => {
     const cfg = await loadRPCConfig("tests/fixtures/empty-string.config.ts");
-    expect(cfg.adapter).toBe("express");
+    expect(cfg.rpcPrefix).toBe("__rpc");
+    expect(cfg.serverFiles).toBe("exact");
+  });
+
+  it("should publish the global prefix on the default-discovery path", async () => {
+    // F2: the config-file search loop returned without calling
+    // setGlobalPrefix, so the *common* case (an rpc.config.ts exists) was the
+    // one that never published it — even though the explicit-configFile and
+    // no-config paths both did.
+    vi.resetModules();
+    const prev = process.cwd();
+    process.chdir("tests/fixtures");
+    try {
+      serverFunctionsMap.clear();
+      setGlobalPrefix(undefined);
+      const { loadRPCConfig: fresh } = await import("../src/index.ts");
+      const cfg = await fresh();
+
+      expect(cfg.rpcPrefix).toBe("_sv");
+      expect(getGlobalPrefix()).toBe("_sv");
+    } finally {
+      setGlobalPrefix(undefined);
+      process.chdir(prev);
+    }
+  });
+
+  it("should treat an object first argument as the options bag, not a config path", async () => {
+    // `loadRPCConfig({ silent: true })` is the documented call form. Passing
+    // it as `configFile` used to make `resolve()` throw on a non-string, and
+    // the catch silently downgraded the resolved config to the defaults.
+    vi.resetModules();
+    const prev = process.cwd();
+    process.chdir("tests/fixtures");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      serverFunctionsMap.clear();
+      const { loadRPCConfig: loadRPCConfigFresh } = await import(
+        "../src"
+      );
+      const cfg = await loadRPCConfigFresh({ silent: true });
+      expect(cfg.rpcPrefix).toBe("_sv");
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("Failed to load RPC config"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+      setGlobalPrefix(undefined);
+      process.chdir(prev);
+    }
   });
 
   it("should discover default config file rpc.config.ts when called from its own directory (lines 108-118)", async () => {
@@ -134,7 +196,6 @@ describe("loadRPCConfig", () => {
       );
       const cfg = await loadRPCConfigFresh();
       expect(cfg.rpcPrefix).toBe("_sv");
-      expect(cfg.adapter).toBe("express");
     } finally {
       process.chdir(prev);
     }
@@ -150,7 +211,11 @@ describe("default options", () => {
 
   it("should have sensible RPC options", () => {
     expect(defaultRPCOptions.rpcPrefix).toBe("__rpc");
-    expect(defaultRPCOptions.adapter).toBe("express");
+    expect(defaultRPCOptions.serverFiles).toBe("exact");
+    // The adapter is not a config option: it is whichever subpath you import
+    // (`@thednp/rpc/express`, `/hono`, ...). Nothing ever read a runtime value,
+    // so it was removed rather than left as an inert field.
+    expect("adapter" in defaultRPCOptions).toBe(false);
   });
 
   it("should have sensible middleware options", () => {
@@ -539,6 +604,61 @@ describe("getClientModules", () => {
 
     expect(result?.code.length).toBeGreaterThan(0);
     expect(result?.map).toBeDefined();
+  });
+
+  it("should pick the esbuild transformer on vite 7 and oxc on vite 8", async () => {
+    const oxc = vite.transformWithOxc as unknown as ReturnType<typeof vi.fn>;
+    const esbuild = vite.transformWithEsbuild as unknown as ReturnType<
+      typeof vi.fn
+    >;
+
+    for (
+      const [ctx, expected, other] of [
+        [mockPlugin7Context, esbuild, oxc],
+        [mockPlugin8Context, oxc, esbuild],
+      ] as const
+    ) {
+      oxc.mockClear();
+      esbuild.mockClear();
+      const plugin = rpcPlugin();
+      (plugin.buildStart as any)?.call(ctx);
+      (plugin.configResolved as any)({ mode: "development" } as any);
+      scannedServerFiles.add("some-id.ts");
+      await (plugin.transform as any)(
+        "createServerFunction()",
+        "some-id.ts",
+        { ssr: false },
+      );
+      expect(
+        expected,
+        `vite ${(ctx as any).meta.viteVersion}`,
+      ).toHaveBeenCalled();
+      expect(other).not.toHaveBeenCalled();
+    }
+  });
+
+  it("should still use oxc on a double-digit vite major version", async () => {
+    // `Number(viteVersion[0]) >= 8` reads "1" from "10.4.2" and fell through
+    // to esbuild, silently using the wrong transformer on Vite 10+.
+    const oxc = vite.transformWithOxc as unknown as ReturnType<typeof vi.fn>;
+    const esbuild = vite.transformWithEsbuild as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    oxc.mockClear();
+    esbuild.mockClear();
+
+    const plugin = rpcPlugin();
+    (plugin.buildStart as any)?.call(mockPlugin10Context);
+    (plugin.configResolved as any)({ mode: "development" } as any);
+    scannedServerFiles.add("some-id.ts");
+    await (plugin.transform as any)(
+      "createServerFunction()",
+      "some-id.ts",
+      { ssr: false },
+    );
+
+    expect(oxc).toHaveBeenCalled();
+    expect(esbuild).not.toHaveBeenCalled();
   });
 
   it("should not rewrite non-scanned modules mentioning createServerFunction", async () => {

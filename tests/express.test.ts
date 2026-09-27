@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
@@ -10,7 +10,6 @@ import {
 import {
   getRequestContext,
   redirect as serverRedirect,
-  sendResponse,
 } from "../src/context.ts";
 import { scannedServerFiles } from "../src/scanForServerFiles.ts";
 import {
@@ -26,8 +25,10 @@ import {
   createRPCMiddleware,
 } from "../src/express/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
+import { setGlobalPrefix } from "../src/server.ts";
 import rpcPlugin, { loadRPCConfig } from "../src/index.ts";
 import { defineConfig } from "../src/config.ts";
+import { defaultRPCOptions } from "../src/options.ts";
 import {
   makeNext,
   makeReq,
@@ -58,7 +59,6 @@ describe("Express helpers extended", () => {
       seedServerMap();
       const mw = createRPCMiddleware();
       const appUse = vi.fn();
-      const app = { use: appUse } as any;
       appUse(mw);
       expect(appUse).toHaveBeenCalledOnce();
     });
@@ -92,13 +92,34 @@ describe("Express helpers extended", () => {
       await expect(p).rejects.toThrow("stream fail");
     });
 
-    it("should resolve as text when JSON parse fails", async () => {
+    it("should sniff a body with no Content-Type as JSON when it parses", async () => {
+      // No Content-Type at all (curl, and the nojs form fallback): the lenient
+      // sniff must stay, or a headerless JSON body would arrive as a string.
+      const req = makeReq({});
+      const p = readBody(req);
+      simulateBody(req, '{"hello":"world"}');
+      const result = await p;
+      expect(result.data).toEqual({ hello: "world" });
+    });
+
+    it("should resolve as text when a non-JSON body does not parse", async () => {
       const req = makeReq({});
       const p = readBody(req);
       simulateBody(req, "not-json");
       const result = await p;
       expect(result.contentType).toBe("text/plain");
       expect(result.data).toBe("not-json");
+    });
+
+    it("should reject with a 400 when a declared JSON body does not parse", async () => {
+      // Previously this resolved as `text/plain` with the raw string — a
+      // JSON-declared function silently received a string and answered 200.
+      // A malformed body is a client error, and every supported host framework
+      // answers 400 here.
+      const req = makeReq({ headers: { "content-type": "application/json" } });
+      const p = readBody(req);
+      simulateBody(req, "not-json");
+      await expect(p).rejects.toMatchObject({ status: 400 });
     });
   });
 
@@ -905,6 +926,42 @@ describe("Express createRPCMiddleware handler", () => {
     expect(sentData).toEqual({ error: "Bad Request" });
   });
 
+  it("should return 400 when GET ?args= is not valid JSON", async () => {
+    // `?args=abc` is a malformed request, not a server fault. It used to throw
+    // out of the dispatch's try and be reported as a 500.
+    const fn = vi.fn();
+    createServerFunction("public-malformed-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: `/__rpc/public-malformed-args?args=${
+        encodeURIComponent("not json")
+      }`,
+      method: "GET",
+    });
+    const res = makeRes();
+    await mw(req, res, makeNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it("should answer 400 end to end for a malformed JSON body", async () => {
+    // The readBody-level test asserts the rejection; this asserts the status
+    // the client actually sees, which is what the framework consensus requires.
+    const fn = vi.fn();
+    createServerFunction("malformed-body", fn);
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/malformed-body",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, "{not json");
+    await mw(req, res, makeNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
   it("should return 403 when Origin does not match the configured origin", async () => {
     createServerFunction("fn", vi.fn());
     const mw = createRPCMiddleware({ origin: "https://app.example.com" });
@@ -1076,18 +1133,18 @@ describe("Express createRPCMiddleware handler", () => {
 
 describe("plugin lifecycle", () => {
   it("defineConfig should merge options with defaults", async () => {
-    const cfg = defineConfig({ adapter: "hono" });
-    expect(cfg.adapter).toBe("hono");
-    expect(cfg.rpcPrefix).toBe("__rpc");
+    const cfg = defineConfig({ serverFiles: "glob", rpcPrefix: "@demo" });
+    expect(cfg.serverFiles).toBe("glob");
+    expect(cfg.rpcPrefix).toBe("@demo");
+    expect(cfg.scanRoot).toBe(defaultRPCOptions.scanRoot);
   });
 
   it("defineConfig should skip explicitly undefined values", () => {
     const cfg = defineConfig({
-      adapter: undefined,
+      scanRoot: undefined,
       rpcPrefix: "_x",
       serverFiles: undefined,
     });
-    expect(cfg.adapter).toBe("express");
     expect(cfg.rpcPrefix).toBe("_x");
     expect(cfg.serverFiles).toBe("exact");
   });
@@ -1198,10 +1255,136 @@ describe("plugin lifecycle", () => {
   it("loadRPCConfig should return cached config on second call without args", async () => {
     // First call with a valid config file sets RPCConfig
     const firstResult = await loadRPCConfig("tests/fixtures/good.config.ts");
-    expect(firstResult.adapter).toBe("hono");
+    expect(firstResult.serverFiles).toBe("glob");
     // Second call without args should return cached config
     const secondResult = await loadRPCConfig();
-    expect(secondResult.adapter).toBe("hono");
+    expect(secondResult.serverFiles).toBe("glob");
     expect(secondResult.rpcPrefix).toBe("_sv");
+  });
+});
+
+// ─── Global-prefix dispatch (audit finding F1) ─────────────────────────
+//
+// `createRPCMiddleware` used to merge `{ rpcPrefix: defaultRPCOptions.rpcPrefix }`
+// into its options *before* resolving the prefix, so `rpcPrefix` was always the
+// truthy string "__rpc" and the trailing `|| getGlobalPrefix() || defaultPrefix`
+// was unreachable in all five adapters. `createServerFunction` DOES honour the
+// global prefix (src/createFunction.ts:61), so the two halves disagreed:
+//
+//   setGlobalPrefix("@demo"); createServerFunction("greet", ...)
+//   createRPCMiddleware({})  ->  POST /@demo/greet  =>  next()  (404)
+//                              POST /__rpc/greet  =>  "Function not found"
+//
+// Every fixture in tests/fixtures/*.ts calls `setGlobalPrefix(undefined)`, so
+// the state this feature is *about* was never exercised — 100% coverage and a
+// broken feature at the same time. These tests set a real global prefix.
+
+describe("global-prefix dispatch", () => {
+  beforeEach(() => {
+    for (const map of serverFunctionsByPrefix.values()) map.clear();
+  });
+
+  afterEach(() => {
+    setGlobalPrefix(undefined);
+    for (const map of serverFunctionsByPrefix.values()) map.clear();
+  });
+
+  const registerUnderGlobalPrefix = (name: string) =>
+    createServerFunction(name, vi.fn(async () => ({ data: "ok" })) as never);
+
+  // POST dispatch reads the body off the stream, so the request has to be
+  // ended or the middleware waits forever.
+  const post = async (
+    mw: ReturnType<typeof createRPCMiddleware>,
+    url: string,
+  ) => {
+    const req = makeReq({
+      originalUrl: url,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, "[]");
+    await mw(req, res, next);
+    return { res, next };
+  };
+
+  it("dispatches to the global prefix when no explicit prefix is passed", async () => {
+    setGlobalPrefix("@demo");
+    registerUnderGlobalPrefix("greet");
+    // Registered under "@demo" — the prefix the middleware must now use.
+    expect([...getFunctionsForPrefix("@demo").keys()]).toEqual(["greet"]);
+
+    const { res } = await post(createRPCMiddleware(), "/@demo/greet");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.chunks.join("")).toContain("ok");
+  });
+
+  it("no longer falls through to next() for the global prefix", async () => {
+    setGlobalPrefix("@demo");
+    registerUnderGlobalPrefix("greet");
+    const { next } = await post(createRPCMiddleware(), "/@demo/greet");
+
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch the global prefix under the default prefix", async () => {
+    setGlobalPrefix("@demo");
+    registerUnderGlobalPrefix("greet");
+    // `/__rpc` is not this middleware's prefix any more, so the outer gate
+    // treats it as a non-RPC path and falls through rather than 404-ing.
+    const { next, res } = await post(createRPCMiddleware(), "/__rpc/greet");
+
+    expect(next).toHaveBeenCalled();
+    expect(res.chunks.join("")).not.toContain("ok");
+  });
+
+  it("lets an explicit prefix win over the global prefix", async () => {
+    setGlobalPrefix("@demo");
+    createServerFunction(
+      "greet",
+      vi.fn(async () => ({ data: "explicit" })) as never,
+      { rpcPrefix: "@explicit" },
+    );
+
+    const { res } = await post(
+      createRPCMiddleware({ rpcPrefix: "@explicit" }),
+      "/@explicit/greet",
+    );
+
+    expect(res.chunks.join("")).toContain("explicit");
+  });
+
+  it("still uses the default prefix when no global prefix is set", async () => {
+    // The overwhelmingly common case (every example, every other test): must
+    // be unchanged by the F1 fix.
+    setGlobalPrefix(undefined);
+    createServerFunction(
+      "greet",
+      vi.fn(async () => ({ data: "default" })) as never,
+    );
+    expect([...getFunctionsForPrefix("__rpc").keys()]).toEqual(["greet"]);
+
+    const { res } = await post(createRPCMiddleware(), "/__rpc/greet");
+
+    expect(res.chunks.join("")).toContain("default");
+  });
+
+  it("keeps the boundary check on the global prefix", async () => {
+    // `__rpc` boundary safety must hold for a resolved prefix too, not just
+    // the default one: a sibling segment must not dispatch.
+    setGlobalPrefix("@demo");
+    registerUnderGlobalPrefix("greet");
+    const next = makeNext();
+
+    await createRPCMiddleware()(
+      makeReq({ originalUrl: "/@demo-evil/greet", method: "POST" }),
+      makeRes(),
+      next,
+    );
+
+    expect(next).toHaveBeenCalled();
   });
 });

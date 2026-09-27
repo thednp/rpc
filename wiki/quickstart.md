@@ -31,7 +31,6 @@ import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: "__A_server",
-  adapter: "express",
 });
 ```
 
@@ -221,4 +220,5 @@ In **production**, remember the prefix proxy must point at a real server that re
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

@@ -1,5 +1,7 @@
 //#region src/constants.ts
+/** Warning text used when a request is cancelled by an HTTP 408/499 response. */
 const REQUEST_CANCELLED = "Request was cancelled";
+/** Prefix of the `Error` message the client helpers throw for a non-OK HTTP response. The status text is appended; the response body is deliberately not read, so server-side detail never reaches the client through this path. */
 const FETCH_ERROR_PREFIX = "Fetch error: ";
 //#endregion
 //#region src/client-helpers.ts

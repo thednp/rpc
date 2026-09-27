@@ -1,5 +1,5 @@
 import { Connect, Plugin, ResolvedConfig } from "vite";
-import { MiddlewareOptions as MiddlewareOptions$1, RpcPluginOptions as RpcPluginOptions$1 } from "@thednp/rpc";
+import { AdapterName as AdapterName$1, MiddlewareOptions as MiddlewareOptions$1 } from "@thednp/rpc";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { NextFunction, Request, Response as Response$1 } from "express";
 import { MiddlewareHandler } from "hono";
@@ -19,7 +19,7 @@ type ExpressMiddlewareOptions = MiddlewareOptions$1<"express">;
  * Express middleware factory: takes optional initial options and returns
  * the Express/Connect-compatible handler.
  */
-type ExpressMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "express">(initialOptions?: Partial<ExpressMiddlewareOptions>) => ExpressMiddlewareHooks["handler"];
+type ExpressMiddlewareFn = <A extends AdapterName$1 = "express">(initialOptions?: Partial<ExpressMiddlewareOptions>) => ExpressMiddlewareHooks["handler"];
 /**
  * Express/Connect middleware handler signature used by the RPC middleware.
  */
@@ -45,7 +45,7 @@ interface HonoMiddlewareHooks {
  * Hono middleware factory: takes optional initial options and returns
  * the Hono-compatible handler.
  */
-type HonoMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "hono">(initialOptions?: Partial<MiddlewareOptions$1<A>>) => HonoMiddlewareHooks["handler"];
+type HonoMiddlewareFn = <A extends AdapterName$1 = "hono">(initialOptions?: Partial<MiddlewareOptions$1<A>>) => HonoMiddlewareHooks["handler"];
 //#endregion
 //#region src/fastify/types.d.ts
 /**
@@ -56,7 +56,7 @@ type FastifyMiddlewareOptions = MiddlewareOptions$1<"fastify">;
  * Fastify middleware factory: takes optional initial options and returns
  * the Fastify-compatible handler.
  */
-type FastifyMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "fastify">(initialOptions?: Partial<FastifyMiddlewareOptions>) => FastifyMiddlewareHooks["handler"];
+type FastifyMiddlewareFn = <A extends AdapterName$1 = "fastify">(initialOptions?: Partial<FastifyMiddlewareOptions>) => FastifyMiddlewareHooks["handler"];
 /**
  * Fastify middleware handler signature used by the RPC middleware.
  */
@@ -90,7 +90,7 @@ interface KoaMiddlewareHooks {
  * Koa middleware factory: takes optional initial options and returns
  * the Koa-compatible handler.
  */
-type KoaMiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "koa">(initialOptions?: Partial<KoaMiddlewareOptions>) => KoaMiddlewareHooks["handler"];
+type KoaMiddlewareFn = <A extends AdapterName$1 = "koa">(initialOptions?: Partial<KoaMiddlewareOptions>) => KoaMiddlewareHooks["handler"];
 //#endregion
 //#region src/h3/types.d.ts
 /**
@@ -112,9 +112,20 @@ interface H3MiddlewareHooks {
  * h3 middleware factory: takes optional initial options and returns
  * the h3-compatible handler.
  */
-type H3MiddlewareFn = <A extends RpcPluginOptions$1["adapter"] = "h3">(initialOptions?: Partial<H3MiddlewareOptions>) => H3MiddlewareHooks["handler"];
+type H3MiddlewareFn = <A extends AdapterName$1 = "h3">(initialOptions?: Partial<H3MiddlewareOptions>) => H3MiddlewareHooks["handler"];
 //#endregion
 //#region src/types.d.ts
+/**
+ * Every framework adapter rpc ships a middleware for.
+ *
+ * This is the key type for {@link FrameworkHooks}, so `MiddlewareOptions<A>`
+ * can type each adapter's `handler` signature. It is a *type* only — the
+ * adapter you get is the one you import (`@thednp/rpc/express`,
+ * `@thednp/rpc/hono`, …). There is deliberately no config option that selects
+ * it: a runtime value could only ever disagree with the subpath actually
+ * mounted, and nothing read it.
+ */
+type AdapterName = "express" | "hono" | "h3" | "fastify" | "koa";
 /**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
  * Used to keep the middleware options type-safe per adapter.
@@ -274,12 +285,13 @@ type ClientFunctionWithOptions = ClientFunction & {
 };
 /**
  * Internal plugin options accepted by `getClientModules`.
+ *
+ * Only the prefix: the generated stubs are adapter-agnostic, since they are
+ * plain `fetch` calls.
  */
 interface RpcPluginOptionsInternal {
   /** RPC endpoint prefix (e.g. "__rpc") */
   rpcPrefix: string;
-  /** Framework adapter name */
-  adapter?: string | undefined;
 }
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
@@ -325,13 +337,6 @@ interface RpcPluginOptions {
    */
   rpcPrefix: "__rpc" | string;
   /**
-   * Option to set an adapter for the middleware connection. The default is _express_,
-   * which is the most popular and battle tested server app. The _express_ adapter is
-   * also compatible with the vite's Connect development server.
-   * @default express
-   */
-  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
-  /**
    * Root directory from which the plugin scans for server files.
    * Defaults to `<root>/src/api`. Use this in monorepos where server files
    * live in a shared package outside the current project root.
@@ -353,7 +358,7 @@ interface RpcPluginOptions {
    */
   silent?: boolean;
 }
-interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
+interface MiddlewareOptions<A extends AdapterName = "express"> {
   /**
    * Name for the middleware (used for identification in Express stack)
    */
@@ -379,7 +384,7 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * // Results in endpoints like: /api/rpc/myFunction
    * rpcPrefix: "api/rpc"
    */
-  rpcPrefix?: string | false;
+  rpcPrefix?: string;
   /**
    * Allowed request origin(s) — a single origin string or an allowlist of them
    * (e.g. `"https://example.com"` or
@@ -480,7 +485,9 @@ type InnerModReturn<T extends JsonValue> = {
  * @param opts - Optional settings; `silent` suppresses the "no config found" warning
  * @returns Resolved RPC plugin options
  */
-declare const loadRPCConfig: (configFile?: string, opts?: {
+declare const loadRPCConfig: (configFile?: string | {
+  silent?: boolean;
+}, opts?: {
   silent?: boolean;
 }) => Promise<RpcPluginOptions>;
 /**
@@ -492,5 +499,5 @@ declare const loadRPCConfig: (configFile?: string, opts?: {
  */
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin;
 //#endregion
-export { type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type StubOptions, type SupportableContentType, rpcPlugin as default, loadRPCConfig };
+export { type AdapterName, type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type FrameworkHooks, type FrameworkMiddlewareFn, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type StubOptions, type SupportableContentType, rpcPlugin as default, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map

@@ -5,7 +5,7 @@ import type {
   HookHandlerDoneFunction,
 } from "fastify";
 import type fp from "fastify-plugin";
-import type { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import type { AdapterName, MiddlewareOptions } from "@thednp/rpc";
 
 /**
  * Fastify RPC plugin signature: registers the middleware as a preHandler hook.
@@ -44,7 +44,7 @@ export type FastifyMiddlewareOptions = MiddlewareOptions<"fastify">;
  * the Fastify-compatible handler.
  */
 export type FastifyMiddlewareFn = <
-  A extends RpcPluginOptions["adapter"] = "fastify",
+  A extends AdapterName = "fastify",
 >(
   initialOptions?: Partial<FastifyMiddlewareOptions>,
 ) => FastifyMiddlewareHooks["handler"];

@@ -15,6 +15,7 @@ Run multiple RPC instances in parallel with different prefixes. Enables versione
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices
 
 ## Problem
@@ -46,9 +47,11 @@ export const login = createServerFunction("login", async (...) => {...}, { rpcPr
 export const login = createServerFunction("login", async (...) => {...}, { rpcPrefix: "v2:rpc" });
 ```
 
-Endpoints:
-- `POST /api/v1/v1:rpc/login`
-- `POST /api/v2/v2:rpc/login`
+Endpoints — the prefix **is** the first path segment, and nothing more is inserted:
+- `POST /v1:rpc/login`
+- `POST /v2:rpc/login`
+
+> **The prefix is the whole route.** A middleware built with `rpcPrefix: "v1:rpc"` gates on the anchored regex `^/v1:rpc/` and strips that exact segment, so the endpoint is always `/{prefix}/{functionName}` at the mount root. Mounting it under an extra path (`app.use("/api/v1", …)`) does **not** namespace it — the gate is evaluated against the full request path, so `POST /api/v1/v1:rpc/login` falls through to `next()` and 404s. The working example in `examples/advanced` mounts `admin:rpc` and `public:rpc` at the app root for exactly this reason.
 
 ## Setup
 
@@ -109,51 +112,47 @@ import { createRPCMiddleware } from "@thednp/rpc/express";
 
 const app = express();
 
-// v1 API
-app.use(
-  "/api/v1",
-  createRPCMiddleware({
-    rpcPrefix: "v1:rpc",
-    path: /^\/api\/v1/,
-  }),
-);
-
-// v2 API
-app.use(
-  "/api/v2",
-  createRPCMiddleware({
-    rpcPrefix: "v2:rpc",
-    path: /^\/api\/v2/,
-  }),
-);
+// Mount at the app root: the prefix is the first path segment.
+app.use(createRPCMiddleware({ rpcPrefix: "v1:rpc" }));
+app.use(createRPCMiddleware({ rpcPrefix: "v2:rpc" }));
 ```
+
+> **If your server files use the `*.server.ts` layout, pass `serverFiles: "glob"` to *each* middleware.** The lazy production scan reads `serverFiles` and `scanRoot` from the *middleware's* options, not from `rpc.config.ts` — so a config file alone is not enough, and without it the scan matches nothing and every endpoint 404s. With the default `"exact"` layout (`server.ts` directly in the scan root) this does not apply.
+>
+> ```typescript
+> app.use(createRPCMiddleware({ rpcPrefix: "v1:rpc", serverFiles: "glob" }));
+> ```
 
 ### 3. Client Usage
 
-The plugin still generates client modules automatically. Each `rpcPrefix` generates stubs that call the correct endpoint:
+Only the **configured** prefix gets auto-generated stubs. The generated module is built from `getFunctionsForPrefix(config.rpcPrefix)` — a single prefix, decided by `rpc.config.ts` (or the `rpc()` options in `vite.config.ts`). Functions under any *other* prefix are not code-generated, and importing them from the generated module fails to resolve.
+
+So there are two cases:
+
+**The function's prefix matches the configured one** — import it and it works:
 
 ```typescript
-// src/api/v1/index.ts
-export * from "./auth.server";
+// src/api/auth.server.ts — registered under the configured prefix
+export const login = createServerFunction("login", async (signal, email: string) => ({...}));
 
 // Client code
-import { login } from "./api/v1";
+import { login } from "./api";
 
-const { data } = login("user@example.com", "password");
-const result = await data; // → POST /api/v1/v1:rpc/login
+const { data } = login("user@example.com");
+await data; // → POST /v1:rpc/login
 ```
+
+**The prefix is not the configured one** — build the stub yourself with `getClientStub` from `@thednp/rpc/helpers`. This is also the right tool for privileged prefixes you deliberately do not want in the public bundle:
 
 ```typescript
-// src/api/v2/index.ts
-export * from "./auth.server";
+import { getClientStub } from "@thednp/rpc/helpers";
 
-// Client code
-// src/index.ts
-import { login } from "./api/v2";
-
-const { data } = login({ email: "user@example.com", password: "pass", mfa: "123456" });
-const result = await data; // → POST /api/v2/v2:rpc/login
+// Manually wire an endpoint for a prefix the bundle does not generate.
+const adminGetUser = getClientStub("admin:rpc", "get-user");
+const adminStats = getClientStub("admin:rpc", "stats", { method: "GET" });
 ```
+
+> A sensible convention: give the public/browser-facing prefix the configured one (so its stubs are generated), and hand-wire anything privileged. That is exactly the split in `examples/advanced`, where `public:rpc` is the config prefix and `admin:rpc` is imported explicitly.
 
 ## Best Practices
 
@@ -187,11 +186,20 @@ src/api/
     index.ts
 ```
 
-### Origin Validation per Instance
+A nested `*.server.ts` layout is only picked up in **glob** mode. Pass `serverFiles: "glob"` to every middleware that should scan it — the lazy production scan reads that option from the middleware, not from `rpc.config.ts`:
 
 ```typescript
 app.use(
-  "/api/v1",
+  createRPCMiddleware({ rpcPrefix: "v1:rpc", serverFiles: "glob" }),
+);
+```
+
+### Origin Validation per Instance
+
+Each instance carries its own `origin` allowlist, and because the prefix is the first path segment they mount side by side at the root:
+
+```typescript
+app.use(
   createRPCMiddleware({
     rpcPrefix: "v1:rpc",
     origin: "https://legacy-app.example.com",
@@ -199,7 +207,6 @@ app.use(
 );
 
 app.use(
-  "/api/v2",
   createRPCMiddleware({
     rpcPrefix: "v2:rpc",
     origin: "https://app.example.com",
@@ -235,17 +242,11 @@ export const getUser = createServerFunction(
 
 ```typescript
 // server.ts
-app.use(
-  "/api/public",
-  createRPCMiddleware({ rpcPrefix: "public:rpc" }),
-);
+app.use(createRPCMiddleware({ rpcPrefix: "public:rpc" }));
 
 app.use(
-  "/api/admin",
-  createRPCMiddleware({
-    rpcPrefix: "admin:rpc",
-    // Could add auth middleware here
-  }),
+  authMiddleware, // could sit between the two
+  createRPCMiddleware({ rpcPrefix: "admin:rpc" }),
 );
 ```
 
@@ -274,16 +275,9 @@ export const createOrder = createServerFunction(
 ```
 
 ```typescript
-// server.ts
-app.use(
-  "/api/orders/stable",
-  createRPCMiddleware({ rpcPrefix: "orders:stable" }),
-);
-
-app.use(
-  "/api/orders/canary",
-  createRPCMiddleware({ rpcPrefix: "orders:canary" }),
-);
+// server.ts — endpoints are /orders:stable/create and /orders:canary/create
+app.use(createRPCMiddleware({ rpcPrefix: "orders:stable" }));
+app.use(createRPCMiddleware({ rpcPrefix: "orders:canary" }));
 ```
 
 ## Backward Compatibility
@@ -299,9 +293,15 @@ export const login = createServerFunction(
 );
 ```
 
+### Only the first scan used to run
+
+`scanForServerFiles` memoizes per scan target — the resolved `(scanRoot, serverFiles, rpcPrefix)` triple — so a second RPC instance on a different prefix is scanned even if another scan already happened. (It used to be a single process-wide flag, so the first scan suppressed every later one and the second instance 404'd.) Each prefix still scans at most once, so this costs nothing at request time.
+
+**A function that declares no `rpcPrefix` of its own** is registered under whichever prefix the scan was configured with — so with two prefixes, pass the prefix on each function (the pattern above), or give the public instance the one in `rpc.config.ts`. A function that *does* declare its prefix is registered correctly by a single scan.
+
 ## Security: Do Not Trust the Prefix
 
-The prefix is a routing segment, not a secret. `getClientModules` only emits the config prefix's stubs (so `admin:rpc` never appears in a `public:rpc` client bundle), but an attacker can still `POST /admin:rpc/get-user` directly. Every privileged prefix **must** call auth inside the handler (e.g. `requireAdmin` via `sendResponse(403)` in `examples/advanced/src/api/middleware.ts:46`) — never rely on hiding the prefix string.
+The prefix is a routing segment, not a secret. `getClientModules` only emits the config prefix's stubs (so `admin:rpc` never appears in a `public:rpc` client bundle), but an attacker can still `POST /admin:rpc/get-user` directly. Every privileged prefix **must** call auth inside the handler (e.g. `requireAdminSession` via `sendResponse(403)` in `examples/advanced/src/api/middleware.ts:98`) — never rely on hiding the prefix string.
 
 ## Limitations
 

@@ -59,22 +59,25 @@ This works because TypeScript resolves `./api` to the real typed server module (
 ## Error Handling
 
 - **Fetch errors** (network failure, CORS) — thrown from `await data`
-- **HTTP 4xx/5xx responses** — thrown from `await data`; the rejection's `message` is the error string from the response body
+- **HTTP 4xx/5xx responses** — thrown from `await data`. The rejection's `message` is `"Fetch error: " + response.statusText` — the **status text only**. The response body is deliberately not read on this path, so nothing the server put in it reaches you here
+- **A top-level `error` in a 2xx body** — thrown from `await data` with that string as the message. This is the only path where server-provided text surfaces, and it only happens when the response was already `ok`
 - **Validation-as-data** — returned `{ error }` from a server function resolves normally; check `'error' in result` (see [Server Functions](./server-functions.md#input-validation))
-- **Cancellation** — aborts the fetch and warns `"Request was cancelled"` in the console
+- **Cancellation** — rejects the in-flight `fetch` (you get the `AbortError`), it does not resolve
 
-When a server function **throws** (including `RPCError`, see [Server Functions](./server-functions.md#typed-errors-rpcerror)), the client's `data` promise rejects with an `Error` whose `message` is the error string:
+When a server function **throws** (including `RPCError`, see [Server Functions](./server-functions.md#typed-errors-rpcerror)), the response is a `500` — and because that is not `ok`, the rejection carries the generic status text in **both** development and production:
 
 ```ts
 try {
   const { data } = getProfile(userId);
   const profile = await data;
 } catch (err) {
-  (err as Error).message; // "User not found" (dev) / "Internal Server Error" (prod)
+  (err as Error).message; // "Fetch error: Internal Server Error"
 }
 ```
 
-> In development the 500 response body also carries the `RPCError` `code` and `data` fields, so you can inspect them with the raw fetch in devtools. In production only the generic message is ever sent. The generated client throws a plain `Error` — the `code`/`data` fields are not re-exposed on the rejection.
+> **This is deliberate, and it is the reason you cannot branch on server error text.** A thrown handler is an *unexpected* failure, so the server returns a generic body (`{ error: "Internal Server Error" }`) and the generated stub never reads it — nothing internal leaks to the browser, in dev or prod. In development the 500 body additionally carries the `RPCError` `code` and `data` fields; you can inspect those in devtools with a raw `fetch`, but they are not re-exposed on the rejection. The `code`/`data` pair is server-side only, and `RPCError` is not a client export.
+
+If you need to *branch* on a failure rather than just report one, model it as data instead of throwing: return `{ error, code }` from the handler with a `200`, and the client resolves it as a value you can discriminate on. That is the difference between the two bullets above.
 
 ## Multipart / File Uploads
 
@@ -107,7 +110,7 @@ if (!res.ok) throw new Error(json.error);  // transport-level failure
 const result = unwrapEnvelope<string>(json); // "Hello World!"
 ```
 
-`unwrapEnvelope` throws when the body carries a **top-level** `error` — the shape the server returns for `400`/`404`/`405`/`415`/`500`:
+`unwrapEnvelope` throws when the body carries a **top-level** `error` with no `data` key — the shape the server returns for `400`/`403`/`404`/`405`/`415`/`500`:
 
 ```ts
 import { unwrapEnvelope } from '@thednp/rpc/helpers';
@@ -124,7 +127,22 @@ Two things it deliberately does **not** do:
 - **It does not throw for `{ data: { error } }`.** That is a `200` carrying a validation outcome as its result — the validation-as-data contract — and it resolves normally. Only a top-level `error` with no `data` aborts.
 - **It is status-code agnostic.** Keep the `res.ok` check; that is what distinguishes a real `200` from a body that merely parses.
 
-> `RPCError` is a **server-side** export (`@thednp/rpc/server`), not a client one — it is not available from `@thednp/rpc/helpers`, and its `code`/`data` are stripped from responses in production regardless. This is the same unwrapping the auto-generated stubs perform internally via `handleResponse`.
+> `RPCError` is a **server-side** export (`@thednp/rpc/server`), not a client one — it is not available from `@thednp/rpc/helpers`, and its `code`/`data` are stripped from responses in production regardless.
+
+### How this differs from the generated stubs
+
+The stubs unwrap internally with `handleResponse`, which is **not** identical to `unwrapEnvelope`, and the difference is deliberate:
+
+| | `handleResponse` (stubs) | `unwrapEnvelope` (yours) |
+| --- | --- | --- |
+| Reads the body | yes | no — you pass it in |
+| Checks `res.ok` | yes, throws on any non-OK | no, status-code agnostic |
+| `{ error, data }` (both keys) | **throws** on `error` | returns `data` |
+| `{ error }` only | throws | throws |
+
+The meaningful row is the third. `handleResponse` tests bare truthiness — `if (result.error)` — while `unwrapEnvelope` requires the `data` key to be absent. So a body carrying *both* keys resolves to `data` for `unwrapEnvelope` and throws for the stubs.
+
+`@thednp/rpc` never emits both keys (a `200` carries `data`, an error response carries `error` alone), so this only shows up with a hand-rolled or proxied body. Reach for `unwrapEnvelope` when you want the conservative reading — the server's `data` wins — and for the stubs when you want the strict one.
 
 ## @tanstack/react-query Integration
 
@@ -213,4 +231,5 @@ Because the query is only created on demand (client-side), nothing async is seri
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

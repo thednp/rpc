@@ -279,7 +279,7 @@ createServer(toNodeListener(app)).listen(3000);
 
 ### Body Size Limits
 
-Cap request bodies with h3's native `bodyLimit`/`assertBodySize`, which swap `event.req` for a bounded stream (never consumed up-front), or use a reverse proxy. See [Best Practices — Body Limits](./best-practices.md#body-limits) for the pattern, and the extracted `middleware/bodyLimit.js` in the [h3 example](../examples/h3/middleware/bodyLimit.js).
+Cap request bodies with h3's native `bodyLimit(limit)`, which swaps `event.req` for a bounded stream so the cap is enforced *while* the body streams rather than after buffering it. Both enforcement paths answer `413 Payload Too Large` — the up-front `Content-Length` check, and the mid-read check for chunked bodies, which the adapter surfaces out of its dispatch `try` rather than reporting as a `500`. See [Best Practices — Body Limits](./best-practices.md#body-limits), or use a reverse proxy. See [Best Practices — Body Limits](./best-practices.md#body-limits) for the pattern, and the extracted `middleware/bodyLimit.js` in the [h3 example](../examples/h3/middleware/bodyLimit.js).
 
 ### Static Assets
 
@@ -351,4 +351,5 @@ See the working example in [demo/netlify/functions/rpc.ts](../demo/netlify/funct
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

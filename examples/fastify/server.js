@@ -38,7 +38,7 @@ if (!isProduction) {
 } else {
   // Load RPC configuration
   const { loadRPCConfig } = await import("@thednp/rpc");
-  const { adapter, ...options } = await loadRPCConfig();
+  const options = await loadRPCConfig();
 
   // Register RPC plugin
   await app.register(import("@thednp/rpc/fastify/plugin"), options);

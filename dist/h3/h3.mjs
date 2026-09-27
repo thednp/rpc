@@ -1,11 +1,12 @@
-import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, isOriginRequestAllowed, provideRequestContext, scanForServerFiles } from "@thednp/rpc/server";
+import { clientErrorMessage, clientErrorStatus, escapeRegExp, formatError, hasContentTypeMismatch, isClientHttpError, isOriginRequestAllowed, provideRequestContext, resolveRPCPrefix, scanForServerFiles } from "@thednp/rpc/server";
 import { HTTPResponse, redirect as redirect$1 } from "h3";
-const defaultRPCOptions = {
-	rpcPrefix: "__rpc",
-	adapter: "express",
-	serverFiles: "exact",
-	scanRoot: void 0
-};
+//#region src/options.ts
+/**
+* Baseline middleware options. Note `rpcPrefix` is `undefined` rather than
+* `defaultPrefix` on purpose: leaving it unset lets `resolveRPCPrefix` fall
+* through to the global prefix, which is what makes a published global prefix
+* reach the middleware.
+*/
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
 	path: void 0,
@@ -39,14 +40,40 @@ const getFunctionsForPrefix = (prefix) => {
 };
 //#endregion
 //#region src/constants.ts
+/** Body of a 404. Deliberately does not name the requested function. */
 const FUNCTION_NOT_FOUND = "Function not found";
+/** Body of a 405, returned when the HTTP method does not match the function's declared method. */
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
+/** Body of a 403, returned when the optional origin allowlist rejects the request. */
 const REQUEST_FORBIDDEN = "Forbidden";
+/** Body of a 415, returned when the request's `Content-Type` does not satisfy the function's declared `contentType`. */
 const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+/** Body of a 400, returned when a GET `?args=` value parses but is not an array. */
 const BAD_REQUEST = "Bad Request";
+/** Abort reason used when the client disconnects mid-dispatch. */
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
+//#endregion
+//#region src/server-helpers.ts
+/**
+* Tags an error with an HTTP status for the dispatch to surface.
+*
+* Used where a malformed *request* is the fault — a body that does not parse
+* under a declared JSON `Content-Type`, a GET `?args=` value that is not valid
+* JSON. Every host framework rpc supports answers `400` for these (Express
+* `entity.parse.failed`, Fastify `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser,
+* and h3's own `readBody`), and treating one as a server fault both misreports
+* the fault and turns a trivial client mistake into a log entry.
+* @param status - The HTTP status to answer with
+* @param message - Internal diagnostic message; never sent to the client
+* @returns An `Error` carrying `status`
+*/
+const httpError = (status, message) => {
+	const err = new Error(message);
+	err.status = status;
+	return err;
+};
 //#endregion
 //#region src/h3/helpers.ts
 /**
@@ -56,7 +83,7 @@ const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already
 */
 async function attachRPC(app) {
 	const { loadRPCConfig } = await import("@thednp/rpc");
-	const { adapter: _adapter, ...options } = await loadRPCConfig();
+	const options = await loadRPCConfig();
 	app.use(createRPCMiddleware(options));
 }
 /**
@@ -132,10 +159,18 @@ const readBody = async (event) => {
 	const isMultipart = contentType.includes("multipart/form-data");
 	const isUrlEncoded = contentType.includes("urlencoded");
 	const text = await event.req.text();
-	if (isJSON) return {
-		contentType: "application/json",
-		data: JSON.parse(text)
-	};
+	if (isJSON) {
+		let data;
+		try {
+			data = JSON.parse(text);
+		} catch {
+			throw httpError(400, "Invalid JSON body");
+		}
+		return {
+			contentType: "application/json",
+			data
+		};
+	}
 	return {
 		contentType: isMultipart ? "multipart/form-data" : isUrlEncoded ? "application/x-www-form-urlencoded" : "text/plain",
 		data: isMultipart ? { raw: text } : isUrlEncoded ? Object.fromEntries(new URLSearchParams(text)) : String(text)
@@ -166,7 +201,7 @@ const middlewareStack = /* @__PURE__ */ new Set();
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
-	let rpcPrefix = options.rpcPrefix;
+	const rpcPrefix = options.rpcPrefix;
 	const path = options.path;
 	const handler = options.handler;
 	let name = middlewareName;
@@ -176,16 +211,16 @@ const createMiddleware = (initialOptions = {}) => {
 	}
 	if (middlewareStack.has(name)) throw new Error(MIDDLEWARE_NAME_USED(name));
 	middlewareStack.add(name);
-	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const resolvedPrefix = resolveRPCPrefix(rpcPrefix);
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(resolvedPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (event, next) => {
 		const url = event.url.pathname;
 		if (!handler) return next();
 		if (pathMatcher && !pathMatcher.test(url)) return next();
 		if (prefixRegex && !prefixRegex.test(url)) return next();
-		rpcPrefix = rpcPrefix || getGlobalPrefix() || "__rpc";
-		if (getFunctionsForPrefix(rpcPrefix).size === 0) await scanForServerFiles({
-			rpcPrefix,
+		if (getFunctionsForPrefix(resolvedPrefix).size === 0) await scanForServerFiles({
+			rpcPrefix: resolvedPrefix,
 			serverFiles: options.serverFiles,
 			scanRoot: options.scanRoot
 		});
@@ -202,13 +237,14 @@ const createMiddleware = (initialOptions = {}) => {
 * @returns An h3 middleware function
 */
 const createRPCMiddleware = (initialOptions = {}) => {
-	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
+	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const rpcPrefix = options.rpcPrefix;
-	const prefix = rpcPrefix || getGlobalPrefix() || "__rpc";
-	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const prefix = resolveRPCPrefix(rpcPrefix);
+	const prefixRegex = new RegExp(`^/${escapeRegExp(prefix)}/`);
 	const prefixReplace = `/${prefix}/`;
 	return createMiddleware({
 		...options,
+		rpcPrefix: prefix,
 		handler: async (event, _next) => {
 			const url = event.url.pathname;
 			if (prefixRegex && !prefixRegex.test(url)) return;
@@ -232,7 +268,13 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				if (method === "GET") {
 					const raw = event.url.searchParams.get("args");
 					if (raw) {
-						const parsed = JSON.parse(raw);
+						let parsed;
+						try {
+							parsed = JSON.parse(raw);
+						} catch {
+							event.res.status = 400;
+							return { error: BAD_REQUEST };
+						}
 						if (!Array.isArray(parsed)) {
 							event.res.status = 400;
 							return { error: BAD_REQUEST };
@@ -282,6 +324,11 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				}
 				return { data: result };
 			} catch (err) {
+				if (isClientHttpError(err)) {
+					const status = clientErrorStatus(err);
+					event.res.status = status;
+					return { error: clientErrorMessage(status) };
+				}
 				console.error(String(err));
 				const isProduction = process.env.NODE_ENV === "production";
 				event.res.status = 500;

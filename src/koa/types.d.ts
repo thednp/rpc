@@ -1,11 +1,7 @@
 // src/koa/types.d.ts
 import type Koa from "koa";
 import type { Context, Next } from "koa";
-import type {
-  JsonValue,
-  MiddlewareOptions,
-  RpcPluginOptions,
-} from "@thednp/rpc";
+import type { AdapterName, JsonValue, MiddlewareOptions } from "@thednp/rpc";
 
 /**
  * Koa-specific middleware options, constrained to the `"koa"` adapter.
@@ -36,7 +32,7 @@ export interface KoaMiddlewareHooks {
  * Koa middleware factory: takes optional initial options and returns
  * the Koa-compatible handler.
  */
-export type KoaMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "koa">(
+export type KoaMiddlewareFn = <A extends AdapterName = "koa">(
   initialOptions?: Partial<KoaMiddlewareOptions>,
 ) => KoaMiddlewareHooks["handler"];
 

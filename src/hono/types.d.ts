@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { IncomingMessage } from "node:http";
-import type { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import type { AdapterName, MiddlewareOptions } from "@thednp/rpc";
 
 /**
  * Node incoming message with an optional pre-parsed body.
@@ -24,7 +24,7 @@ export interface HonoMiddlewareHooks {
  * Hono middleware factory: takes optional initial options and returns
  * the Hono-compatible handler.
  */
-export type HonoMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "hono">(
+export type HonoMiddlewareFn = <A extends AdapterName = "hono">(
   initialOptions?: Partial<MiddlewareOptions<A>>,
 ) => HonoMiddlewareHooks["handler"];
 

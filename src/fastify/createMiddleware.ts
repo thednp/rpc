@@ -11,21 +11,20 @@ import type {
 import type { JsonValue } from "@thednp/rpc";
 import type { RequestEvent } from "@thednp/rpc/server";
 import {
+  clientErrorMessage,
+  clientErrorStatus,
   escapeRegExp,
   formatError,
-  getGlobalPrefix,
   hasContentTypeMismatch,
+  isClientHttpError,
   isOriginRequestAllowed,
   provideRequestContext,
+  resolveRPCPrefix,
   safeURL,
   scanForServerFiles,
 } from "@thednp/rpc/server";
 import { getFunctionsForPrefix } from "../functionsMap.ts";
-import {
-  defaultMiddlewareOptions,
-  defaultPrefix,
-  defaultRPCOptions,
-} from "../options.ts";
+import { defaultMiddlewareOptions } from "../options.ts";
 import {
   BAD_REQUEST,
   CLIENT_DISCONNECTED,
@@ -54,7 +53,7 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
   ) as FastifyMiddlewareOptions;
 
   const middlewareName = options.name;
-  let rpcPrefix = options.rpcPrefix;
+  const rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -70,8 +69,15 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
 
   // Hoist regex compilation out of per-request path. Escape the prefix to
   // prevent regex injection via metacharacters in the config string.
+  // Resolved once at creation time so the hoisted regex and the
+  // function-map lookup can never disagree. `createRPCMiddleware` hands
+  // over its already-resolved prefix, making this a no-op in that path.
+  const resolvedPrefix = resolveRPCPrefix(rpcPrefix);
+  // Gated only when an explicit prefix was supplied: a bare
+  // `createMiddleware({ path, handler })` has never prefix-gated.
+  // `createRPCMiddleware` always supplies one, so RPC dispatch does.
   const prefixRegex: RegExp | null = rpcPrefix
-    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
+    ? new RegExp(`^/${escapeRegExp(resolvedPrefix)}/`)
     : null;
   const pathMatcher: RegExp | null = path
     ? (typeof path === "string" ? new RegExp(path) : path)
@@ -103,12 +109,10 @@ export const createMiddleware: FastifyMiddlewareFn = (initialOptions = {}) => {
       return;
     }
 
-    rpcPrefix = (rpcPrefix ?? defaultPrefix) as string;
-
     // When serving from production server, scan for server files
-    if (getFunctionsForPrefix(rpcPrefix).size === 0) {
+    if (getFunctionsForPrefix(resolvedPrefix).size === 0) {
       await scanForServerFiles({
-        rpcPrefix,
+        rpcPrefix: resolvedPrefix,
         serverFiles: (options as unknown as { serverFiles?: "exact" | "glob" })
           .serverFiles,
         scanRoot: (options as unknown as { scanRoot?: string }).scanRoot,
@@ -139,21 +143,20 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
   const options = Object.assign(
     {},
     defaultMiddlewareOptions,
-    { rpcPrefix: defaultRPCOptions.rpcPrefix },
     initialOptions,
   ) as FastifyMiddlewareOptions;
 
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
-  const prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
-  const prefixRegex = rpcPrefix
-    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
-    : /* istanbul ignore next */ null;
+  const prefix = resolveRPCPrefix(rpcPrefix);
+  const prefixRegex = new RegExp(`^/${escapeRegExp(prefix)}/`);
   const prefixReplace = `/${prefix}/`;
 
   return createMiddleware({
     ...options,
+    // Hand the resolved prefix down so the gate and the dispatch agree.
+    rpcPrefix: prefix,
     handler: async (
       req: FastifyRequest,
       reply: FastifyReply,
@@ -204,7 +207,15 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
         if (method === "GET") {
           const raw = reqUrl.searchParams.get("args");
           if (raw) {
-            const parsed: unknown = JSON.parse(raw);
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              // A malformed `?args=` is a malformed request, not a server
+              // fault, so it answers 400 like the non-array case above.
+              reply.status(400).send({ error: BAD_REQUEST });
+              return;
+            }
             if (!Array.isArray(parsed)) {
               reply.status(400).send({ error: BAD_REQUEST });
               return;
@@ -268,6 +279,19 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
           reply.status(200).send({ data });
         }
       } catch (err) {
+        // A malformed request is a client error, not a server fault. rpc raises
+        // these with a status (see `httpError`), and host frameworks signal the
+        // same class the same way — h3's body limit throws 413 from inside the
+        // read, Express's body-parser throws 400, and Fastify's parser does the
+        // same before rpc is reached. Answering 500 for any of them both
+        // misreports the fault and turns a trivial client mistake into a log
+        // entry. The body comes from a fixed table, so nothing from the
+        // underlying error is echoed back.
+        if (isClientHttpError(err)) {
+          const status = clientErrorStatus(err);
+          reply.status(status).send({ error: clientErrorMessage(status) });
+          return;
+        }
         console.error(String(err));
         const isProduction = process.env.NODE_ENV === "production";
         reply.status(500).send(formatError(err, isProduction));

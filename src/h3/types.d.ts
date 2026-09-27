@@ -1,6 +1,6 @@
 // src/h3/types.d.ts
 import type { H3, H3Event, Middleware } from "h3";
-import type { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import type { AdapterName, MiddlewareOptions } from "@thednp/rpc";
 
 /**
  * h3-specific middleware options, constrained to the `"h3"` adapter.
@@ -23,7 +23,7 @@ export interface H3MiddlewareHooks {
  * h3 middleware factory: takes optional initial options and returns
  * the h3-compatible handler.
  */
-export type H3MiddlewareFn = <A extends RpcPluginOptions["adapter"] = "h3">(
+export type H3MiddlewareFn = <A extends AdapterName = "h3">(
   initialOptions?: Partial<H3MiddlewareOptions>,
 ) => H3MiddlewareHooks["handler"];
 

@@ -11,7 +11,6 @@ import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: '__rpc',
-  adapter: 'express',
 });
 ```
 
@@ -29,14 +28,13 @@ export default defineConfig({
 
 ```
 
-> **NOTE** these plugin options only apply to **development** and override the options in `rpc.config.ts`.
+> **NOTE** these plugin options apply to **both** `vite dev` and `vite build` — `configResolved` merges them for either command, and the production scan (`buildStart`) and the client-module generation (`transform`) both read them. They override the values in `rpc.config.ts`.
 
 ### Options
 
 | Option       | Type     | Default     | Description                                                  |
 | --------------| ----------| -------------| --------------------------------------------------------------|
 | `rpcPrefix` | `string` | `'__rpc'`   | RPC endpoint prefix used in URL routing. Functions can override this per-call via `createServerFunction(..., { rpcPrefix })` — see [Multi-Prefix Support](./multi-prefix-guide.md) |
-| `adapter`    | `string` | `'express'` | Target adapter (`'express'`, `'fastify'`, `'hono'`, `'koa'`) |
 | `serverFiles` | `'exact'` \| `'glob'` | `'exact'` | Server file matching mode: `'exact'` for the classic `server.ts\|js\|mjs\|mts` names, `'glob'` to recursively match `*.server.{ts,js,mjs,mts}` under the scan root |
 | `scanRoot` | `string` | `undefined` | Directory to scan for server files, relative to the project root. Defaults to `<root>/src/api`. Useful in monorepos where server files live in a shared package |
 | `silent` | `boolean` | `false` | Suppress the `NO_CONFIG_FOUND` warning when no config file is found. Useful for wrapper plugins that define server functions directly without a config file |
@@ -79,16 +77,29 @@ import { loadRPCConfig } from '@thednp/rpc';
 
 const config = await loadRPCConfig();
 console.log(config.rpcPrefix);  // '__rpc'
-console.log(config.adapter);    // 'express'
 ```
 
-`loadRPCConfig` also calls `setGlobalPrefix(config.rpcPrefix)` internally — any `createServerFunction` calls that follow will automatically register under the configured prefix. This makes it the recommended bootstrap step for regular SSR servers (Express, Fastify, Hono, Koa, h3).
+Pass the loaded config straight to the middleware — that is the recommended bootstrap step for regular SSR servers (Express, Fastify, Hono, Koa, h3):
+
+```ts
+import { loadRPCConfig } from '@thednp/rpc';
+import { createRPCMiddleware } from '@thednp/rpc/express';
+
+const config = await loadRPCConfig();
+app.use(createRPCMiddleware({ rpcPrefix: config.rpcPrefix }));
+```
+
+`loadRPCConfig` also publishes the prefix globally via `setGlobalPrefix`, so any `createServerFunction` call that follows registers under it. Both sides resolve the prefix the same way — explicit argument first, then the global prefix, then the default — so passing it explicitly is still recommended, but the two can no longer disagree.
+
+If your server functions are registered by direct import rather than by the plugin's scan (serverless, custom hosts), set the prefix in the server module itself before any `createServerFunction` call — see [Adapters — Serverless](./adapters.md#serverless).
 
 Pass `{ silent: true }` to suppress the `NO_CONFIG_FOUND` warning when no config file is found — useful for wrapper plugins that define server functions directly without a config file:
 
 ```ts
 const config = await loadRPCConfig({ silent: true });
 ```
+
+Both call forms are accepted: `loadRPCConfig(undefined, { silent: true })` and `loadRPCConfig({ silent: true })` behave identically. A config file that fails to load falls back to the defaults, with a `Failed to load RPC config` warning.
 
 > **Note for serverless environments:** In serverless (Netlify, Vercel, etc.), call `setGlobalPrefix` directly before importing your server files or before defining your server functions — see [Adapters — Serverless](./adapters.md#serverless).
 
@@ -109,4 +120,5 @@ const config = await loadRPCConfig({ silent: true });
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

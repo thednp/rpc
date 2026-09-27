@@ -1,10 +1,11 @@
-import { escapeRegExp, formatError, getGlobalPrefix, hasContentTypeMismatch, isOriginRequestAllowed, provideRequestContext, safeURL, scanForServerFiles } from "@thednp/rpc/server";
-const defaultRPCOptions = {
-	rpcPrefix: "__rpc",
-	adapter: "express",
-	serverFiles: "exact",
-	scanRoot: void 0
-};
+import { clientErrorMessage, clientErrorStatus, escapeRegExp, formatError, hasContentTypeMismatch, isClientHttpError, isOriginRequestAllowed, provideRequestContext, resolveRPCPrefix, safeURL, scanForServerFiles } from "@thednp/rpc/server";
+//#region src/options.ts
+/**
+* Baseline middleware options. Note `rpcPrefix` is `undefined` rather than
+* `defaultPrefix` on purpose: leaving it unset lets `resolveRPCPrefix` fall
+* through to the global prefix, which is what makes a published global prefix
+* reach the middleware.
+*/
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
 	path: void 0,
@@ -38,14 +39,40 @@ const getFunctionsForPrefix = (prefix) => {
 };
 //#endregion
 //#region src/constants.ts
+/** Body of a 404. Deliberately does not name the requested function. */
 const FUNCTION_NOT_FOUND = "Function not found";
+/** Body of a 405, returned when the HTTP method does not match the function's declared method. */
 const METHOD_NOT_ALLOWED = "Method Not Allowed";
+/** Body of a 403, returned when the optional origin allowlist rejects the request. */
 const REQUEST_FORBIDDEN = "Forbidden";
+/** Body of a 415, returned when the request's `Content-Type` does not satisfy the function's declared `contentType`. */
 const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+/** Body of a 400, returned when a GET `?args=` value parses but is not an array. */
 const BAD_REQUEST = "Bad Request";
+/** Abort reason used when the client disconnects mid-dispatch. */
 const CLIENT_DISCONNECTED = "client disconnected";
 /** Returns a warning when a middleware name is reused, preventing registration conflicts. @param name - The duplicate middleware name */
 const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already used.`;
+//#endregion
+//#region src/server-helpers.ts
+/**
+* Tags an error with an HTTP status for the dispatch to surface.
+*
+* Used where a malformed *request* is the fault — a body that does not parse
+* under a declared JSON `Content-Type`, a GET `?args=` value that is not valid
+* JSON. Every host framework rpc supports answers `400` for these (Express
+* `entity.parse.failed`, Fastify `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser,
+* and h3's own `readBody`), and treating one as a server fault both misreports
+* the fault and turns a trivial client mistake into a log entry.
+* @param status - The HTTP status to answer with
+* @param message - Internal diagnostic message; never sent to the client
+* @returns An `Error` carrying `status`
+*/
+const httpError = (status, message) => {
+	const err = new Error(message);
+	err.status = status;
+	return err;
+};
 //#endregion
 //#region src/koa/helpers.ts
 /**
@@ -55,7 +82,7 @@ const MIDDLEWARE_NAME_USED = (name) => `The middleware name "${name}" is already
 */
 async function attachRPC(app) {
 	const { loadRPCConfig } = await import("@thednp/rpc");
-	const { adapter: _adapter, ...options } = await loadRPCConfig();
+	const options = await loadRPCConfig();
 	app.use(createRPCMiddleware(options));
 }
 /**
@@ -91,6 +118,20 @@ function attachVite(app, vite) {
 * @param ctx - Koa context
 * @returns A promise resolving to the parsed body with its content type
 */
+/**
+* Parses a body leniently: JSON when it parses, otherwise the raw string.
+* Used for bodies that did not declare JSON — notably a request with no
+* `Content-Type` header, which must still arrive parsed if it carries JSON.
+* @param body - The raw body text
+* @returns The parsed JSON value, or the original string
+*/
+const parseJsonOrRawText = (body) => {
+	try {
+		return JSON.parse(body);
+	} catch {
+		return body;
+	}
+};
 const readBody = (ctx) => {
 	const contentType = ctx.request.headers["content-type"]?.toLowerCase() || "";
 	return new Promise((resolve, reject) => {
@@ -121,16 +162,13 @@ const readBody = (ctx) => {
 			const isMultipart = contentType.includes("multipart/form-data");
 			const isUrlEncoded = contentType.includes("urlencoded");
 			try {
-				const data = isMultipart ? { raw: body } : isUrlEncoded ? Object.fromEntries(new URLSearchParams(body)) : JSON.parse(body);
+				const data = isMultipart ? { raw: body } : isUrlEncoded ? Object.fromEntries(new URLSearchParams(body)) : isJSON ? JSON.parse(body) : parseJsonOrRawText(body);
 				resolve({
 					contentType: isMultipart ? "multipart/form-data" : isJSON ? "application/json" : isUrlEncoded ? "application/x-www-form-urlencoded" : "text/plain",
 					data: isMultipart ? data : data
 				});
 			} catch (_er) {
-				resolve({
-					contentType: "text/plain",
-					data: String(body)
-				});
+				reject(httpError(400, "Invalid JSON body"));
 			}
 		};
 		const onError = (err) => {
@@ -168,7 +206,7 @@ const middlewareStack = /* @__PURE__ */ new Set();
 const createMiddleware = (initialOptions = {}) => {
 	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const middlewareName = options.name;
-	let rpcPrefix = options.rpcPrefix;
+	const rpcPrefix = options.rpcPrefix;
 	const path = options.path;
 	const handler = options.handler;
 	let name = middlewareName;
@@ -178,16 +216,16 @@ const createMiddleware = (initialOptions = {}) => {
 	}
 	if (middlewareStack.has(name)) throw new Error(MIDDLEWARE_NAME_USED(name));
 	middlewareStack.add(name);
-	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const resolvedPrefix = resolveRPCPrefix(rpcPrefix);
+	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(resolvedPrefix)}/`) : null;
 	const pathMatcher = path ? typeof path === "string" ? new RegExp(path) : path : null;
 	const middlewareHandler = async (ctx, next) => {
 		const url = safeURL(ctx.url).pathname;
 		if (!handler) return next();
 		if (pathMatcher && !pathMatcher.test(url)) return next();
 		if (prefixRegex && !prefixRegex.test(url)) return next();
-		rpcPrefix = rpcPrefix ?? "__rpc";
-		if (getFunctionsForPrefix(rpcPrefix).size === 0) await scanForServerFiles({
-			rpcPrefix,
+		if (getFunctionsForPrefix(resolvedPrefix).size === 0) await scanForServerFiles({
+			rpcPrefix: resolvedPrefix,
 			serverFiles: options.serverFiles,
 			scanRoot: options.scanRoot
 		});
@@ -204,13 +242,14 @@ const createMiddleware = (initialOptions = {}) => {
 * @returns A Koa middleware function
 */
 const createRPCMiddleware = (initialOptions = {}) => {
-	const options = Object.assign({}, defaultMiddlewareOptions, { rpcPrefix: defaultRPCOptions.rpcPrefix }, initialOptions);
+	const options = Object.assign({}, defaultMiddlewareOptions, initialOptions);
 	const rpcPrefix = options.rpcPrefix;
-	const prefix = rpcPrefix || getGlobalPrefix() || "__rpc";
-	const prefixRegex = rpcPrefix ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`) : null;
+	const prefix = resolveRPCPrefix(rpcPrefix);
+	const prefixRegex = new RegExp(`^/${escapeRegExp(prefix)}/`);
 	const prefixReplace = `/${prefix}/`;
 	return createMiddleware({
 		...options,
+		rpcPrefix: prefix,
 		handler: async (ctx, _next) => {
 			const reqUrl = safeURL(ctx.url);
 			const url = reqUrl.pathname;
@@ -238,7 +277,14 @@ const createRPCMiddleware = (initialOptions = {}) => {
 				if (method === "GET") {
 					const raw = reqUrl.searchParams.get("args");
 					if (raw) {
-						const parsed = JSON.parse(raw);
+						let parsed;
+						try {
+							parsed = JSON.parse(raw);
+						} catch {
+							ctx.status = 400;
+							ctx.body = { error: BAD_REQUEST };
+							return;
+						}
 						if (!Array.isArray(parsed)) {
 							ctx.status = 400;
 							ctx.body = { error: BAD_REQUEST };
@@ -289,6 +335,12 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					ctx.body = { data: result };
 				}
 			} catch (err) {
+				if (isClientHttpError(err)) {
+					const status = clientErrorStatus(err);
+					ctx.status = status;
+					ctx.body = { error: clientErrorMessage(status) };
+					return;
+				}
 				console.error(String(err));
 				const isProduction = process.env.NODE_ENV === "production";
 				ctx.status = 500;

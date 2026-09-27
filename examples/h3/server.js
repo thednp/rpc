@@ -41,7 +41,7 @@ if (!isProduction) {
   const { bodyLimit } = await import("./middleware/bodyLimit.js");
   const { serveStatic } = await import("./middleware/serveStatic.js");
   const { createRPCMiddleware } = await import("@thednp/rpc/h3");
-  const { adapter: _adapter, ...options } = rpcConfig;
+  const options = rpcConfig;
 
   // Body size limit — enforced before RPC middleware (defense-in-depth)
   app.use(bodyLimit);

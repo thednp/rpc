@@ -35,7 +35,7 @@ if (!isProduction) {
   app.use(viteMiddleware(vite));
 } else {
   const { createRPCMiddleware } = await import("@thednp/rpc/hono");
-  const { adapter, ...options } = rpcConfig;
+  const options = rpcConfig;
   app.use(createRPCMiddleware(options));
 
   // Serve static assets

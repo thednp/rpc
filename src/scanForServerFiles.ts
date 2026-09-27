@@ -13,7 +13,17 @@ import {
   NO_SERVER_FUNCTION_FOUND,
 } from "./constants.ts";
 
-let isScanned = false;
+/**
+ * Scan targets already performed, so a lazy re-scan is not repeated.
+ *
+ * Keyed by everything that determines the outcome — the resolved scan root
+ * (which files are read), the matching mode, and the prefix prefix-less
+ * functions register under. A single process-wide boolean used to be enough
+ * only while there was one prefix: the *first* scan suppressed every later
+ * one, so a second RPC instance on a different prefix asked for a lazy scan,
+ * got an early return, and answered 404 for every function it owned.
+ */
+const scannedTargets = new Set<string>();
 
 /** Absolute ids (normalized) of the scanned server function files. */
 export const scannedServerFiles: Set<string> = new Set<string>();
@@ -35,7 +45,20 @@ export const scanForServerFiles = async (
   initialCfg?: ScanConfig,
   devServer?: ViteDevServer,
 ): Promise<void> => {
-  if (isScanned && !devServer) {
+  // Resolve the scan target up front, before anything expensive. Importing
+  // Vite and standing up an internal server are the costly parts, and neither
+  // is needed once a scan is known to be a repeat.
+  const root = initialCfg?.root || process.cwd();
+  const resolvedScanRoot = resolve(
+    root,
+    initialCfg?.scanRoot ?? join(root, "src", "api"),
+  );
+  const serverFiles = initialCfg?.serverFiles ?? "exact";
+  const target = `${resolvedScanRoot}|${serverFiles}|${
+    initialCfg?.rpcPrefix ?? defaultPrefix
+  }`;
+
+  if (scannedTargets.has(target) && !devServer) {
     return;
   }
   // Vite is only needed to spin up the internal dev server that loads the
@@ -57,7 +80,7 @@ export const scanForServerFiles = async (
     // `Cannot find module 'vite'`.
     return;
   }
-  const config = (!initialCfg && !devServer) || !initialCfg
+  const config = !initialCfg
     ? {
       root: process.cwd(),
       base: process.env.BASE || "/",
@@ -90,14 +113,6 @@ export const scanForServerFiles = async (
       ssr: { optimizeDeps: { noDiscovery: true } },
     });
   }
-
-  const root = config.root || process.cwd();
-  const resolvedScanRoot = resolve(
-    root,
-    config.scanRoot ?? join(root, "src", "api"),
-  );
-  const serverFiles: "exact" | "glob" = config.serverFiles ??
-    "exact";
 
   // Names registered during this scan run, used for duplicate detection.
   // Keyed by `${prefix}:${registeredName}` so the same name can coexist
@@ -132,8 +147,10 @@ export const scanForServerFiles = async (
       }
       const moduleEntries = Object.entries(moduleExports);
       if (!moduleEntries.length) {
+        // Warn and move on: returning here would abandon every remaining
+        // file in the scan, silently dropping their functions.
         console.warn(NO_SERVER_FUNCTION_FOUND);
-        return;
+        continue;
       }
 
       // Register each export into its prefix-scoped map, recording the
@@ -176,6 +193,6 @@ export const scanForServerFiles = async (
     if (!devServer && server) {
       await server.close();
     }
-    isScanned = true;
+    scannedTargets.add(target);
   }
 };

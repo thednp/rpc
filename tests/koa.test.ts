@@ -60,14 +60,17 @@ describe("Koa helpers", () => {
       expect(result.data).toBe("plain text");
     });
 
-    it("should fallback to text for invalid JSON with json content-type", async () => {
+    it("should reject with a 400 when a declared JSON body does not parse", async () => {
+      // This used to resolve as `text/plain` with the raw string, silently
+      // handing a JSON-declared function a string and answering 200. A
+      // malformed body is a client error — Express (`entity.parse.failed`),
+      // Fastify (`FST_ERR_CTP_INVALID_JSON_BODY`), koa-bodyparser and h3's own
+      // readBody all answer 400 here.
       const ctx = makeKoaCtx({
         headers: { "content-type": "application/json" },
       });
       simulateKoaBody(ctx, "not json");
-      const result = await readBody(ctx);
-      expect(result.contentType).toBe("text/plain");
-      expect(result.data).toBe("not json");
+      await expect(readBody(ctx)).rejects.toMatchObject({ status: 400 });
     });
 
     it("should fallback to text/plain for JSON body with empty content-type header", async () => {
@@ -848,6 +851,39 @@ describe("Koa createRPCMiddleware", () => {
     });
     const next = makeKoaNext();
     await mw(ctx, next);
+    expect(fn).not.toHaveBeenCalled();
+    expect(ctx.status).toBe(400);
+    expect(ctx.body).toEqual({ error: "Bad Request" });
+  });
+
+  it("should return 400 when GET ?args= is not valid JSON", async () => {
+    // A malformed request, not a server fault.
+    const fn = vi.fn();
+    createServerFunction("koa-malformed-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: `/__rpc/koa-malformed-args?args=${encodeURIComponent("not json")}`,
+      method: "GET",
+    });
+    await mw(ctx, makeKoaNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(ctx.status).toBe(400);
+    expect(ctx.body).toEqual({ error: "Bad Request" });
+  });
+
+  it("should answer 400 end to end for a malformed JSON body", async () => {
+    // A malformed request is a client error; it used to be answered 200 with
+    // the raw string handed to a JSON-declared function.
+    const fn = vi.fn();
+    createServerFunction("koa-malformed", fn);
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-malformed",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, "{not json");
+    await mw(ctx, makeKoaNext());
     expect(fn).not.toHaveBeenCalled();
     expect(ctx.status).toBe(400);
     expect(ctx.body).toEqual({ error: "Bad Request" });

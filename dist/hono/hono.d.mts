@@ -1,7 +1,7 @@
 import { createMiddleware as createMiddleware$1 } from "hono/factory";
 import { Context, Context as HonoContext, Hono, Hono as Hono$1, Hono as HonoApp, HonoRequest, MiddlewareHandler, MiddlewareHandler as HonoMiddlewareHandler, Next as HonoNext, Response as HonoResponse } from "hono";
 import { IncomingHttpHeaders, IncomingMessage } from "node:http";
-import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { AdapterName, BodyResult, MiddlewareOptions } from "@thednp/rpc";
 import { ViteDevServer } from "vite";
 import "express";
 import "fastify";
@@ -92,7 +92,7 @@ interface HonoMiddlewareHooks {
  * Hono middleware factory: takes optional initial options and returns
  * the Hono-compatible handler.
  */
-type HonoMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "hono">(initialOptions?: Partial<MiddlewareOptions<A>>) => HonoMiddlewareHooks["handler"];
+type HonoMiddlewareFn = <A extends AdapterName = "hono">(initialOptions?: Partial<MiddlewareOptions<A>>) => HonoMiddlewareHooks["handler"];
 //#endregion
 //#region src/hono/createMiddleware.d.ts
 /**

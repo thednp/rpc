@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
-import { H3 } from "h3";
+import { bodyLimit, H3, H3Error } from "h3";
 import type { H3Event } from "h3";
 import type { ViteDevServer } from "vite";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
@@ -118,7 +118,7 @@ describe("h3 helpers", () => {
   describe("viteMiddleware", () => {
     it("should capture the body written by the Vite stack (web fallback)", async () => {
       const vite = {
-        middlewares: vi.fn((_req: any, res: any, cb: any) => {
+        middlewares: vi.fn((_req: any, res: any, _cb: any) => {
           res.setHeader("content-type", "text/html");
           res.end("<h1>app</h1>");
         }),
@@ -433,6 +433,101 @@ describe("h3 createRPCMiddleware", () => {
     expect(await res.json()).toEqual({ data: "hello h3" });
   });
 
+  it("should surface a 413 when the host body limit trips mid-read", async () => {
+    // h3 enforces `bodyLimit` while the request stream is read, so an
+    // oversized *chunked* body (no Content-Length to check up front) throws
+    // inside the dispatch. The other four adapters get a 413 from their host
+    // body parser before rpc runs; h3 must not report it as a 500.
+    createServerFunction("h3-hello", vi.fn().mockResolvedValue("hello h3"));
+    const app = new H3();
+    app.use(bodyLimit(64));
+    app.use(createRPCMiddleware());
+
+    // A ReadableStream body has no Content-Length, so this takes the
+    // mid-stream path rather than the up-front rejection.
+    const chunked = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(JSON.stringify(["x".repeat(4096)])));
+        c.close();
+      },
+    });
+    const res = await app.fetch(
+      new Request(`${APP_HOST}/__rpc/h3-hello`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: chunked,
+        // @ts-expect-error - Node requires this for a streaming request body
+        duplex: "half",
+      }),
+    );
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "Payload Too Large" });
+  });
+
+  it("should forward a 4xx the handler raises, and fall back to Bad Request", async () => {
+    // Covers the non-413 client-error branch and the statusText fallback:
+    // a bare H3Error carries no statusText, so the body uses BAD_REQUEST.
+    createServerFunction(
+      "h3-client-error",
+      vi.fn().mockRejectedValue(new H3Error({ status: 400 })),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware());
+
+    const res = await app.fetch(postJSON("/__rpc/h3-client-error", []));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
+  it("should not forward a 5xx the handler raises", async () => {
+    // The 4xx pass-through must not turn a server fault into a bare 5xx body
+    // — 5xx still goes through formatError.
+    createServerFunction(
+      "h3-server-error",
+      vi.fn().mockRejectedValue(new H3Error({ status: 503, message: "down" })),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware());
+
+    const res = await app.fetch(postJSON("/__rpc/h3-server-error", []));
+    expect(res.status).toBe(500);
+  });
+
+  it("should answer 400 for a malformed JSON body", async () => {
+    // h3's own readBody throws a 400 here; rpc parses the body itself and used
+    // to let the SyntaxError escape the dispatch as a 500.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("h3-malformed", fn);
+    const app = new H3();
+    app.use(createRPCMiddleware());
+
+    const res = await app.fetch(
+      new Request(`${APP_HOST}/__rpc/h3-malformed`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{not json",
+      }),
+    );
+
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
+  it("should still report an unexpected handler throw as a 500", async () => {
+    // The 4xx pass-through must not swallow genuine server faults.
+    createServerFunction(
+      "h3-boom",
+      vi.fn().mockRejectedValue(new Error("kaboom")),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware());
+
+    const res = await app.fetch(postJSON("/__rpc/h3-boom", []));
+    expect(res.status).toBe(500);
+  });
+
   it("should use default prefix when rpcPrefix is undefined", async () => {
     createServerFunction(
       "h3-hello",
@@ -694,6 +789,23 @@ describe("h3 createRPCMiddleware", () => {
       new Request(
         `${APP_HOST}/__rpc/h3-public-bad-args?args=${
           encodeURIComponent('{"a":1}')
+        }`,
+      ),
+    );
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
+  it("should return 400 when GET ?args= is not valid JSON", async () => {
+    const fn = vi.fn();
+    createServerFunction("h3-malformed-args", fn, { method: "GET" });
+    const app = new H3();
+    app.use(createRPCMiddleware());
+    const res = await app.fetch(
+      new Request(
+        `${APP_HOST}/__rpc/h3-malformed-args?args=${
+          encodeURIComponent("not json")
         }`,
       ),
     );

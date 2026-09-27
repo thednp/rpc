@@ -955,6 +955,43 @@ describe("Fastify createRPCMiddleware", () => {
     expect(reply.send).toHaveBeenCalledWith({ error: "Bad Request" });
   });
 
+  it("should return 400 when GET ?args= is not valid JSON", async () => {
+    // A malformed request, not a server fault — it used to escape the dispatch
+    // try and be reported as a 500.
+    const fn = vi.fn();
+    createServerFunction("fastify-malformed-args", fn, { method: "GET" });
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: `/__rpc/fastify-malformed-args?args=${
+        encodeURIComponent("not json")
+      }`,
+      method: "GET",
+    });
+    const reply = makeFastifyReply();
+    await mw(req as never, reply as never, makeFastifyDone());
+    expect(fn).not.toHaveBeenCalled();
+    expect(reply.status).toHaveBeenCalledWith(400);
+  });
+
+  it("should answer 400 end to end for a malformed JSON body", async () => {
+    // Fastify's own parser answers 400 before rpc is reached, so this drives
+    // the raw-stream path rpc uses when no parser ran.
+    const fn = vi.fn();
+    createServerFunction("fastify-malformed", fn);
+    const mw = createRPCMiddleware();
+    const req = makeFastifyReq({
+      url: "/__rpc/fastify-malformed",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateRawBody(req, "{not json");
+    const reply = makeFastifyReply();
+    await mw(req as never, reply as never, makeFastifyDone());
+    expect(fn).not.toHaveBeenCalled();
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Bad Request" });
+  });
+
   it("should return 403 when Origin does not match the configured origin", async () => {
     createServerFunction("fastify-fn", vi.fn());
     const mw = createRPCMiddleware({ origin: "https://app.example.com" });

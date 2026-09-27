@@ -48,6 +48,11 @@ function makeFastifyReply() {
       if (data !== undefined) this._data = data;
     }),
     header: vi.fn(),
+    // Fastify v5 signature: destination first, status optional. The
+    // `redirect` helper in src/fastify/helpers.ts calls exactly this, so the
+    // mock has to carry the method — without it, every redirect test had to
+    // bolt one on with a cast.
+    redirect: vi.fn(),
     raw: { headersSent: false },
   };
 }

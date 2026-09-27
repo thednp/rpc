@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
 import { FastifyInstance, FastifyInstance as Fastify, FastifyInstance as FastifyApp, FastifyReply, FastifyReply as FastifyReply$1, FastifyReply as FastifyResponse, FastifyRequest, FastifyRequest as FastifyRequest$1, HookHandlerDoneFunction, HookHandlerDoneFunction as FastifyNext } from "fastify";
-import { MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { AdapterName, MiddlewareOptions } from "@thednp/rpc";
 import { IncomingHttpHeaders } from "node:http";
 import { ViteDevServer } from "vite";
 import "express";
@@ -114,7 +114,7 @@ type FastifyMiddlewareOptions = MiddlewareOptions<"fastify">;
  * Fastify middleware factory: takes optional initial options and returns
  * the Fastify-compatible handler.
  */
-type FastifyMiddlewareFn = <A extends RpcPluginOptions["adapter"] = "fastify">(initialOptions?: Partial<FastifyMiddlewareOptions>) => FastifyMiddlewareHooks["handler"];
+type FastifyMiddlewareFn = <A extends AdapterName = "fastify">(initialOptions?: Partial<FastifyMiddlewareOptions>) => FastifyMiddlewareHooks["handler"];
 /**
  * Fastify middleware handler signature used by the RPC middleware.
  */
@@ -177,12 +177,6 @@ export declare function attachVite(app: FastifyInstance, vite: ViteDevServer): v
  * @returns A Fastify `onRequest` hook handler
  */
 export declare function viteMiddleware(vite: ViteDevServer): (request: FastifyRequest$1, reply: FastifyReply$1) => Promise<void>;
-/**
- * Reads and parses the HTTP request body from a Fastify request.
- * If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
- * @param req - Fastify request object
- * @returns A promise resolving to the parsed body with its content type
- */
 export declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Fastify reply using the native

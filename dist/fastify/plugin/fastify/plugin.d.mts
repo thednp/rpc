@@ -83,6 +83,17 @@ interface H3MiddlewareHooks {
 //#endregion
 //#region src/types.d.ts
 /**
+ * Every framework adapter rpc ships a middleware for.
+ *
+ * This is the key type for {@link FrameworkHooks}, so `MiddlewareOptions<A>`
+ * can type each adapter's `handler` signature. It is a *type* only — the
+ * adapter you get is the one you import (`@thednp/rpc/express`,
+ * `@thednp/rpc/hono`, …). There is deliberately no config option that selects
+ * it: a runtime value could only ever disagree with the subpath actually
+ * mounted, and nothing read it.
+ */
+type AdapterName = "express" | "hono" | "h3" | "fastify" | "koa";
+/**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
  * Used to keep the middleware options type-safe per adapter.
  */
@@ -98,54 +109,7 @@ interface FrameworkHooks {
   /** h3 middleware handler signature */
   h3: H3MiddlewareHooks;
 }
-/**
- * ### @thednp/rpc
- * The plugin configuration allows for granular control of your
- * application RPC calls. The default settings are optimized for development
- * environments while providing a secure foundation for production use.
- */
-interface RpcPluginOptions {
-  // RPC Middleware Options
-  /**
-   * RPC prefix without leading slash (e.g. "__rpc")
-   * Leading slash will be added automatically by the middleware.
-   * This prefix defines the base path for all RPC endpoints.
-   * @default "__rpc"
-   * @example
-   * // Results in endpoints like: /api/rpc/myFunction
-   * rpcPrefix: "api/rpc"
-   */
-  rpcPrefix: "__rpc" | string;
-  /**
-   * Option to set an adapter for the middleware connection. The default is _express_,
-   * which is the most popular and battle tested server app. The _express_ adapter is
-   * also compatible with the vite's Connect development server.
-   * @default express
-   */
-  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
-  /**
-   * Root directory from which the plugin scans for server files.
-   * Defaults to `<root>/src/api`. Use this in monorepos where server files
-   * live in a shared package outside the current project root.
-   * @default undefined (resolves to src/api relative to the Vite root)
-   */
-  scanRoot?: string;
-  /**
-   * Server file matching mode. Use `"exact"` (default) for the classic
-   * `server.ts|js|mjs|mts` names, or `"glob"` to match `**\/*.server.{ts,js,mjs,mts}`
-   * inside the scan root.
-   * @default "exact"
-   */
-  serverFiles?: "exact" | "glob";
-  /**
-   * Suppress the "no RPC config found" warning when no config file is
-   * discovered. Useful when the plugin is wrapped by another tool that
-   * provides configuration externally (e.g. a meta-framework adapter).
-   * @default false
-   */
-  silent?: boolean;
-}
-interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
+interface MiddlewareOptions<A extends AdapterName = "express"> {
   /**
    * Name for the middleware (used for identification in Express stack)
    */
@@ -171,7 +135,7 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * // Results in endpoints like: /api/rpc/myFunction
    * rpcPrefix: "api/rpc"
    */
-  rpcPrefix?: string | false;
+  rpcPrefix?: string;
   /**
    * Allowed request origin(s) — a single origin string or an allowlist of them
    * (e.g. `"https://example.com"` or

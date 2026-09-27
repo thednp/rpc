@@ -1,0 +1,10 @@
+{
+  // Type-checks the test suite. Kept separate from tsconfig.json on purpose:
+  // `tsdown` uses tsconfig.json to EMIT declarations, and including tests/fixtures
+  // in that program makes TypeScript raise TS2883 ("inferred type cannot be
+  // named without a reference to 'Procedure' from '…/vitest/dist/…'"), which
+  // fails the build. Under `noEmit` those errors do not occur, so the test
+  // suite is checked here instead of in the emit program.
+  "extends": "./tsconfig.json",
+  "include": ["src", "tests"]
+}

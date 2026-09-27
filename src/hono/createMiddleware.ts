@@ -9,21 +9,20 @@ import type { JsonValue } from "@thednp/rpc";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
 import type { RequestEvent } from "@thednp/rpc/server";
 import {
+  clientErrorMessage,
+  clientErrorStatus,
   escapeRegExp,
   formatError,
-  getGlobalPrefix,
   hasContentTypeMismatch,
+  isClientHttpError,
   isOriginRequestAllowed,
   provideRequestContext,
+  resolveRPCPrefix,
   safeURL,
   scanForServerFiles,
 } from "@thednp/rpc/server";
 import { getFunctionsForPrefix } from "../functionsMap.ts";
-import {
-  defaultMiddlewareOptions,
-  defaultPrefix,
-  defaultRPCOptions,
-} from "../options.ts";
+import { defaultMiddlewareOptions } from "../options.ts";
 import {
   BAD_REQUEST,
   CLIENT_DISCONNECTED,
@@ -53,7 +52,7 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   ) as HonoMiddlewareOptions;
 
   const middlewareName = options.name;
-  let rpcPrefix = options.rpcPrefix;
+  const rpcPrefix = options.rpcPrefix;
   const path = options.path;
   const handler = options.handler;
 
@@ -69,8 +68,15 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
 
   // Hoist regex compilation out of per-request path. Escape the prefix to
   // prevent regex injection via metacharacters in the config string.
+  // Resolved once at creation time so the hoisted regex and the
+  // function-map lookup can never disagree. `createRPCMiddleware` hands
+  // over its already-resolved prefix, making this a no-op in that path.
+  const resolvedPrefix = resolveRPCPrefix(rpcPrefix);
+  // Gated only when an explicit prefix was supplied: a bare
+  // `createMiddleware({ path, handler })` has never prefix-gated.
+  // `createRPCMiddleware` always supplies one, so RPC dispatch does.
   const prefixRegex: RegExp | null = rpcPrefix
-    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
+    ? new RegExp(`^/${escapeRegExp(resolvedPrefix)}/`)
     : null;
   const pathMatcher: RegExp | null = path
     ? (typeof path === "string" ? new RegExp(path) : path)
@@ -94,10 +100,8 @@ export const createMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         return next();
       }
 
-      rpcPrefix = (rpcPrefix ?? defaultPrefix) as string;
-
       // When serving from production server, scan for server files
-      if (getFunctionsForPrefix(rpcPrefix).size === 0) {
+      if (getFunctionsForPrefix(resolvedPrefix).size === 0) {
         await scanForServerFiles({
           rpcPrefix,
           serverFiles:
@@ -129,21 +133,20 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
   const options = Object.assign(
     {},
     defaultMiddlewareOptions,
-    { rpcPrefix: defaultRPCOptions.rpcPrefix },
     initialOptions,
   ) as HonoMiddlewareOptions;
 
   // Hoist prefix regex (escaped) and the literal prefix-for-replace out of the
   // per-request handler to avoid regex injection and per-request compilation.
   const rpcPrefix = options.rpcPrefix;
-  const prefix = rpcPrefix || getGlobalPrefix() || defaultPrefix;
-  const prefixRegex = rpcPrefix
-    ? new RegExp(`^/${escapeRegExp(rpcPrefix)}/`)
-    : /* istanbul ignore next */ null;
+  const prefix = resolveRPCPrefix(rpcPrefix);
+  const prefixRegex = new RegExp(`^/${escapeRegExp(prefix)}/`);
   const prefixReplace = `/${prefix}/`;
 
   return createMiddleware({
     ...options,
+    // Hand the resolved prefix down so the gate and the dispatch agree.
+    rpcPrefix: prefix,
     handler: async (c: Context, _next: Next) => {
       const { path: reqPath } = c.req;
       // const { rpcPrefix: prefix } = options;
@@ -186,7 +189,14 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         if (method === "GET") {
           const raw = c.req.query("args");
           if (raw) {
-            const parsed: unknown = JSON.parse(raw);
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              // A malformed `?args=` is a malformed request, not a server
+              // fault, so it answers 400 like the non-array case above.
+              return c.json({ error: BAD_REQUEST }, 400);
+            }
             if (!Array.isArray(parsed)) {
               return c.json({ error: BAD_REQUEST }, 400);
             }
@@ -231,10 +241,13 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
         );
         const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);
         // The runtime adapter may be absent in some Hono environments
-        // (e.g. standalone serverless adapters), so guard the close hook.
-        c.env.incoming?.on("close", onAbort);
+        // (e.g. Workers, Bun, Deno, standalone serverless adapters), so guard
+        // the close hook. `c.env?.incoming?.` — the `?.` after `incoming` alone
+        // guards a null `incoming`, not an undefined `c.env`, which is what
+        // actually threw here and turned every request into a 500.
+        c.env?.incoming?.on("close", onAbort);
         const result = await fnResult.data;
-        c.env.incoming?.off("close", onAbort);
+        c.env?.incoming?.off("close", onAbort);
 
         if (requestEvent.redirected) {
           return c.redirect(
@@ -253,6 +266,21 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
 
         return c.json({ data: result }, 200);
       } catch (err) {
+        // A malformed request is a client error, not a server fault. rpc raises
+        // these with a status (see `httpError`), and host frameworks signal the
+        // same class the same way — h3's body limit throws 413 from inside the
+        // read, Express's body-parser throws 400, and Fastify's parser does the
+        // same before rpc is reached. Answering 500 for any of them both
+        // misreports the fault and turns a trivial client mistake into a log
+        // entry. The body comes from a fixed table, so nothing from the
+        // underlying error is echoed back.
+        if (isClientHttpError(err)) {
+          const status = clientErrorStatus(err);
+          return c.json(
+            { error: clientErrorMessage(status) },
+            status as ContentfulStatusCode,
+          );
+        }
         console.error(String(err));
         const isProduction = process.env.NODE_ENV === "production";
         return c.json(formatError(err, isProduction), 500);

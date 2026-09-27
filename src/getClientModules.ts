@@ -58,7 +58,10 @@ const getModule = (
  * Generates the complete client-side module bundle by iterating all registered server functions
  * for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
  * (or Oxc) during the dev server or production build.
- * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
+ *
+ * The generated stubs are plain `fetch` calls, so they are adapter-agnostic —
+ * only the prefix is needed.
+ * @param initialOptions - Plugin options containing the rpcPrefix
  * @returns A string of JavaScript code with all client RPC modules and their import dependencies
  */
 export const getClientModules = (

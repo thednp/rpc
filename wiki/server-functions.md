@@ -25,19 +25,21 @@ The core API for defining server-side functions.
 ### Signature
 
 ```ts
-function createServerFunction<T>(
+function createServerFunction<TArgs extends JsonArray, TResult>(
   name: string,
-  handler: (signal: AbortSignal, ...args: JsonArray) => Promise<T>,
+  handler: ServerFunctionInit<TArgs, TResult>,
   options?: {
     contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data',
     credentials?: "same-origin" | "include" | "omit",
     method?: "GET" | "POST",
     rpcPrefix?: string,
   }
-): ServerFunction<T>;
+): ClientFunction<TArgs, TResult>;
 ```
 
-> **Note:** `T` is unconstrained (no `extends JsonValue` requirement). The actual wire protocol serialization still uses JSON, but the relaxed type allows wrapper libraries to define server functions with non-JSON return types without double-casts.
+`ClientFunction` is what you get back — the `{ data, cancel }` handle described above. It is a different type from `ServerFunctionInit`, which is the *handler* signature. `TArgs` defaults to `JsonArray` and the handler is `ServerFunctionInit<TArgs, TResult>` (an `AbortSignal` followed by your arguments).
+
+> **Note:** `TResult` is unconstrained (no `extends JsonValue` requirement). The actual wire protocol serialization still uses JSON, but the relaxed type allows wrapper libraries to define server functions with non-JSON return types without double-casts.
 
 ### Parameters
 
@@ -47,7 +49,7 @@ function createServerFunction<T>(
   * `contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data'` - Defaults to `'application/json'`.
   * `credentials?: "include" | "same-origin" | "omit"` - Defaults to `'same-origin'`.
   * `method?: "GET" | "POST"` - Defaults to `'POST'`.
-  * `rpcPrefix?: string` - Defaults to `'__rpc'`. Registers the function under a custom prefix so multiple RPC instances can coexist (versioned/namespaced APIs) — the same name may be reused under different prefixes. See [Multi-Prefix Support](./multi-prefix-guide.md).
+  * `rpcPrefix?: string` - Registers the function under a custom prefix so multiple RPC instances can coexist (versioned/namespaced APIs) — the same name may be reused under different prefixes. Omitted, it resolves to the **global prefix** (whatever `setGlobalPrefix` / `loadRPCConfig` published) and only then to `'__rpc'`, so the effective default follows your config rather than being hard-coded. Every adapter resolves its dispatch prefix the same way, so a registered function is always reachable. See [Multi-Prefix Support](./multi-prefix-guide.md) and [Configuration](./configuration.md#loadrpcconfig).
 
 ### Content Types
 
@@ -269,20 +271,35 @@ See [Client Usage](./client-usage.md#error-handling) and [Security](./security.m
 
 For **Post/Redirect/Get** (PRG) flows — a native form POST that should bounce the browser to a new URL — use the `redirect` helper instead of hand-writing `statusCode`/`Location`/`end`:
 
-- **Core**: `redirect(res, location, status?)` from `@thednp/rpc/server` — accepts an Express `Response` **or** a raw Node `ServerResponse`. When the response exposes a native `.redirect()`, it delegates to it; otherwise it falls back to writing the status code and `Location` header directly. The raw-node path works on Connect-compatible middlewares and serverless adapters (e.g. Netlify's `serverless-http` mock) whose responses lack `.redirect()`.
-- **Per adapter**: `redirect(reply, location, status?)`, `redirect(ctx, location, status?)`, `redirect(c, location, status?)` on the Fastify, Koa, and Hono adapters respectively, typed for each framework's native response object.
+There are two different `redirect` functions with different signatures. Which one you want depends on whether you are inside a server function or holding a response object.
 
-All variants default to **`303 See Other`** — the semantically correct code for "the POST succeeded, now GET this page". Fastify's native API takes the URL first (`reply.redirect(url, status)`), Koa requires setting `ctx.status` *after* `ctx.redirect()` (Koa ignores a status set before it, see [koajs/koa#857](https://github.com/koajs/koa/issues/857)), and Hono's must be **returned** from the handler (`return redirect(c, url)`).
+**Inside a server function — `redirect(location, status?)` from `@thednp/rpc/server`.** This is the one to reach for in almost every case: it reads the adapter-bound `redirect` from the request context, so it works from anywhere inside the dispatch with no `res` threading. It **takes no response argument** — passing one would silently send it as the `location`.
 
 ```ts
-import { redirect } from '@thednp/rpc/server';       // Express/Node
-import { redirect } from '@thednp/rpc/express';      // Express adapter
-import { redirect } from '@thednp/rpc/fastify';      // FastifyReply
-import { redirect } from '@thednp/rpc/koa';          // Koa Context (set ctx.status = 303 after)
-import { redirect } from '@thednp/rpc/hono';         // Hono Context → return it from the handler
+// src/api/submit.ts
+import { createServerFunction, redirect } from "@thednp/rpc/server";
+
+export const submit = createServerFunction("submit", async (signal, form) => {
+  await save(form);
+  redirect("/thanks");           // → POST /__rpc/submit answers 303 Location: /thanks
+});
 ```
 
-The demo's native form fallback uses this helper for its PRG redirects.
+It throws if called outside a request, so it only works during dispatch.
+
+**Holding a response object — the per-adapter `redirect(res, location, status?)`.** Use this from raw middleware, or when you already have the framework's response in hand. Each takes that framework's native object as the first argument:
+
+```ts
+import { redirect } from '@thednp/rpc/express';      // Express Response or raw ServerResponse
+import { redirect } from '@thednp/rpc/fastify';      // FastifyReply
+import { redirect } from '@thednp/rpc/koa';          // Koa Context
+import { redirect } from '@thednp/rpc/hono';         // Hono Context
+import { redirect } from '@thednp/rpc/h3';           // (location, status) — no response arg
+```
+
+The Express variant prefers a native `.redirect()` when the response has one and otherwise writes `Location` + status directly, so it also works on Connect-style and serverless responses that lack the method. Note **h3 is the exception among the adapters** — its `redirect` also takes no response argument, since `event.res` is reachable from the context.
+
+All variants default to **`303 See Other`** — the semantically correct code for "the POST succeeded, now GET this page". Fastify's native API takes the URL first (`reply.redirect(url, status)`), Koa requires setting `ctx.status` *after* `ctx.redirect()` (Koa ignores a status set before it, see [koajs/koa#857](https://github.com/koajs/koa/issues/857)), and Hono's must be **returned** from the handler (`return redirect(c, url)`).
 
 ## Request Context (`provideRequestContext`, `getRequestContext`)
 
@@ -420,4 +437,5 @@ Because `getRequestContext()` works identically across all five adapters, you ca
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

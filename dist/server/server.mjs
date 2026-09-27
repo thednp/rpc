@@ -3,18 +3,37 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { AsyncLocalStorage } from "node:async_hooks";
 //#region src/options.ts
+/**
+* Defaults applied to a server function that declares no `method`,
+* `credentials`, or `contentType` of its own.
+*/
 const defaultServerFnOptions = {
 	contentType: "application/json",
 	credentials: "same-origin",
 	method: "POST"
 };
+/**
+* The built-in RPC endpoint prefix, used when neither an explicit prefix nor a
+* global one (`getGlobalPrefix`) is supplied. Kept for backward compatibility
+* with pre-multi-prefix setups, where every function lived under this one map.
+*/
 const defaultPrefix = "__rpc";
+/**
+* Baseline plugin options. `defineConfig` merges a user's partial config over
+* these, and `loadRPCConfig` merges a loaded config file over them, so every
+* option has a defined value even when a config file omits it.
+*/
 const defaultRPCOptions = {
 	rpcPrefix: defaultPrefix,
-	adapter: "express",
 	serverFiles: "exact",
 	scanRoot: void 0
 };
+/**
+* Baseline middleware options. Note `rpcPrefix` is `undefined` rather than
+* `defaultPrefix` on purpose: leaving it unset lets `resolveRPCPrefix` fall
+* through to the global prefix, which is what makes a published global prefix
+* reach the middleware.
+*/
 const defaultMiddlewareOptions = {
 	rpcPrefix: void 0,
 	path: void 0,
@@ -67,9 +86,31 @@ const serverFunctionsMap = {
 };
 //#endregion
 //#region src/constants.ts
+/**
+* @module User-facing message strings.
+*
+* Two shapes live here: plain message constants (the exact text an RPC
+* response body carries) and message *factories* for the cases that need a
+* value interpolated. Both are part of the wire contract for the bodies below,
+* so the casing is deliberate — e.g. a client matching on
+* `METHOD_NOT_ALLOWED` must see `"Method Not Allowed"`, not `"Method not
+* allowed"`. These strings are also what keeps error responses generic: they
+* never include the requested function name, so a response cannot be used to
+* enumerate what exists.
+*/
+/** Thrown-name for an operation stopped by its own `cancel()`. */
 const OPERATION_ABORTED = "Operation aborted";
+/** Warning logged when a scanned server module exports nothing. */
 const NO_SERVER_FUNCTION_FOUND = "No server function found.";
+/** Error logged when a server function file cannot be loaded by Vite's SSR loader. */
 const ERROR_LOADING_FILE = "Error loading file:";
+/** Body of a 415, returned when the request's `Content-Type` does not satisfy the function's declared `contentType`. */
+const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+/** Body of a 413, returned when the request body exceeds the host's configured size limit. */
+const PAYLOAD_TOO_LARGE = "Payload Too Large";
+/** Body of a 400, returned when a GET `?args=` value parses but is not an array. */
+const BAD_REQUEST = "Bad Request";
+/** Body of a 500. Always generic — never the underlying error, so internals cannot leak. */
 const INTERNAL_SERVER_ERROR = "Internal Server Error";
 /** Error message when a value fails the safe-identifier validation. @param label - What kind of value was being validated. @param name - The rejected value */
 const INVALID_IDENTIFIER = (label, name) => `Invalid ${label}: "${name}" must match /^[A-Za-z_$][A-Za-z0-9_$]*$/`;
@@ -141,11 +182,60 @@ const formatError = (err, isProduction) => {
 	return { error: INTERNAL_SERVER_ERROR };
 };
 /**
-* Checks whether a content type maps to a form encoding
-* (`multipart/form-data` or `application/x-www-form-urlencoded`).
-* Form-declared functions accept either encoding so native browser
-* submissions (urlencoded) keep working without JavaScript.
+* Tags an error with an HTTP status for the dispatch to surface.
+*
+* Used where a malformed *request* is the fault — a body that does not parse
+* under a declared JSON `Content-Type`, a GET `?args=` value that is not valid
+* JSON. Every host framework rpc supports answers `400` for these (Express
+* `entity.parse.failed`, Fastify `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser,
+* and h3's own `readBody`), and treating one as a server fault both misreports
+* the fault and turns a trivial client mistake into a log entry.
+* @param status - The HTTP status to answer with
+* @param message - Internal diagnostic message; never sent to the client
+* @returns An `Error` carrying `status`
 */
+const httpError = (status, message) => {
+	const err = new Error(message);
+	err.status = status;
+	return err;
+};
+/**
+* Recognises an error that should produce a `4xx` response rather than a `500`.
+*
+* Matches the `status` / `statusCode` convention used by h3's `HTTPError`, the
+* `http-errors` objects Express's `body-parser` throws, and anything else that
+* carries a numeric 4xx. Shared by all five adapters so a host-framework
+* signal and an rpc-raised one are handled by the same rule.
+* @param err - The caught error
+* @returns True when the error denotes a client (4xx) fault
+*/
+const readClientStatus = (err) => {
+	const candidate = err;
+	const status = candidate?.status ?? candidate?.statusCode;
+	return typeof status === "number" && status >= 400 && status < 500 ? status : void 0;
+};
+/**
+* Recognises an error that should produce a `4xx` response rather than a `500`.
+* Matches the `status` / `statusCode` convention used by h3's `HTTPError`, the
+* `http-errors` objects Express's `body-parser` throws, and anything else
+* carrying a numeric 4xx. Shared by all five adapters so a host-framework
+* signal and an rpc-raised one are handled by the same rule.
+* @param err - The caught error
+* @returns True when the error denotes a client (4xx) fault
+*/
+const isClientHttpError = (err) => readClientStatus(err) !== void 0;
+/**
+* Reads the status to answer for a client error. Defaults to `400` rather than
+* `500` so an unrecognised 4xx is never reported as a server fault.
+* @param err - The caught error
+* @returns The 4xx status to answer with
+*/
+const clientErrorStatus = (err) => readClientStatus(err) ?? 400;
+const clientErrorMessage = (status) => {
+	if (status === 413) return PAYLOAD_TOO_LARGE;
+	if (status === 415) return UNSUPPORTED_MEDIA_TYPE;
+	return BAD_REQUEST;
+};
 const isFormContentType = (contentType) => contentType === "multipart/form-data" || contentType === "application/x-www-form-urlencoded";
 /**
 * Detects whether an incoming request's `Content-Type` header conflicts
@@ -167,7 +257,7 @@ const hasContentTypeMismatch = (declared, rawHeader) => {
 * Decides whether a request may proceed, given the configured origin allowlist
 * and the two headers a browser can be made to reveal.
 *
-* Three tiers, evaluated in order — the first tier with a signal decides:
+* Four tiers, evaluated in order — the first tier with a signal decides:
 *
 * 1. `origin` option unset → everything passes. No validation is performed.
 * 2. `Origin` present → the allowlist decides, exactly as {@link isOriginAllowed}.
@@ -259,13 +349,49 @@ const safeURL = (rawUrl, base = SAFE_URL_BASE) => {
 const globalPrefixSymbol = Symbol.for("thednp.rpc.globalPrefix");
 /** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
 const getGlobalPrefix = () => globalThis[globalPrefixSymbol];
+/**
+* Publishes the global RPC prefix, consulted by `resolveRPCPrefix` whenever no
+* explicit prefix is supplied. `loadRPCConfig` calls this on every return path
+* so a loaded config is the fallback for later registrations and dispatches.
+*
+* Stored on a `Symbol.for` key on `globalThis` so it stays instance-stable
+* across the bundled entry copies (`server.mjs`, `express.mjs`, ...) and dev
+* server hot reloads — the same technique as the request-context storage.
+* @param prefix - The prefix to publish, or `undefined` to clear it
+*/
 const setGlobalPrefix = (prefix) => {
 	if (prefix) globalThis[globalPrefixSymbol] = prefix;
 	else delete globalThis[globalPrefixSymbol];
 };
+/**
+* Resolves the effective RPC prefix: the explicit one when given, otherwise
+* the global prefix set by `setGlobalPrefix` / `loadRPCConfig`, otherwise the
+* built-in default.
+*
+* Every adapter resolves its prefix through this single function — in both the
+* outer `createMiddleware` gate and the `createRPCMiddleware` dispatch — so the
+* two halves of a request can never disagree, and so a prefix registered by
+* `createServerFunction` (which resolves the same way) is always the prefix the
+* middleware looks up. Resolving the two sides independently is what allowed
+* h3 to drift from the other four adapters, and what left the documented
+* global-prefix flow returning 404 on all of them.
+* @param rpcPrefix - Explicit prefix from config or middleware options
+* @returns The prefix to gate on, look up in, and strip from the request path
+*/
+const resolveRPCPrefix = (rpcPrefix) => rpcPrefix || getGlobalPrefix() || "__rpc";
 //#endregion
 //#region src/scanForServerFiles.ts
-let isScanned = false;
+/**
+* Scan targets already performed, so a lazy re-scan is not repeated.
+*
+* Keyed by everything that determines the outcome — the resolved scan root
+* (which files are read), the matching mode, and the prefix prefix-less
+* functions register under. A single process-wide boolean used to be enough
+* only while there was one prefix: the *first* scan suppressed every later
+* one, so a second RPC instance on a different prefix asked for a lazy scan,
+* got an early return, and answered 404 for every function it owned.
+*/
+const scannedTargets = /* @__PURE__ */ new Set();
 /** Absolute ids (normalized) of the scanned server function files. */
 const scannedServerFiles = /* @__PURE__ */ new Set();
 const EXACT_NAMES = [
@@ -286,7 +412,11 @@ const EXACT_NAMES = [
 * @param devServer - Optional running Vite dev server instance; when provided, skips creating a new one
 */
 const scanForServerFiles = async (initialCfg, devServer) => {
-	if (isScanned && !devServer) return;
+	const root = initialCfg?.root || process.cwd();
+	const resolvedScanRoot = resolve(root, initialCfg?.scanRoot ?? join(root, "src", "api"));
+	const serverFiles = initialCfg?.serverFiles ?? "exact";
+	const target = `${resolvedScanRoot}|${serverFiles}|${initialCfg?.rpcPrefix ?? "__rpc"}`;
+	if (scannedTargets.has(target) && !devServer) return;
 	let createServer;
 	let normalizePath;
 	try {
@@ -294,7 +424,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 	} catch {
 		return;
 	}
-	const config = !initialCfg && !devServer || !initialCfg ? {
+	const config = !initialCfg ? {
 		root: process.cwd(),
 		base: process.env.BASE || "/",
 		server: { middlewareMode: true }
@@ -312,9 +442,6 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 		optimizeDeps: { noDiscovery: true },
 		ssr: { optimizeDeps: { noDiscovery: true } }
 	});
-	const root = config.root || process.cwd();
-	const resolvedScanRoot = resolve(root, config.scanRoot ?? join(root, "src", "api"));
-	const serverFiles = config.serverFiles ?? "exact";
 	const seenNames = /* @__PURE__ */ new Set();
 	let files;
 	try {
@@ -336,7 +463,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 			const moduleEntries = Object.entries(moduleExports);
 			if (!moduleEntries.length) {
 				console.warn(NO_SERVER_FUNCTION_FOUND);
-				return;
+				continue;
 			}
 			for (const [exportName, exportValue] of moduleEntries) {
 				const registeredName = exportValue.name;
@@ -361,7 +488,7 @@ const scanForServerFiles = async (initialCfg, devServer) => {
 		}
 	} finally {
 		if (!devServer && server) await server.close();
-		isScanned = true;
+		scannedTargets.add(target);
 	}
 };
 //#endregion
@@ -496,7 +623,10 @@ const getModule = (fnName, fnEntry, options) => {
 * Generates the complete client-side module bundle by iterating all registered server functions
 * for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
 * (or Oxc) during the dev server or production build.
-* @param initialOptions - Plugin options containing rpcPrefix and optional adapter
+*
+* The generated stubs are plain `fetch` calls, so they are adapter-agnostic —
+* only the prefix is needed.
+* @param initialOptions - Plugin options containing the rpcPrefix
 * @returns A string of JavaScript code with all client RPC modules and their import dependencies
 */
 const getClientModules = (initialOptions) => {
@@ -608,6 +738,6 @@ const getRequestMeta = (event) => {
 	};
 };
 //#endregion
-export { RPCError, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, isFormContentType, isOriginAllowed, isOriginRequestAllowed, provideRequestContext, redirect, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
+export { RPCError, clientErrorMessage, clientErrorStatus, createServerFunction, defaultMiddlewareOptions, defaultPrefix, defaultRPCOptions, defaultServerFnOptions, escapeRegExp, formatError, getClientModules, getFunctionsForPrefix, getGlobalPrefix, getRequestContext, getRequestMeta, hasContentTypeMismatch, httpError, isClientHttpError, isFormContentType, isOriginAllowed, isOriginRequestAllowed, provideRequestContext, redirect, resolveRPCPrefix, safeURL, scanForServerFiles, scannedServerFiles, sendResponse, serverFunctionsByPrefix, serverFunctionsMap, setGlobalPrefix, walkGlobFiles };
 
 //# sourceMappingURL=server.mjs.map

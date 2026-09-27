@@ -83,7 +83,6 @@ import { defineConfig } from "@thednp/rpc/config";
 
 export default defineConfig({
   rpcPrefix: "__rpc",
-  adapter: "express",
 });
 ```
 
@@ -100,7 +99,7 @@ export default {
 };
 ```
 
-Plugin options only apply in development; see [Configuration](./configuration.md).
+Plugin options here apply to **both** dev and build — `configResolved` merges them for either command, and `buildStart` and `transform` read them during `vite build`. They take precedence over `rpc.config.ts`; see [Configuration](./configuration.md).
 
 
 ### 3. Create a server function in `src/api/server.ts`
@@ -142,10 +141,11 @@ For a more detailed guide on client-side usage, check the [dedicated wiki sectio
 
 ## How Auto-Scanning Works
 
-1. During Vite's `resolveId` phase, the plugin intercepts imports from `./api` (or paths under `src/api/`).
-2. It scans `src/api/` for the server files listed above and loads them via `vite.ssrLoadModule`.
-3. It builds a map of export names to their `createServerFunction` registration names.
-4. During `transform`, it replaces the import with generated client modules that use `fetch` under the hood.
+1. In `buildStart` (and in `configureServer` for the dev server), it scans `src/api/` for the server files listed above and loads each one with `vite.ssrLoadModule`.
+2. Loading the module is what registers the functions — `createServerFunction` writes itself into a prefix-scoped map as a side effect — and the scan records each export's `exportName` against its registered name.
+3. During `transform`, for any file in that scanned set that is pulled into a **client** build, it discards the server implementation and substitutes a generated module of `fetch`-based stubs. Files that merely mention `createServerFunction` in prose are left alone.
+
+> There is no `resolveId` hook. The gate for step 3 is the `scannedServerFiles` set: only a module the scan actually loaded gets rewritten.
 
 ## SSR vs SPA
 
@@ -186,4 +186,5 @@ await attachRPC(app);  // production — mounts createRPCMiddleware() with the r
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

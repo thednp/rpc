@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -57,6 +57,7 @@
     "test:dev": "node scripts/dev-test",
     "test:prod": "node scripts/dev-test --mode=preview",
     "format": "deno fmt src tests examples/**/src",
+    "format:check": "deno fmt --check src tests examples/**/src",
     "clean": "rm -rf examples/**/dist examples/**/node_modules examples/**/package-lock.json examples/**/pnpm-lock.yaml examples/**/bun.lockb examples/**/deno.lock",
     "dev": "cd examples/spa && pnpm up && pnpm dev",
     "dev:advanced": "cd examples/advanced && pnpm up && pnpm dev",
@@ -68,7 +69,7 @@
     "dev:react-query": "cd examples/react-query && pnpm up && pnpm dev",
     "dev:solid-query": "cd examples/solid-query && pnpm up && pnpm dev",
     "dev:ssr": "cd examples/ssr && pnpm up && pnpm dev",
-    "lint": "pnpm lint:ts && pnpm check:ts",
+    "lint": "pnpm lint:ts && pnpm check:ts && pnpm check:tests",
     "lint:ts": "deno lint src",
     "fix:ts": "deno lint src --fix",
     "check:ts": "tsc -noEmit",
@@ -81,7 +82,8 @@
     "audit:src": "node scripts/audit-src.js",
     "prepareOnly": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "prepublishOnly_": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
-    "build": "tsdown"
+    "build": "tsdown",
+    "check:tests": "tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "express": "^5.2.1",

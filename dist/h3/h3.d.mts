@@ -1,5 +1,5 @@
 import { EventHandler as H3Next, H3, H3 as H3$1, H3Event, H3Event as H3Event$1, H3Event as H3Request, H3Response, HTTPResponse, Middleware, Middleware as H3Middleware } from "h3";
-import { BodyResult, MiddlewareOptions, RpcPluginOptions } from "@thednp/rpc";
+import { AdapterName, BodyResult, MiddlewareOptions } from "@thednp/rpc";
 import { IncomingHttpHeaders } from "node:http";
 import { ViteDevServer } from "vite";
 import "express";
@@ -90,7 +90,7 @@ interface H3MiddlewareHooks {
  * h3 middleware factory: takes optional initial options and returns
  * the h3-compatible handler.
  */
-type H3MiddlewareFn = <A extends RpcPluginOptions["adapter"] = "h3">(initialOptions?: Partial<H3MiddlewareOptions>) => H3MiddlewareHooks["handler"];
+type H3MiddlewareFn = <A extends AdapterName = "h3">(initialOptions?: Partial<H3MiddlewareOptions>) => H3MiddlewareHooks["handler"];
 /**
  * h3 application reference used by helpers that attach middleware to an app.
  */

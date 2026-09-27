@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { clientErrorStatus, isClientHttpError } from "../src/server-helpers.ts";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
-  sendResponse,
+  // sendResponse,
 } from "../src/context.ts";
 import {
   attachRPC,
@@ -327,12 +329,106 @@ describe("Hono createRPCMiddleware", () => {
     serverFunctionsMap.clear();
   });
 
+  // A whole class of runtimes (Cloudflare Workers, Bun, Deno, standalone
+  // serverless adapters, and Hono's own `app.fetch()`) leave `c.env`
+  // undefined. The fixtures below always set it, so nothing caught that
+  // `readBody`, the disconnect hook and `viteMiddleware` each read `c.env`
+  // unguarded — every request on those runtimes threw a TypeError and came back
+  // as a 500, even a well-formed one. These tests drive a real `Hono` app
+  // through `app.fetch()` so `c.env` is genuinely absent.
+  describe("on a runtime without c.env", () => {
+    const call = async (path: string, body: unknown, contentType?: string) => {
+      const app = new Hono();
+      app.use(createRPCMiddleware());
+      return app.fetch(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: contentType ? { "content-type": contentType } : {},
+          body: JSON.stringify(body),
+        }),
+      );
+    };
+
+    it("dispatches a well-formed JSON body", async () => {
+      createServerFunction("hono-env", vi.fn().mockResolvedValue("ok"));
+      const res = await call(
+        "/__rpc/hono-env",
+        ["hi"],
+        "application/json",
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ data: "ok" });
+    });
+
+    it("passes the parsed argument through", async () => {
+      const fn = vi.fn().mockResolvedValue("ok");
+      createServerFunction("hono-arg", fn);
+      await call("/__rpc/hono-arg", { email: "a@b.c" }, "application/json");
+      const received = fn.mock.calls[0]?.[1] as unknown;
+      expect(received).toEqual({ email: "a@b.c" });
+    });
+
+    it("rejects a malformed JSON body with 400, not 500", async () => {
+      createServerFunction("hono-bad", vi.fn().mockResolvedValue("ok"));
+      const app = new Hono();
+      app.use(createRPCMiddleware());
+      const res = await app.fetch(
+        new Request("http://localhost/__rpc/hono-bad", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{not json",
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Bad Request" });
+    });
+
+    it("returns 404 for an unknown function", async () => {
+      const res = await call("/__rpc/nope", [], "application/json");
+      expect(res.status).toBe(404);
+    });
+
+    it("preserves a client error the host already classified", async () => {
+      // If `c.req.json()` fails with something that already carries a 4xx —
+      // Hono's own HTTPException, say — the status is kept rather than
+      // relabelled.
+      const app = new Hono();
+      app.use(createRPCMiddleware());
+      const hostile = {
+        env: undefined,
+        req: {
+          header: () => "application/json",
+          json: () => Promise.reject({ status: 422, message: "nope" }),
+          text: () => Promise.resolve(""),
+        },
+      };
+      const err = await readBody(hostile as never).catch((e: unknown) => e);
+      expect(isClientHttpError(err)).toBe(true);
+      expect(clientErrorStatus(err)).toBe(422);
+    });
+
+    it("rejects a malformed ?args= with 400, not 500", async () => {
+      const fn = vi.fn();
+      createServerFunction("hono-malformed-args", fn, { method: "GET" });
+      const app = new Hono();
+      app.use(createRPCMiddleware());
+      const res = await app.fetch(
+        new Request(
+          "http://localhost/__rpc/hono-malformed-args?args=not%20json",
+        ),
+      );
+      expect(fn).not.toHaveBeenCalled();
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Bad Request" });
+    });
+  });
+
   it("should return 404 for unknown function", async () => {
     seedServerMap();
     const mw = createRPCMiddleware();
     const c = makeHonoContext({ path: "/__rpc/noSuchFn" });
     const next = makeHonoNext();
-    const result = await mw(c, next);
+    await mw(c, next);
     expect(c.json).toHaveBeenCalledWith(
       { error: "Function not found" },
       404,
@@ -367,7 +463,7 @@ describe("Hono createRPCMiddleware", () => {
       body: JSON.stringify(["arg1"]),
     });
     const next = makeHonoNext();
-    const result = await mw(c, next);
+    await mw(c, next);
     expect(c.json).toHaveBeenCalledWith({ data: "hello hono" }, 200);
   });
 

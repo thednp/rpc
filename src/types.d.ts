@@ -18,6 +18,18 @@ import type { KoaMiddlewareFn, KoaMiddlewareHooks } from "./koa/index.ts";
 import type { H3MiddlewareFn, H3MiddlewareHooks } from "./h3/index.ts";
 
 /**
+ * Every framework adapter rpc ships a middleware for.
+ *
+ * This is the key type for {@link FrameworkHooks}, so `MiddlewareOptions<A>`
+ * can type each adapter's `handler` signature. It is a *type* only — the
+ * adapter you get is the one you import (`@thednp/rpc/express`,
+ * `@thednp/rpc/hono`, …). There is deliberately no config option that selects
+ * it: a runtime value could only ever disagree with the subpath actually
+ * mounted, and nothing read it.
+ */
+export type AdapterName = "express" | "hono" | "h3" | "fastify" | "koa";
+
+/**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
  * Used to keep the middleware options type-safe per adapter.
  */
@@ -203,12 +215,13 @@ export type ClientFunctionWithOptions = ClientFunction & {
 
 /**
  * Internal plugin options accepted by `getClientModules`.
+ *
+ * Only the prefix: the generated stubs are adapter-agnostic, since they are
+ * plain `fetch` calls.
  */
 export interface RpcPluginOptionsInternal {
   /** RPC endpoint prefix (e.g. "__rpc") */
   rpcPrefix: string;
-  /** Framework adapter name */
-  adapter?: string | undefined;
 }
 
 /**
@@ -258,14 +271,6 @@ export interface RpcPluginOptions {
   rpcPrefix: "__rpc" | string;
 
   /**
-   * Option to set an adapter for the middleware connection. The default is _express_,
-   * which is the most popular and battle tested server app. The _express_ adapter is
-   * also compatible with the vite's Connect development server.
-   * @default express
-   */
-  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
-
-  /**
    * Root directory from which the plugin scans for server files.
    * Defaults to `<root>/src/api`. Use this in monorepos where server files
    * live in a shared package outside the current project root.
@@ -291,7 +296,7 @@ export interface RpcPluginOptions {
 }
 
 export interface MiddlewareOptions<
-  A extends RpcPluginOptions["adapter"] = "express",
+  A extends AdapterName = "express",
 > {
   /**
    * Name for the middleware (used for identification in Express stack)
@@ -320,7 +325,7 @@ export interface MiddlewareOptions<
    * // Results in endpoints like: /api/rpc/myFunction
    * rpcPrefix: "api/rpc"
    */
-  rpcPrefix?: string | false;
+  rpcPrefix?: string;
 
   /**
    * Allowed request origin(s) — a single origin string or an allowlist of them

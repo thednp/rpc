@@ -36,7 +36,7 @@ if (!isProduction) {
   // load RPC configuration
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { createRPCMiddleware } = await import("@thednp/rpc/express");
-  const { adapter, ...options } = await loadRPCConfig();
+  const options = await loadRPCConfig();
   app.use(createRPCMiddleware(options));
 
   // other middleware

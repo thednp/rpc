@@ -19,13 +19,19 @@ Using `startsWith` would incorrectly match paths like `/__rpc-evil/foo`, which c
 
 ## URL Normalization (all adapters)
 
-Every adapter parses the request URL through the shared `safeURL()` helper (`src/server-helpers.ts`) before any prefix matching. It strips query strings and normalizes encoding, preventing query-string injection into the function-name lookup:
+Every adapter normalizes the request URL before any prefix matching, so a query string can never be injected into the function-name lookup. The call site differs per adapter, so it is worth being precise about which is which:
+
+| Adapter | Source | How it is normalized |
+| --- | --- | --- |
+| Fastify, Koa, Hono | `req.url` / `ctx.url` / `c.req.path` | `safeURL()` directly |
+| Express | `req.url` | `safeURL()` via `getRequestDetails(req)` (`src/express/helpers.ts`) |
+| h3 | `event.url.pathname` | Already parsed by h3 before the middleware runs — `safeURL()` is not called, and does not need to be |
 
 ```ts
 const { pathname, search, searchParams } = safeURL(rawUrl);
 ```
 
-`safeURL` never throws. Malformed request-targets (`/\`, `//`, `/\/`) make the WHATWG URL parser raise `TypeError: Invalid URL`, and the adapters parse the URL *before* their dispatch `try` block — so an unguarded throw became an unhandled rejection that crashes raw `node:http` hosts (and Express 4) on a single unauthenticated request. On failure `safeURL` falls back to the base root, so the pathname never matches the prefix and the request is treated as non-RPC and falls through to `next()` / 404.
+Where `safeURL` is used, it never throws. Malformed request-targets (`/\`, `//`, `/\/`) make the WHATWG URL parser raise `TypeError: Invalid URL`, and the adapters parse the URL *before* their dispatch `try` block — so an unguarded throw became an unhandled rejection that crashes raw `node:http` hosts (and Express 4) on a single unauthenticated request. On failure `safeURL` falls back to the base root, so the pathname never matches the prefix and the request is treated as non-RPC and falls through to `next()` / 404. h3 is unaffected by that class of crash because it parses the request target itself, upstream of this middleware.
 
 This applies to Express, Fastify, Koa, Hono, h3, and `getRequestMeta` in the request context.
 
@@ -116,7 +122,7 @@ app.use(createRPCMiddleware({
 }));
 ```
 
-The rule, shared by all five adapters via the `isOriginRequestAllowed` helper (`src/server-helpers.ts`). Three tiers, first signal wins:
+The rule, shared by all five adapters via the `isOriginRequestAllowed` helper (`src/server-helpers.ts`). Four tiers, first signal wins:
 
 1. **`origin` unset** → everything passes. No validation is performed.
 2. **`Origin` present** → the allowlist decides, exactly as before.
@@ -149,7 +155,7 @@ Two more properties worth relying on:
 
 An empty or whitespace-only header value counts as **absent**, not as an unrecognised signal — no browser emits an empty `Sec-Fetch-Site`.
 
-This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives.
+This closes the "sibling subdomain" CSRF gap that `SameSite=Lax` cookies alone cannot cover. See [Best Practices — Origin / CSRF Protection](./best-practices.md#origin--csrf-protection) for the full guide and alternatives, and [Comparison](./comparison.md) for how this check stacks up against Next.js Server Actions, TanStack Start, and tRPC — including where it is the *weakest* of the four.
 
 ### Residual Gaps
 
@@ -171,15 +177,15 @@ One limit worth knowing before you rely on `origin` alone:
 
 ## Multi-Prefix Client Isolation
 
-`getClientModules` (`src/getClientModules.ts:93`) does **not** write files to disk. The Vite plugin's `transform` hook (`src/index.ts:221`) replaces each scanned server file **in-memory** (a virtual module) with the string returned by `getClientModules`. That string is built from a single prefix-scoped map:
+`getClientModules` (`src/getClientModules.ts:67`) does **not** write files to disk. The Vite plugin's `transform` hook (`src/index.ts:236`) replaces each scanned server file **in-memory** (a virtual module) with the string returned by `getClientModules`. That string is built from a single prefix-scoped map:
 
 ```ts
-const prefixMap = getFunctionsForPrefix(initialOptions.rpcPrefix); // src/getClientModules.ts:100
+const prefixMap = getFunctionsForPrefix(initialOptions.rpcPrefix); // src/getClientModules.ts:74
 ```
 
 Only functions whose `createServerFunction(...,{rpcPrefix})` matches the config `rpcPrefix` are emitted. With `rpc.config.ts: {rpcPrefix:"public:rpc", serverFiles:"glob"}` scanning both `public.server.ts` (`public:rpc`) and `admin.server.ts` (`admin:rpc`), a client build for `public:rpc` contains **no** `admin:rpc` stubs — inspecting the public client bundle cannot reveal `admin` function names. Each scanned `*.server.ts` is replaced with the same virtual module (all public functions), not a file per server file.
 
-Prefix isolation is **not** a security boundary. The prefix segment (`/admin:rpc/get-user`) is just a URL path — an attacker can guess `admin:rpc`, `private:rpc`, `v1:rpc` regardless of the bundle. Do not rely on obscurity. Protect every non-public prefix with explicit auth inside the handler (`requireAdmin` via `getRequestContext`/`sendResponse(403)` as in `examples/advanced/src/api/admin.server.ts:13` and `middleware.ts:46`), and validate the prefix with the same escaped-regex guard the adapters use. Client-bundle isolation only prevents accidental leakage; the network boundary must enforce auth.
+Prefix isolation is **not** a security boundary. The prefix segment (`/admin:rpc/get-user`) is just a URL path — an attacker can guess `admin:rpc`, `private:rpc`, `v1:rpc` regardless of the bundle. Do not rely on obscurity. Protect every non-public prefix with explicit auth inside the handler (`requireAdminSession` via `getRequestContext`/`sendResponse(403)` as in `examples/advanced/src/api/admin.server.ts:13` and `examples/advanced/src/api/middleware.ts:98`), and validate the prefix with the same escaped-regex guard the adapters use. Client-bundle isolation only prevents accidental leakage; the network boundary must enforce auth.
 
 ## Authentication via Middleware
 
@@ -220,4 +226,5 @@ Server functions receive raw, untrusted client data. Always validate before use.
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
+- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

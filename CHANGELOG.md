@@ -1,5 +1,121 @@
 # Changelog
 
+## [0.3.7] - 2026-09-27
+
+A correctness pass over the transport, found by auditing the codebase against its
+own documentation. Two of the three headline bugs were found *by* that audit
+being unable to corroborate the docs — they were documented, tested-adjacent, and
+wrong.
+
+**What was broken**
+
+- **Hono's RPC returned `500` for every request on any runtime that is not
+  `@hono/node-server`** — Workers, Bun, Deno, standalone serverless, and Hono's
+  own `app.fetch()`. Three unguarded `c.env` reads, and a disconnect hook whose
+  comment said "may be absent ... so guard the close hook" followed by
+  `c.env.incoming?.`, which guards a null `incoming` rather than an absent
+  `c.env`. The fixtures always set `env`, so nothing caught it.
+- **A malformed declared-JSON body was answered `200` with the raw string handed
+  to the handler** on Express, Koa and Fastify, and `500` on Hono and h3. The
+  cause was a `readBody` ternary with no `isJSON` branch: text bodies also went
+  through `JSON.parse`, so a malformed JSON body and a legitimate text body threw
+  the same exception and were indistinguishable. The `200` failed *open*.
+- **The documented global-prefix and serverless flows returned `404` on every
+  adapter**, and `loadRPCConfig` skipped publishing the prefix on its most
+  common code path.
+- **Only the first scan in a process ran**, so a second RPC instance on its own
+  prefix could never populate its map.
+- **A CI gap let the export-surface test pass while the type it guards was
+  deleted** — it is a build-output test, and the build step was commented out.
+
+**What changed underneath**: a malformed request is now a `4xx` and never a
+silent `200` or a `500`, via one shared rule used by all five adapters; the
+prefix resolves through a single `resolveRPCPrefix()`; and two config options
+that never did anything (`adapter`, and `rpcPrefix: false`) are gone, with the
+one type that carries real meaning extracted as `AdapterName`.
+
+This release **does** change the emitted bundles — `src/index.ts`,
+`src/scanForServerFiles.ts`, `src/server-helpers.ts`, `src/getClientModules.ts`,
+`src/constants.ts`, `src/options.ts`, `src/types.d.ts` and all five
+`src/*/createMiddleware.ts` + `src/*/helpers.ts` files — so `dist/` is rebuilt
+and must be committed with the source. **Breaking**: express/koa/fastify now
+answer `400` where they answered `200` for a malformed body, and a config
+carrying `adapter:` now fails typecheck rather than being ignored.
+
+### ⚠️ Behaviour change — prefix resolution
+
+- **The documented global-prefix and serverless flows returned 404 on all five adapters.** `createRPCMiddleware` merged `{ rpcPrefix: defaultRPCOptions.rpcPrefix }` into its options *before* resolving the prefix, so `rpcPrefix` was always the truthy `"__rpc"` and the trailing `rpcPrefix || getGlobalPrefix() || defaultPrefix` was unreachable. `createServerFunction` *does* honour the global prefix, so the two halves disagreed — with `setGlobalPrefix("@demo")`, a middleware built without an explicit prefix answered `next()` for `/@demo/greet` (falling through to the app) and `"Function not found"` for `/__rpc/greet`. `attachRPC` escaped this only because it threads the loaded config through explicitly, which is why every example passed.
+  The default injection is gone, and all five adapters now resolve through a new `resolveRPCPrefix()` (`src/server-helpers.ts`) used in *both* the outer `createMiddleware` gate and the `createRPCMiddleware` dispatch, so parity is structural rather than a convention. **The change only affects states that were already returning 404:** with no global prefix set — every example and every other test — the resolved prefix is still `"__rpc"`, and an explicitly-passed prefix still wins. The boundary regex is built from the *resolved* prefix so gating is never dropped.
+- **`loadRPCConfig` now publishes the global prefix on every return path.** It returned from inside its config-file search loop without calling `setGlobalPrefix`, while the explicit-`configFile` and no-config paths both did — so the common case (an `rpc.config.ts` exists) was the one that skipped it. Masked in the plugin path because `scanForServerFiles` re-resolves the prefix itself; exposed in the `attachRPC` / direct-import path.
+
+Both bugs shipped at 100% coverage because every fixture in `tests/fixtures/*.ts` called `setGlobalPrefix(undefined)`, so the state the feature is *about* was never exercised. `tests/express.test.ts` now has a `global-prefix dispatch` block (6 tests) that sets a real prefix, and `tests/plugin.test.ts` has a file-level `afterEach` resetting it.
+
+One related thing was investigated and deliberately left alone: a config file that throws still resets the `RPCConfig` cache to the defaults, because the "fall back to defaults" contract is asserted by tests. (The `rpcPrefix: false` phantom found by the same audit is handled below.)
+
+### ⚠️ Breaking — the inert `adapter` config option is gone
+
+- `RpcPluginOptions.adapter` (`'express' | 'hono' | 'h3' | 'fastify' | 'koa'`) was **never read by anything**. Exactly two places in the whole source touched its value: `src/index.ts` destructured it out and discarded it (`const { adapter: _adapter, ...rest } = options`), and passed it into `getClientModules`, which spread it into a helper's options and never looked at it. The adapter is determined entirely by which subpath you import — `@thednp/rpc/express`, `/hono`, `/koa`, `/h3`, `/fastify` — which is exactly how the type system already modelled it, each adapter hardcoding its own literal into `MiddlewareOptions<"express">` etc.
+  A runtime value could therefore only ever *disagree* with the subpath actually mounted, and nothing read it to notice. Setting `adapter: "hono"` while mounting Express silently did nothing. The field is removed; the **union survives as the exported `AdapterName` type**, which is what keys `FrameworkHooks[A]["handler"]` at `src/types.d.ts:383` and is genuinely load-bearing.
+  Removed alongside it: `adapter` from `RpcPluginOptionsInternal` (which is why `getClientModules` only ever needed `rpcPrefix`), from `defaultRPCOptions`, and the five `const { adapter: _adapter, ...options } = await loadRPCConfig()` workarounds in `src/*/helpers.ts` and the example servers — a phantom field that every consumer had to strip out by hand before the middleware would accept the config. `configuration.md` no longer lists it.
+  Compile-time only: a config file still carrying `adapter:` now fails typecheck rather than being ignored.
+
+- **Also removed (types only): `rpcPrefix: false`.**
+
+  `MiddlewareOptions.rpcPrefix` was declared `string | false`, but `false` was **documented nowhere, tested nowhere, and handled nowhere**. Measured: it was byte-identical to omitting the option — `createRPCMiddleware({ rpcPrefix: false })` dispatched exactly like `createRPCMiddleware({})` for both `/__rpc/greet` (200) and `/anything/greet` (fall-through). A silent no-op that reads like "disable prefix gating" is worse than an absent option, so the type now says `string`. `resolveRPCPrefix()`'s signature was narrowed to match.
+  This is a **compile-time-only** change: JavaScript callers passing `false` are unaffected at runtime, since the `||` chain still falls through to the global prefix and then the default. It only surfaces for TypeScript users who wrote `rpcPrefix: false` — and for them the error is the correction, because they had been running with full prefix gating while believing the gate was disabled.
+
+### ⚠️ Behaviour change — malformed request bodies are now `400`, not `200` or `500`
+
+- **A declared-JSON body that does not parse used to be answered `200` with the raw string handed to the handler** on Express, Koa and Fastify, and `500` on Hono and h3. Both outcomes were wrong, and the first was worse: it failed *open*. The cause was in `readBody`, where all three content-type branches fell through to a single `JSON.parse(body)` — so a `text/plain` body also went through `JSON.parse`, threw, and was "recovered" by a catch that resolved it as `text/plain`. A malformed JSON body and a legitimate text body were therefore indistinguishable, and the recovery path silently answered `200`.
+  Only a *declared* JSON body is now parsed strictly; everything else keeps the lenient sniff, which is deliberate and load-bearing — a request with no `Content-Type` at all (curl, and the nojs form fallback) that happens to carry JSON must still arrive parsed. On failure the error is tagged with a `400` (`httpError`, new) and every adapter answers `{ error: "Bad Request" }`.
+  This matches every supported host: Express `body-parser` (`entity.parse.failed` → 400), Fastify (`FST_ERR_CTP_INVALID_JSON_BODY` → 400), koa-bodyparser (400), and h3's own `readBody` (`HTTPError` 400, which rpc was discarding by parsing the body itself). Hono has no opinion here — its maintainers declined to own the case in honojs/hono#578 — so as the thing doing the parsing, rpc answers 400 for it.
+- **Only the first scan in a process ran.** `scanForServerFiles` memoized with a single module-level boolean, so the *first* scan suppressed every subsequent one. The scan target is now keyed on the resolved `(scanRoot, serverFiles, rpcPrefix)` triple — everything that determines which files are read and where prefix-less functions register — so a repeat of the same scan is still skipped, but a second RPC instance on its own prefix now scans. Previously that instance asked for a lazy scan, got an early return, and answered `404` for every function it owned. Only reachable with a function declaring no `rpcPrefix` under a second middleware, i.e. a configuration that was already broken; it is now correct. Functions that declare their own prefix were never affected — one scan registers them all.
+- **A malformed GET `?args=` is now `400` on all five adapters.** It previously threw out of the dispatch's `try` and was reported as a `500` — a cheap way for a client to generate server errors. The existing non-array case already answered `400`; only the malformed-syntax half was wrong.
+- Client-error statuses are surfaced through one shared rule (`isClientHttpError` / `clientErrorStatus` / `clientErrorMessage` in `src/server-helpers.ts`) rather than per-adapter logic, so a host framework's signal and an rpc-raised one are handled identically. It reads both `status` (h3's `HTTPError`, rpc's `httpError`) and `statusCode` (the `http-errors` objects Express throws, Koa's `ctx.throw`), and the response body comes from a fixed table so no host-framework message is echoed back. `5xx` and unrecognised errors still go through `formatError`.
+
+### Fixed
+
+- **⚠️ Hono's RPC was broken on every runtime that is not `@hono/node-server`.** `readBody`, the client-disconnect hook and `viteMiddleware` each read `c.env` unguarded, so on Cloudflare Workers, Bun, Deno, standalone serverless adapters — and Hono's own `app.fetch()` — `c.env` is `undefined` and *every* request threw a `TypeError` and came back as a `500`, including a well-formed one. The disconnect hook even carried a comment saying the runtime adapter "may be absent ... so guard the close hook" and then wrote `c.env.incoming?.`, which guards a null `incoming` but not an undefined `c.env`. The existing fixtures always set `env`, so nothing caught it; four tests now drive a real `Hono` app through `app.fetch()` where `c.env` is genuinely absent.
+
+- **h3 reported an oversized body as a `500` instead of a `413`.** h3's `bodyLimit`/`assertBodySize` enforces its cap in two places: an honest `Content-Length` over the limit is rejected up front, before rpc is reached, but a **chunked** body (no length to check) trips *while the stream is read* — which is inside the RPC dispatch's `try` block. The adapter's generic catch flattened h3's `413` into a `500`, so h3 was the only adapter that reported an oversize body as a server fault; the other four get their `413` from the host body parser before rpc runs. The h3 adapter now forwards h3's own `4xx` out of the dispatch `try` (`413` becomes `{ error: "Payload Too Large" }`), while `5xx` and unrecognised errors still go through `formatError`. Covered by a real-`H3` test that streams a body with no `Content-Length` and asserts `413`, verified to fail with the fix removed.
+
+- **`loadRPCConfig({ silent: true })` silently discarded the config** (`src/index.ts`). The documented single-argument form passes the options bag where the signature expects a config path, so `resolve()` threw `ERR_INVALID_ARG_TYPE`, the `catch` swallowed it, and the call returned `defaultRPCOptions` instead of the project's real config — with only a `Failed to load RPC config` warning as evidence. This was the form shown in `wiki/configuration.md`. An object first argument is now normalised to the options bag, and both the two-argument and one-argument forms work.
+- **Vite 10+ silently used the wrong transform pipeline** (`src/index.ts`). `isOxc` was derived from `Number(viteVersion[0]) >= 8`, which reads the first *character*: `"10.4.2"` yields `1`, fails the `>= 8` test, and routes every future double-digit Vite through `transformWithEsbuild` instead of `transformWithOxc`. Now parsed as an integer major.
+- **An export-less module silently abandoned the rest of the scan** (`src/scanForServerFiles.ts`). A module with no exports warned and then `return`ed out of the whole function rather than `continue`ing to the next file, so in `serverFiles: "glob"` mode every file after it was dropped without a word. Any glob project with a helper or barrel file that exports nothing was affected, and the missing functions surfaced only as `404`s at request time.
+- **h3's outer gate resolved its prefix differently from the other four adapters** (`src/h3/createMiddleware.ts`). It used the three-way `rpcPrefix || getGlobalPrefix() || defaultPrefix` where express/fastify/hono/koa use `rpcPrefix ?? defaultPrefix`, so the same setup could pass h3's gate and be rejected by the others. Normalised to match.
+- **Scan fixtures could not compile** (`tests/fixtures/scan-api/src/api/users.server.ts`, `upload.server.mts`): both called `createServerFunction(handler)` with the required `name` argument missing, so neither file was valid against the real signature. This never surfaced because `scanForServerFiles` discovers server modules by *filename* and never imports them — a fixture that would fail to compile sat in the tree indefinitely. Both now match the real API.
+
+### Tests
+
+- **Regression tests for each runtime fix**, each verified to fail with the bug reintroduced. The Vite-version test asserts *which* transformer was called — the existing vite 7/8 tests only asserted the output was non-empty, and both mocked transformers return the input, which is why `Number(viteVersion[0])` survived. The scan test uses a fixture with two export-less modules and one populated, so it fails under any directory read order.
+- New `tests/fixtures/scan-mixed/` (`a-empty.server.ts`, `b-loaded.server.ts`, `c-empty.server.ts`); `tests/fixtures/vite-mock.ts` gains `mockPlugin10Context` for the double-digit major version.
+- **The Fastify reply mock now carries `redirect`** (`tests/fixtures/fastify.ts`): the v5-signature helper in `src/fastify/helpers.ts` calls `reply.redirect(location, status)`, so all four redirect tests had to attach the method to the double with a cast. The mock ships it instead. All four still assert on the call, so none became vacuous.
+- Removed genuinely dead code from the suites: an unused `sendResponse` import (express, hono), an unused `app` binding (express), three unused `result` bindings (hono), an unused trailing `cb` parameter (h3), and a commented-out `origWarn` (scan).
+- **17 pre-existing type errors in the test suite fixed.** None were reachable before — see the `check:tests` entry below.
+- The `F1` finding was originally tracked as an `it.todo` in `tests/express.test.ts`; once fixed it became a six-test `global-prefix dispatch` block that sets a real global prefix. Three of the six fail with the bug reintroduced; the other three guard behaviour that must *not* change (default prefix with no global prefix set, explicit prefix winning over the global one, and boundary safety on a resolved prefix). `tests/plugin.test.ts` gained a file-level `afterEach` resetting the global prefix, since `loadRPCConfig` now publishes it and would otherwise leak into every later `createServerFunction` call.
+
+### Chores
+
+- **CI now builds before testing** (`.github/workflows/ci.yml`). `tests/adapter-exports.test.ts` is a build-output test that parses the emitted `dist/<adapter>/*.d.mts`, but the build step was commented out. Because `dist/` is committed the file exists on a fresh checkout, so the suite silently validated the *last committed bundle* rather than current source — demonstrated by deleting `ExpressApp` from `src/express/types.d.ts`, which passed 56/56 with no build and fails with one. That test exists to stop a type name "quietly disappearing in a refactor", and it could not do so.
+- **CI checks formatting instead of rewriting it** (`format:check`, new script). The workflow ran `pnpm format`, which rewrites files in the runner with no `git diff --exit-code` afterward, so format drift never failed a build — it just got silently "fixed" somewhere nobody would notice. `deno fmt --check` exits non-zero with `Found N not formatted files`.
+- **The test suite is now typechecked** (`tsconfig.tests.json`, `check:tests`): `tsc` only ever covered `src`, so none of the test files were typechecked despite being a large part of the tree. `lint` now runs a third step after `check:ts`.
+  It is a **separate tsconfig on purpose**: `tsdown` emits declarations from `tsconfig.json`, and pulling `tests/fixtures` into that program raises TS2883 (*"inferred type cannot be named without a reference to 'Procedure' from `…/vitest/dist/…`"*) and fails the build. Under `noEmit` those errors do not occur, so tests are checked in their own program rather than the emit one.
+- Removed dead and duplicated logic in the plugin entry: the unreachable third clause of the `transform` guard (`code.includes(...)` was already tested, and `typeof process === "undefined"` is always false inside a Node-hosted plugin), a per-call `await import("vite")` replaced by a static namespace import, a `(!initialCfg && !devServer) || !initialCfg` no-op, and the two duplicated config-merge blocks folded into one `mergeLoaded` helper.
+
+### Docs
+
+- **`wiki/comparison.md` re-verified against vendor source and documentation**, and it was wrong in a security-relevant direction. Next.js does **not** abort a request with no `Origin` — an absent header is let through with a dev warning, on the stated reasoning that a handcrafted request cannot carry unwilling victim credentials. That is the *same* fail-open posture `@thednp/rpc` takes for its curl/native hole, and the page had claimed rpc was uniquely permissive about it. TanStack was also overstated: it rejects a request carrying *no* signal at all, not specifically one lacking `Origin` (a no-`Origin` request with a same-origin `Referer` is allowed). Corrected, with a note recording what the earlier draft got wrong.
+  Also updated: the `GHSA-mq59-m269-xvcx` entry with its CVE alias, severity, affected range (`16.0.1`–`16.1.6`) and fix version (`16.1.7`); SvelteKit's `trustedOrigins: ['*']`, which does **not** rescue a missing-`Origin` form POST, and the fact that PR #14795 was **closed unmerged** — remote functions are exempt from `trustedOrigins` by design, not awaiting a fix; a **removed** claim that `Referrer-Policy: no-referrer` causes SvelteKit CSRF false positives (SvelteKit reads only `Origin` and has no `Referer` fallback, so that mechanism does not exist); tRPC's POST `Content-Type` enforcement as a form-CSRF mitigation it does ship; `shield()` being dev-off by default; and verified versions for all five projects in the header and Sources.
+
+### Docs
+
+- **`AGENTS.md` — the URL-normalization note overclaimed.** It stated that *every* adapter parses the request URL through the shared `safeURL()` helper. In fact fastify/hono/koa call it directly, express reaches it through `getRequestDetails`, and **h3 does not call it at all** — it reads `event.url.pathname`, which h3 has already parsed, so the throw-on-malformed-target case is handled upstream by h3. There was never a security gap; the note claimed more than the code did. Corrected in both the security section and the threat-model table.
+- **`AGENTS.md` — the deferred-findings section became a *Fixed in 0.3.7* section** once the two prefix bugs landed, so it now documents the guardrails instead of the open questions: `resolveRPCPrefix()` is the single resolution point and a local `a || b || c` in an adapter is a regression; the removed default injection is *why* the `|| getGlobalPrefix()` fallback was unreachable; the boundary regex must be built from the resolved prefix but still gated on an explicitly-supplied one, because building it unconditionally would start gating a bare `createMiddleware({ path, handler })`; and a throwing config file still resets the `RPCConfig` cache, deliberately. It also keeps the coverage lesson that let both bugs through at 100%.
+- **`wiki/middleware.md` — the framework-agnostic alternative to the `locals` bridge.** The page documented per-adapter recipes for reaching pre-dispatch framework state, but on Fastify and Hono those are five separate code paths with no coverage, and Fastify has no per-request store to bridge at all. New *The Framework-Agnostic Alternative: Handler Wrappers* section documents the part of the contract that actually carries: `event.locals` is a mutable object rpc passes into the request context, so a handler wrapper can resolve per-request data and store it there — identically on all five adapters, with no framework imports and no new rpc API. Includes a signed-cookie session worked example, a "when to use which" split against the framework-middleware path, and the honest tradeoff (a wrapper runs per function call, so request-pipeline concerns still belong in real framework middleware). The Fastify/Hono note now points at it as the better default
+- **New `wiki/comparison.md`** — the cross-origin / CSRF boundary compared against Next.js Server Actions, TanStack Start, SvelteKit, and tRPC, with a section covering Vike and Telefunc. Verified against vendor documentation on 2026-09-27 rather than written from memory, which changed several conclusions: TanStack's `createCsrfMiddleware` is auto-installed and **fails closed**; Next.js shipped `GHSA-mq59-m269-xvcx` for treating `origin: null` as missing (rpc rejects it by default); tRPC shipped `CVE-2025-68130` for prototype pollution via FormData keys (rpc's urlencoded path is verified immune). Measured against TanStack's documented algorithm, rpc is **stricter in three cases** — an untrusted `Origin` claiming `Sec-Fetch-Site: same-origin`, `Origin: null`, and lookalike hosts — because checking `Origin` first is what closes them, and more permissive in two, both deliberate (the allowlisted sibling, and the headerless curl case)
+- Framed as *fail-open by default, strictest-once-configured, multi-origin without a proxy* — with `Where the trade costs you` keeping the real sharp edges (case-sensitive origin matching, literal origins only, no automatic input validation, deliberate `Referer` omission). Linked from all 13 other wiki pages, `wiki/index.md`, `AGENTS.md`, and `llms.txt`; the `AGENTS.md` entry warns future agents to read it before writing security copy
+- Two broken wiki anchors fixed: `client-usage.md#native-http-clients--unwrapenvelopet` and the tier-order slug in `comparison.md`. A link/anchor pass validates all 47.
+
 ## [0.3.6] - 2026-09-27
 
 Two independent changes: a **behaviour change** to origin validation, and an

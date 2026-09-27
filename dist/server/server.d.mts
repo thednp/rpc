@@ -75,6 +75,17 @@ interface H3MiddlewareHooks {
 //#endregion
 //#region src/types.d.ts
 /**
+ * Every framework adapter rpc ships a middleware for.
+ *
+ * This is the key type for {@link FrameworkHooks}, so `MiddlewareOptions<A>`
+ * can type each adapter's `handler` signature. It is a *type* only — the
+ * adapter you get is the one you import (`@thednp/rpc/express`,
+ * `@thednp/rpc/hono`, …). There is deliberately no config option that selects
+ * it: a runtime value could only ever disagree with the subpath actually
+ * mounted, and nothing read it.
+ */
+type AdapterName = "express" | "hono" | "h3" | "fastify" | "koa";
+/**
  * Maps each supported framework adapter to its middleware hooks (handler signatures).
  * Used to keep the middleware options type-safe per adapter.
  */
@@ -173,12 +184,13 @@ type ClientFunctionWithOptions = ClientFunction & {
 };
 /**
  * Internal plugin options accepted by `getClientModules`.
+ *
+ * Only the prefix: the generated stubs are adapter-agnostic, since they are
+ * plain `fetch` calls.
  */
 interface RpcPluginOptionsInternal {
   /** RPC endpoint prefix (e.g. "__rpc") */
   rpcPrefix: string;
-  /** Framework adapter name */
-  adapter?: string | undefined;
 }
 /**
  * Partial Vite config used when scanning server files outside a running dev server.
@@ -224,13 +236,6 @@ interface RpcPluginOptions {
    */
   rpcPrefix: "__rpc" | string;
   /**
-   * Option to set an adapter for the middleware connection. The default is _express_,
-   * which is the most popular and battle tested server app. The _express_ adapter is
-   * also compatible with the vite's Connect development server.
-   * @default express
-   */
-  adapter: "express" | "hono" | "h3" | "fastify" | "koa";
-  /**
    * Root directory from which the plugin scans for server files.
    * Defaults to `<root>/src/api`. Use this in monorepos where server files
    * live in a shared package outside the current project root.
@@ -252,7 +257,7 @@ interface RpcPluginOptions {
    */
   silent?: boolean;
 }
-interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
+interface MiddlewareOptions<A extends AdapterName = "express"> {
   /**
    * Name for the middleware (used for identification in Express stack)
    */
@@ -278,7 +283,7 @@ interface MiddlewareOptions<A extends RpcPluginOptions["adapter"] = "express"> {
    * // Results in endpoints like: /api/rpc/myFunction
    * rpcPrefix: "api/rpc"
    */
-  rpcPrefix?: string | false;
+  rpcPrefix?: string;
   /**
    * Allowed request origin(s) — a single origin string or an allowlist of them
    * (e.g. `"https://example.com"` or
@@ -416,7 +421,10 @@ export declare function createServerFunction<TArgs extends JsonArray = JsonArray
  * Generates the complete client-side module bundle by iterating all registered server functions
  * for a specific prefix and producing fetch-based stubs for each. The result is transformed by Vite
  * (or Oxc) during the dev server or production build.
- * @param initialOptions - Plugin options containing rpcPrefix and optional adapter
+ *
+ * The generated stubs are plain `fetch` calls, so they are adapter-agnostic —
+ * only the prefix is needed.
+ * @param initialOptions - Plugin options containing the rpcPrefix
  * @returns A string of JavaScript code with all client RPC modules and their import dependencies
  */
 export declare const getClientModules: (initialOptions: RpcPluginOptionsInternal) => string;
@@ -454,6 +462,46 @@ export declare const formatError: (err: unknown, isProduction: boolean) => JsonO
  * Form-declared functions accept either encoding so native browser
  * submissions (urlencoded) keep working without JavaScript.
  */
+/**
+ * An error carrying an HTTP status, so the dispatch can answer that status
+ * instead of flattening every failure to a `500`.
+ */
+export interface ClientHttpError extends Error {
+  status?: number;
+  statusCode?: number;
+}
+/**
+ * Tags an error with an HTTP status for the dispatch to surface.
+ *
+ * Used where a malformed *request* is the fault — a body that does not parse
+ * under a declared JSON `Content-Type`, a GET `?args=` value that is not valid
+ * JSON. Every host framework rpc supports answers `400` for these (Express
+ * `entity.parse.failed`, Fastify `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser,
+ * and h3's own `readBody`), and treating one as a server fault both misreports
+ * the fault and turns a trivial client mistake into a log entry.
+ * @param status - The HTTP status to answer with
+ * @param message - Internal diagnostic message; never sent to the client
+ * @returns An `Error` carrying `status`
+ */
+export declare const httpError: (status: number, message: string) => ClientHttpError;
+/**
+ * Recognises an error that should produce a `4xx` response rather than a `500`.
+ * Matches the `status` / `statusCode` convention used by h3's `HTTPError`, the
+ * `http-errors` objects Express's `body-parser` throws, and anything else
+ * carrying a numeric 4xx. Shared by all five adapters so a host-framework
+ * signal and an rpc-raised one are handled by the same rule.
+ * @param err - The caught error
+ * @returns True when the error denotes a client (4xx) fault
+ */
+export declare const isClientHttpError: (err: unknown) => boolean;
+/**
+ * Reads the status to answer for a client error. Defaults to `400` rather than
+ * `500` so an unrecognised 4xx is never reported as a server fault.
+ * @param err - The caught error
+ * @returns The 4xx status to answer with
+ */
+export declare const clientErrorStatus: (err: unknown) => number;
+export declare const clientErrorMessage: (status: number) => string;
 export declare const isFormContentType: (contentType: string) => boolean;
 /**
  * Detects whether an incoming request's `Content-Type` header conflicts
@@ -470,7 +518,7 @@ export declare const hasContentTypeMismatch: (declared: ContentType, rawHeader: 
  * Decides whether a request may proceed, given the configured origin allowlist
  * and the two headers a browser can be made to reveal.
  *
- * Three tiers, evaluated in order — the first tier with a signal decides:
+ * Four tiers, evaluated in order — the first tier with a signal decides:
  *
  * 1. `origin` option unset → everything passes. No validation is performed.
  * 2. `Origin` present → the allowlist decides, exactly as {@link isOriginAllowed}.
@@ -544,7 +592,33 @@ export declare const isOriginAllowed: (allowed: string | string[] | undefined, r
 export declare const safeURL: (rawUrl: string, base?: string) => URL;
 /** Global rpcPrefix from the last loaded config / middleware — fallback for functions without explicit prefix. */
 export declare const getGlobalPrefix: () => string | undefined;
+/**
+ * Publishes the global RPC prefix, consulted by `resolveRPCPrefix` whenever no
+ * explicit prefix is supplied. `loadRPCConfig` calls this on every return path
+ * so a loaded config is the fallback for later registrations and dispatches.
+ *
+ * Stored on a `Symbol.for` key on `globalThis` so it stays instance-stable
+ * across the bundled entry copies (`server.mjs`, `express.mjs`, ...) and dev
+ * server hot reloads — the same technique as the request-context storage.
+ * @param prefix - The prefix to publish, or `undefined` to clear it
+ */
 export declare const setGlobalPrefix: (prefix: string | undefined) => void;
+/**
+ * Resolves the effective RPC prefix: the explicit one when given, otherwise
+ * the global prefix set by `setGlobalPrefix` / `loadRPCConfig`, otherwise the
+ * built-in default.
+ *
+ * Every adapter resolves its prefix through this single function — in both the
+ * outer `createMiddleware` gate and the `createRPCMiddleware` dispatch — so the
+ * two halves of a request can never disagree, and so a prefix registered by
+ * `createServerFunction` (which resolves the same way) is always the prefix the
+ * middleware looks up. Resolving the two sides independently is what allowed
+ * h3 to drift from the other four adapters, and what left the documented
+ * global-prefix flow returning 404 on all of them.
+ * @param rpcPrefix - Explicit prefix from config or middleware options
+ * @returns The prefix to gate on, look up in, and strip from the request path
+ */
+export declare const resolveRPCPrefix: (rpcPrefix?: string) => string;
 //#endregion
 //#region src/context.d.ts
 /**
@@ -682,9 +756,29 @@ export interface RequestMeta {
 export declare const getRequestMeta: (event: RequestEvent) => RequestMeta;
 //#endregion
 //#region src/options.d.ts
+/**
+ * Defaults applied to a server function that declares no `method`,
+ * `credentials`, or `contentType` of its own.
+ */
 export declare const defaultServerFnOptions: ServerFunctionOptions;
+/**
+ * The built-in RPC endpoint prefix, used when neither an explicit prefix nor a
+ * global one (`getGlobalPrefix`) is supplied. Kept for backward compatibility
+ * with pre-multi-prefix setups, where every function lived under this one map.
+ */
 export declare const defaultPrefix = "__rpc";
+/**
+ * Baseline plugin options. `defineConfig` merges a user's partial config over
+ * these, and `loadRPCConfig` merges a loaded config file over them, so every
+ * option has a defined value even when a config file omits it.
+ */
 export declare const defaultRPCOptions: RpcPluginOptions;
+/**
+ * Baseline middleware options. Note `rpcPrefix` is `undefined` rather than
+ * `defaultPrefix` on purpose: leaving it unset lets `resolveRPCPrefix` fall
+ * through to the global prefix, which is what makes a published global prefix
+ * reach the middleware.
+ */
 export declare const defaultMiddlewareOptions: MiddlewareOptions;
 //#endregion
 //# sourceMappingURL=server.d.mts.map

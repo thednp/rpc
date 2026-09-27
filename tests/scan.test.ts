@@ -59,17 +59,78 @@ describe("scanForServerFiles", () => {
     }
   });
 
-  it("should skip scan when already scanned (isScanned flag)", async () => {
-    // isScanned is true from the previous test.
-    // Even though beforeEach cleared the maps, calling scanForServerFiles again
-    // (without devServer) returns early and doesn't re-populate.
+  it("should skip a repeat scan of the same target", async () => {
+    // A scan is memoized per target — (scan root, matching mode, prefix) — so
+    // repeating the identical scan is a no-op and does not re-populate. The
+    // maps are cleared by beforeEach, so if this ran it would refill them.
     const { scanForServerFiles } = await import(
       "../src/scanForServerFiles"
     );
-    // maps are empty (from beforeEach), and scan skips → stay empty
-    expect(serverFunctionsMap.size).toBe(0);
-    await scanForServerFiles();
-    expect(serverFunctionsMap.size).toBe(0); // still empty, scan skipped
+    const target = {
+      base: "/",
+      scanRoot: "tests/fixtures/scan-twoprefix",
+      serverFiles: "glob" as const,
+      rpcPrefix: "memo:a",
+    };
+    await scanForServerFiles(target);
+    expect(getFunctionsForPrefix("memo:a").size).toBeGreaterThan(0);
+
+    for (const map of serverFunctionsByPrefix.values()) map.clear();
+    await scanForServerFiles(target);
+    expect(getFunctionsForPrefix("memo:a").size).toBe(0);
+  });
+
+  it("should scan a second prefix after the first", async () => {
+    // The process-wide boolean this replaced meant the *first* scan suppressed
+    // every later one. A second RPC instance on its own prefix then asked for a
+    // lazy scan, got an early return, and answered 404 for every function it
+    // owned. Each prefix is a distinct target and must be scanned.
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const base = {
+      base: "/",
+      scanRoot: "tests/fixtures/scan-twoprefix",
+      serverFiles: "glob" as const,
+    };
+
+    await scanForServerFiles({ ...base, rpcPrefix: "alpha" });
+    expect([...getFunctionsForPrefix("alpha").keys()]).toEqual(["plainFn"]);
+    // A function that declares its own prefix is registered correctly by the
+    // first scan, and must not be duplicated into the second prefix's map.
+    expect([...getFunctionsForPrefix("tagged:rpc").keys()]).toEqual([
+      "taggedFn",
+    ]);
+
+    await scanForServerFiles({ ...base, rpcPrefix: "beta" });
+    expect([...getFunctionsForPrefix("beta").keys()]).toEqual(["plainFn"]);
+
+    // And the first prefix is untouched by the second scan.
+    expect([...getFunctionsForPrefix("alpha").keys()]).toEqual(["plainFn"]);
+  });
+
+  it("should scan the same root again when only the mode differs", async () => {
+    // scanRoot and serverFiles both feed the target key, so switching matching
+    // mode is genuinely different work and must not be skipped.
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    await scanForServerFiles({
+      base: "/",
+      scanRoot: "tests/fixtures/scan-twoprefix",
+      serverFiles: "exact",
+      rpcPrefix: "mode:a",
+    });
+    // `exact` looks for server.ts/js/mjs/mts, which this directory has none of.
+    expect(getFunctionsForPrefix("mode:a").size).toBe(0);
+
+    await scanForServerFiles({
+      base: "/",
+      scanRoot: "tests/fixtures/scan-twoprefix",
+      serverFiles: "glob",
+      rpcPrefix: "mode:a",
+    });
+    expect(getFunctionsForPrefix("mode:a").size).toBeGreaterThan(0);
   });
 
   it("should use provided devServer instead of creating a new one", async () => {
@@ -133,7 +194,7 @@ describe("scanForServerFiles", () => {
         close: vi.fn(),
       } as unknown as ViteDevServer;
       const warnSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      const origWarn = console.error;
+      // const origWarn = console.error;
       serverFunctionsMap.clear();
       await scanForServerFiles(
         { base: "/" },
@@ -196,6 +257,42 @@ describe("scanForServerFiles", () => {
       expect(serverFunctionsMap.get("test-fn")?.exportName).toBe("testFn");
     } finally {
       process.chdir(originalCwd);
+    }
+  });
+
+  it("should keep scanning after an export-less module", async () => {
+    // An export-less module used to `return` out of the whole scan, so every
+    // file after it was silently dropped. The fixture has two empty modules
+    // and one populated, so this fails under any directory read order.
+    const { scanForServerFiles } = await import(
+      "../src/scanForServerFiles"
+    );
+    const ssrLoadModule = vi.fn().mockImplementation(async (file: string) => {
+      if (file.includes("b-loaded.server.ts")) {
+        return { survivor: { name: "survivor" } };
+      }
+      return {};
+    });
+    const mockDevServer = {
+      ssrLoadModule,
+      close: vi.fn(),
+    } as unknown as ViteDevServer;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    serverFunctionsMap.clear();
+    try {
+      await scanForServerFiles(
+        {
+          base: "/",
+          serverFiles: "glob",
+          scanRoot: "tests/fixtures/scan-mixed",
+        },
+        mockDevServer,
+      );
+      expect(ssrLoadModule).toHaveBeenCalledTimes(3);
+      expect(serverFunctionsMap.get("survivor")?.exportName).toBe("survivor");
+      expect(warnSpy).toHaveBeenCalledWith("No server function found.");
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 
