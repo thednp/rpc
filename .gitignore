@@ -1,6 +1,7 @@
 node_modules
 coverage
 experiments
+experiments_
 TEMP
 examples/**/pnpm-lock.yaml
 examples/**/package-lock.json

@@ -544,37 +544,6 @@ importers:
         specifier: ^1.5.0
         version: 1.5.0(typescript@7.0.2)
 
-  experiments/json-db/cms:
-    dependencies:
-      '@thednp/rpc':
-        specifier: workspace:*
-        version: link:../../..
-      compression:
-        specifier: ^1.8.1
-        version: 1.8.2
-      express:
-        specifier: ^5.2.1
-        version: 5.2.1
-      sirv:
-        specifier: ^3.0.2
-        version: 3.0.2
-      valibot:
-        specifier: ^1.4.2
-        version: 1.5.0(typescript@7.0.2)
-      vite:
-        specifier: ^8.2.2
-        version: 8.3.2(@types/node@26.6.4)
-    devDependencies:
-      '@types/express':
-        specifier: ^5.0.6
-        version: 5.0.6
-      '@types/node':
-        specifier: ^26.2.0
-        version: 26.6.4
-      typescript:
-        specifier: ~7.0.2
-        version: 7.0.2
-
 packages:
 
   '@ark/schema@0.56.5':
