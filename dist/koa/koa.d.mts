@@ -125,7 +125,7 @@ export declare const createRPCMiddleware: KoaMiddlewareFn;
  * Dynamically imports loadRPCConfig and registers the middleware.
  * @param app - Koa application instance
  */
-export declare function attachRPC(app: Koa): Promise<void>;
+export declare function attachRPC(app: Koa, overrides?: MiddlewareOptions<"koa">): Promise<void>;
 /**
  * Attaches Vite's dev server middlewares to a Koa app for development mode.
  * Bridges Koa's context-based middleware to Vite's Connect-compatible middleware stack
@@ -134,7 +134,14 @@ export declare function attachRPC(app: Koa): Promise<void>;
  * @param vite - Running Vite dev server
  */
 export declare function attachVite(app: Koa, vite: ViteDevServer): void;
-export declare const readBody: (ctx: KoaContext) => Promise<BodyResult>;
+/**
+ * Reads and parses the HTTP request body from a Koa context.
+ * If koa-body or another body parser already consumed the stream,
+ * uses the pre-parsed body from `ctx.request.body`.
+ * @param ctx - Koa context
+ * @returns A promise resolving to the parsed body with its content type
+ */
+export declare const readBody: (ctx: KoaContext, limit?: number) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Koa context. Koa's `ctx.redirect(location)`
  * defaults to `302` and sets the `Location` header; the status code must be

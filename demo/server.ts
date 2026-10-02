@@ -1,17 +1,15 @@
 export const startProxyServer = async (port: number = 3000) => {
   const { createServer } = await import("node:http");
   const { bodyLimit } = await import("./body-limit.ts");
-  const { createFormFallback } = await import("./src/lib/form-fallback.ts");
   const colors = (await import("picocolors")).default;
   const { loadRPCConfig } = await import("@thednp/rpc");
   const { createRPCMiddleware } = await import("@thednp/rpc/express");
   const rpcConfig = await loadRPCConfig();
   const rpc = createRPCMiddleware(rpcConfig);
-  const formFallback = createFormFallback({
-    rpcPrefix: rpcConfig.rpcPrefix,
-    functionName: "submit-contact",
-  });
-  const stack = [bodyLimit, formFallback, rpc];
+  // The no-JS fallback is no longer an app-layer middleware: a function that
+  // declares `fallback` gets the Post/Redirect/Get behaviour from the rpc
+  // dispatch itself, so `submit-contact` handles it and this stack does not.
+  const stack = [bodyLimit, rpc];
 
   const httpServer = createServer(async (req, res) => {
     for (let i = 0; i < stack.length; i++) {

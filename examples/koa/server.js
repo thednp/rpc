@@ -40,7 +40,12 @@ if (!isProduction) {
   attachVite(app, vite);
 } else {
   const { attachRPC } = await import("@thednp/rpc/koa");
-  await attachRPC(app);
+  // Since 0.4.0 the cross-origin check is on by default (`origin: "self"`), so a
+  // request with no `Origin` and no `Sec-Fetch-Site` is refused. These example
+  // servers are meant to be poked with `curl` and the no-JS form fallback,
+  // which send neither header — hence `allowHeaderless: true`. A real deployment
+  // should leave it off and name its public origins instead.
+  await attachRPC(app, { allowHeaderless: true });
 }
 
 if (isProduction) {

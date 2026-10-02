@@ -32,7 +32,7 @@ export type HonoMiddlewareFn = <A extends AdapterName = "hono">(
  * Framework types re-exported from `hono` so consumers can annotate apps
  * and handlers without a direct dependency on hono types.
  */
-import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
+import type { RequestDetails, ResponseDetails } from "../adapter-types.d.ts";
 
 /**
  * Normalized request/response shapes, shared with every adapter so a wrapper

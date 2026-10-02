@@ -6,9 +6,51 @@ const FETCH_ERROR_PREFIX = "Fetch error: ";
 //#endregion
 //#region src/client-helpers.ts
 /**
+* A non-2xx RPC response, with the server's body attached.
+*
+* Carrying the body matters because the server sends its most useful errors
+* *in* it. A `400` from a schema violation carries the rendered issue paths and
+* the per-field `hint`; discarding that and throwing only `statusText` would
+* leave the browser unable to tell the caller *which field* was wrong, which is
+* the whole point of the teaching-error work. The previous behaviour — throw
+* `FETCH_ERROR_PREFIX + statusText` without reading the body — is preserved in
+* `message` for anyone matching on it.
+*/
+var RPCResponseError = class extends Error {
+	/** The HTTP status. */
+	status;
+	/** The parsed response body, when it was JSON. */
+	body;
+	constructor(status, statusText, body) {
+		super(FETCH_ERROR_PREFIX + statusText);
+		this.name = "RPCResponseError";
+		this.status = status;
+		this.body = body;
+	}
+	/**
+	* The validation issues from a `422` body, when the server sent them.
+	*
+	* Returns `undefined` for any other status or an unrecognised body, so a
+	* caller can branch without inspecting the shape itself.
+	*/
+	get issues() {
+		const body = this.body;
+		if (body?.code !== "VALIDATION") return void 0;
+		const issues = body.data?.issues;
+		return Array.isArray(issues) ? issues : void 0;
+	}
+	/** The general `hint` from a `422` body, when the server sent one. */
+	get hint() {
+		const hint = this.body?.hint;
+		return typeof hint === "string" ? hint : void 0;
+	}
+};
+/**
 * Processes an HTTP fetch response from the RPC server.
+*
 * On HTTP 499 or 408 (client cancellation), logs a warning and returns undefined.
-* On other error statuses, throws a Fetch error.
+* On any other error status, throws an {@link RPCResponseError} carrying the
+* status and the parsed body when there is one.
 * On success, parses JSON and returns `result.data` — or throws if `result.error` is set.
 * @param response - Fetch Response object from the RPC endpoint
 * @returns The response data, or void on cancellation
@@ -16,24 +58,105 @@ const FETCH_ERROR_PREFIX = "Fetch error: ";
 const handleResponse = async (response) => {
 	if (!response.ok) {
 		if (response.status === 499 || response.status === 408) return console.warn(REQUEST_CANCELLED);
-		throw new Error(FETCH_ERROR_PREFIX + response.statusText);
+		let body;
+		try {
+			body = await response.clone().json();
+		} catch {
+			body = void 0;
+		}
+		throw new RPCResponseError(response.status, response.statusText, body);
 	}
 	const result = await response.json();
 	if (result.error) throw new Error(result.error);
 	return result.data;
 };
 /**
+* Field errors from a rejected call, keyed by the path that failed.
+*
+* The server normalises **every** validator's issues into the same
+* `{ path, message, hint? }` shape, so this is validator-agnostic: a zod
+* rejection and an arktype rejection arrive identically, and neither needs the
+* app to know which library produced it. That is what removes the usual
+* per-app helper — a hand-rolled `isValiError` guard plus a
+* `getError(error, field)` formatter, both tied to one library's flattened
+* output and silently wrong for the other three.
+*
+* Paths are the rendered strings rpc already produces, so a nested failure keys
+* on `"profile.email"`. An empty path — a top-level scalar — keys on `""`.
+*
+* ```ts
+* import { fieldErrors } from "@thednp/rpc/helpers";
+*
+* for (const [path, messages] of Object.entries(fieldErrors(err))) {
+*   showError(path, messages.join(" "));
+* }
+* ```
+*
+* Works in production as well as development. A production rejection carries
+* each issue's `path` and `hint` but not the validator library's `message`, so
+* the message falls back to the hint; an issue carrying neither is skipped
+* rather than rendered as an empty string, which would put a stray `""` into
+* every "show errors" loop.
+*
+* Returns an empty object for anything that is not a validation failure.
+*/
+const fieldErrors = (err) => {
+	const issues = err instanceof RPCResponseError ? err.issues : void 0;
+	if (!issues) return {};
+	const grouped = {};
+	for (const issue of issues) {
+		const text = issue.message ?? issue.hint ?? "";
+		const key = issue.path ?? "";
+		(grouped[key] ??= []).push(text);
+	}
+	return grouped;
+};
+/**
+* One field's messages, ready to render — the exact replacement for a
+* hand-written `getError(error, field)`.
+*
+* Returns `""` when the field did not fail, so it drops straight into an
+* element's `textContent` with no guard:
+*
+* ```ts
+* emailError.textContent = fieldErrorText(err, "email");
+* ```
+*/
+const fieldErrorText = (err, field) => {
+	const messages = fieldErrors(err)[field];
+	return messages?.length ? messages.join("; ") : "";
+};
+/**
+* The `hint` for a field's failure, or `""`.
+*
+* Prefers the field's own hint — from `hints: { email: "…" }` or from a builder
+* schema's `field.string({ hint })` — and falls back to the function-wide
+* `hint`, which is the more common form and would otherwise be unreachable from
+* a per-field lookup. Several issues can share a path; the first hint wins,
+* because a field with two hints is better served by one than by none.
+*
+* Sent in production as well as development. A hint is authored in
+* `ServerFunctionOptions`, so disclosing it was deliberate — which is exactly
+* why it is the one part of an issue that survives into a production body.
+* That makes it the right thing to put in a `title` or tooltip beside the
+* field, whether or not there is a visible message to pair it with.
+*/
+const fieldErrorHint = (err, field) => {
+	if (!(err instanceof RPCResponseError)) return "";
+	return err.issues?.find((i) => (i.path ?? "") === field)?.hint ?? err.hint ?? "";
+};
+/**
 * Unwraps the `{ data }` envelope from a parsed RPC response body.
 *
 * Error handling matches `handleResponse` so both helpers in this module agree
-* on the contract: a **top-level** `error` key (which the server only emits for
-* 404/405/415/400/500) throws, while a `{ data: { error } }` body resolves
+* on the contract: a **top-level** `error` key (including `400`/`403`/`404`/`405`/`409`/`413`/`415`/`422`/`500`) throws, while a `{ data: { error } }` body resolves
 * normally — that shape is the documented "validation-as-data" contract where a
 * 200 carries the validation outcome as its result.
 *
 * Discriminating on `error` present **and** `data` absent is what keeps those
 * two cases apart. Checking `res.ok` first is still recommended, since this
-* helper is status-code agnostic by design.
+* helper is status-code agnostic by design, so still check `res.ok` before
+* passing it a body.
 * @param json - Parsed JSON response body
 * @returns The unwrapped response data
 * @throws When the body carries a top-level `error` and no `data`
@@ -147,6 +270,6 @@ const innerModule = (body, headers, credentials, prefix, name, method) => {
 	};
 };
 //#endregion
-export { getClientStub, handleResponse, innerModule, unwrapEnvelope };
+export { RPCResponseError, fieldErrorHint, fieldErrorText, fieldErrors, getClientStub, handleResponse, innerModule, unwrapEnvelope };
 
 //# sourceMappingURL=helpers.mjs.map

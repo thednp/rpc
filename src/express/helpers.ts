@@ -5,12 +5,12 @@ import type {
   Response as ExpressResponse,
 } from "express";
 import type { BodyResult, JsonValue } from "@thednp/rpc";
-import type { Buffer } from "node:buffer";
 import type { ViteDevServer } from "vite";
 import type { Express } from "express";
-import { createRPCMiddleware } from "./createMiddleware.ts";
 import type { RequestDetails, ResponseDetails } from "./types.d.ts";
-import { httpError, safeURL } from "../server-helpers.ts";
+import { createRPCMiddleware } from "./createMiddleware.ts";
+import { preParsedBody, readStream } from "../body.ts";
+import { safeURL } from "../server-helpers.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to an Express app.
@@ -40,121 +40,22 @@ export function attachVite(app: Express, vite: ViteDevServer) {
  * If a body parser middleware (e.g. express.json()) already consumed the stream,
  * uses the pre-parsed body from `req.body`.
  * @param req - Express or Node.js IncomingMessage
+ * @param limit - Streamed byte cap; `0` disables it
  * @returns A promise resolving to the parsed body with its content type
  */
-/**
- * Parses a body leniently: JSON when it parses, otherwise the raw string.
- * Used for bodies that did not declare JSON — notably a request with no
- * `Content-Type` header, which must still arrive parsed if it carries JSON.
- * @param body - The raw body text
- * @returns The parsed JSON value, or the original string
- */
-const parseJsonOrRawText = (body: string): unknown => {
-  try {
-    return JSON.parse(body);
-  } catch {
-    return body;
-  }
-};
-
 export const readBody = (
   req: ExpressRequest | IncomingMessage,
+  limit?: number,
 ): Promise<BodyResult> => {
-  return new Promise((resolve, reject) => {
-    // If an Express body parser already consumed the stream
-    // via app.use(express.json()), use req.body directly
-    if (hasPreParsedBody(req) && req.body !== undefined) {
-      // istanbul ignore next
-      const contentType = req.headers["content-type"]?.toLowerCase() || "";
-      const isJSON = contentType.includes("json");
-      const isMultipart = contentType.includes("multipart/form-data");
-      const isUrlEncoded = contentType.includes("urlencoded");
-      resolve({
-        contentType: isMultipart
-          ? "multipart/form-data"
-          : isJSON
-          ? "application/json"
-          : isUrlEncoded
-          ? "application/x-www-form-urlencoded"
-          : "text/plain",
-        data: isMultipart
-          ? (req.body as Record<string, unknown>)
-          : isJSON
-          ? req.body
-          : isUrlEncoded
-          ? (req.body as Record<string, unknown>)
-          : String(req.body),
-      } as BodyResult);
-      return;
-    }
+  const declared = req.headers["content-type"];
 
-    // Else we parse the body right away
-    let body = "";
+  // If an Express body parser already consumed the stream via
+  // app.use(express.json()), the decoded body is authoritative.
+  if (hasPreParsedBody(req) && req.body !== undefined) {
+    return Promise.resolve(preParsedBody(req.body, declared));
+  }
 
-    const toggleListeners = (add?: boolean) => {
-      const method = add ? "on" : "off";
-      req[method]("data", onData);
-      req[method]("end", onEnd);
-      req[method]("error", onError);
-    };
-
-    const onData = (chunk: Buffer) => {
-      body += chunk.toString();
-    };
-
-    const onEnd = () => {
-      toggleListeners();
-      const incomingType = req.headers["content-type"]?.toLowerCase() || "";
-      const isJSON = incomingType.includes("json");
-      const isMultipart = incomingType.includes("multipart/form-data");
-      const isUrlEncoded = incomingType.includes("urlencoded");
-      try {
-        // Only a *declared* JSON body is parsed strictly; everything else keeps
-        // the lenient sniff. Previously all three fell through to a single
-        // `JSON.parse(body)`, so a malformed JSON body and a legitimate text
-        // body produced the same exception and were indistinguishable — the
-        // catch "recovered" both into a text/plain string, which silently
-        // handed a JSON-declared function a string and answered 200.
-        //
-        // The lenient branch is deliberate and must stay: a request with no
-        // `Content-Type` at all (curl, and the nojs form fallback) that
-        // happens to carry JSON still has to arrive parsed.
-        const data = isMultipart
-          ? { raw: body }
-          : isUrlEncoded
-          ? Object.fromEntries(new URLSearchParams(body))
-          : isJSON
-          ? JSON.parse(body)
-          : parseJsonOrRawText(body);
-        resolve({
-          contentType: isMultipart
-            ? "multipart/form-data"
-            : isJSON
-            ? "application/json"
-            : isUrlEncoded
-            ? "application/x-www-form-urlencoded"
-            : "text/plain",
-          data: isMultipart ? (data as Record<string, unknown>) : data,
-        } as BodyResult);
-      } catch (_e) {
-        // A body that does not parse under a declared JSON Content-Type is a
-        // client error. It used to resolve as `text/plain` with the raw string,
-        // which silently handed a JSON-declared function a string and answered
-        // 200 — failing open on malformed input. Every host framework rpc
-        // supports answers 400 here (Express `entity.parse.failed`, Fastify
-        // `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser, h3's own readBody).
-        reject(httpError(400, "Invalid JSON body"));
-      }
-    };
-
-    const onError = (err: Error) => {
-      toggleListeners();
-
-      reject(err);
-    };
-
-    toggleListeners(true);
-  });
+  return readStream(req, req.headers["content-type"], { limit });
 };
 
 /**

@@ -1,4 +1,5 @@
-import { sayHi } from "./api";
+import { sayHi } from "./api/index.ts";
+import { VALIDATORS } from "./api/validator-info.ts";
 
 export async function render(_url: string) {
   const { data: greeting } = sayHi(
@@ -15,6 +16,52 @@ export async function render(_url: string) {
         multi-prefix (<code>public:rpc</code> + <code>admin:rpc</code>) and
         universal middleware (rate limiting, audit log, admin auth)
       </p>
+
+      <section id="validators">
+        <h2>Four validators, one <code>schema</code> option</h2>
+        <p>
+          The same input contract written four times — valibot, zod, arktype and
+          effect — and registered through the identical <code>schema</code> option.
+          rpc receives four <code>StandardSchemaV1</code> values and has no idea
+          which library produced any of them. Changing the radio sends an RPC to
+          the server, then calls the matching function; each is its own wire path,
+          so the network panel names the validator that ran.
+        </p>
+        <fieldset id="validator-picker">
+          <legend>Validator</legend>
+          ${
+    VALIDATORS.map((name, i) => `
+          <label>
+            <input type="radio" name="validator" value="${name}"${
+      i === 0 ? " checked" : ""
+    } />
+            ${name}
+          </label>`).join("")
+  }
+        </fieldset>
+        <div id="validator-note" class="note"></div>
+        <form id="profileForm">
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem">
+            <label>Name <input id="p-name" value="Ada" /></label>
+            <label>Age <input id="p-age" value="36" /></label>
+            <label>Tags <input id="p-tags" value="admin,dev" /></label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem">
+            <label>City <input id="p-city" value="London" /></label>
+            <label>Zip <input id="p-zip" value="" /></label>
+          </div>
+          <div style="margin-top: 0.5rem">
+            <button id="profile-submit" type="submit">Validate</button>
+            <output id="profile-out">—</output>
+          </div>
+          <ul id="profile-issues" style="color: red"></ul>
+        </form>
+        <p class="note">
+          Try <code>Age = 36</code> (number) vs <code>36</code> (string), and a
+          too-long name, to see where the four disagree.
+        </p>
+      </section>
+
       <form id="addForm">
         <h2>Form</h2>
         <div style="display: flex; align-items: center; gap: 0.5rem">

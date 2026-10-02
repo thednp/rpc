@@ -120,7 +120,7 @@ describe("adapter export surface", () => {
     // They moved to src/adapter-types.ts; every adapter re-exports that one type,
     // so a wrapper can write a single helper against all five frameworks.
     const shared = readFileSync(
-      new URL("../src/adapter-types.ts", import.meta.url),
+      new URL("../src/adapter-types.d.ts", import.meta.url),
       "utf8",
     );
     expect(shared).toMatch(/export type RequestDetails/);

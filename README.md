@@ -35,7 +35,11 @@ You define them in a file, import and call them where you need them. The plugin 
 * `createFunction.ts` — server-side definition (wrapped handler with `AbortController`)
 * `getClientModules.ts` — build-time code generation (string template with validation)
 * `client-helpers.ts` — client-side runtime (thin `fetch` based modules)
+* `schema.ts` — the `schema` option: any Standard Schema, plus the dependency-free builder
+* `body.ts` — body parsing policy and the size cap, shared by all five adapters
+* `execution-log.ts` — the `onDispatch` hook and the dispatch record
 * `server-helpers.ts` — server-only utilities (`RPCError`, error formatting, `redirect`, glob file walking)
+* `validate.ts` — the content-type gate shared by the adapters
 * `scanForServerFiles.ts` — file discovery
 * **Adapters** — thin middleware wrappers
 </details>
@@ -88,6 +92,40 @@ Scan `src/api/` for classic `server.ts|js|mjs|mts` files, or switch to glob mode
 </details>
 
 <details>
+<summary><b>Cross-origin protection, on by default</b></summary>
+
+Since 0.4.0 the `origin` check is **not opt-in**. With no configuration, a foreign
+`Origin` is rejected, and a request carrying no browser provenance at all is
+`403` too — a check nobody turns on protects nobody. An allowlist *widens*
+`"self"` rather than replacing it, so naming an extra origin can never lock you
+out of your own site.
+
+It is shared by all five adapters and it fails **closed**: if `Origin` has been
+stripped, `Sec-Fetch-Site` is consulted instead, and only `same-origin`/`none`
+pass. No forwarded header is ever trusted and there is no `trustProxy` option.
+
+See [Security](./wiki/security.md), and the
+[Comparison](./wiki/comparison.md) for how this measures against Next.js Server
+Actions, TanStack Start, SvelteKit, tRPC and Vike.
+</details>
+
+<details>
+<summary><b>A form that works without JavaScript</b></summary>
+
+Set `fallback` on a server function and a native `<form action>` pointing at it gets a
+Post/Redirect/Get `303` with the failure as a flash, instead of a `422` JSON body
+rendered as raw text. It runs *inside* the dispatch, so it is subject to the
+origin check above — unlike an app-layer middleware mounted before it, which
+answers a form post from any origin and is a CSRF hole.
+
+Values come back only if you name them: `replay` is an explicit allowlist and
+defaults to empty, because a URL reaches history, `Referer` and access logs.
+
+See [Native Form Fallback](./wiki/nojs-fallback.md).
+</details>
+
+
+<details>
 <summary><b>Typed errors, safe by default</b></summary>
 
 Server errors return a generic `Internal Server Error` — no messages, codes, or stacks leak to clients, in any environment. Only `RPCError` payloads (developer-authored `message`/`code`/`data`) reach the client, and only in development, so you can debug instantly. `multipart/form-data` content type is supported for file uploads via your framework's multipart parser, and json/text/urlencoded requests are validated against the function's declared content type (`415 Unsupported Media Type` on mismatch; form encodings are interchangeable for nojs form fallbacks).
@@ -109,6 +147,22 @@ Run multiple RPC instances in parallel. Pass `{ rpcPrefix: "v1:rpc" }` to `creat
 <summary><b>Universal middleware</b></summary>
 
 Write **one** middleware function that runs unchanged on every adapter (Express, Fastify, Hono, Koa, h3). Because every dispatch runs inside a per-request context, middleware written against `getRequestContext()` — reading normalized request data via `getRequestMeta()`, short-circuiting with `sendResponse(status, body, headers)` — behaves identically regardless of the host framework. No per-framework rewrites for cross-cutting RPC rules like per-function rate limiting, audit logging, or feature flags. See the [Middleware Guide](./wiki/middleware.md).
+</details>
+
+<details>
+<summary><b>Errors that teach, not just complain</b></summary>
+
+A `hint` is the difference between a failure that says what went wrong and one that says what to do about it: `"ids look like u-42"` beats `"Invalid user id"`. Pass it as the fourth argument to `RPCError`, or use the typed subclasses — `NotFoundError`, `ForbiddenError`, `ConflictError` — where it's **required**, because a class whose whole purpose is to explain a failure shouldn't be constructible without the explanation. Each carries a status, so a missing resource is answered `404` rather than `500`. Hints are developer-facing and stripped in production, like `code` and `data`.
+
+Register `onDispatch` and every dispatch is reported with a bounded, redacted record — which function ran and its siblings, which tier of the cross-origin rule decided the request, declared vs actual content type, the **shape** of the arguments and never their values, the status, and how long it took. The library retains nothing: what you pass it to is the storage, and a hook that throws is ignored rather than taking down the request it is describing.
+</details>
+
+<details>
+<summary><b>Input validation, with no lock-in</b></summary>
+
+Pass a `schema` to any server function and the input is validated **before the handler is entered** — a bad input is a `422`, and your function is never called with it. Any [Standard Schema](https://standardschema.dev) works: zod, valibot, arktype, effect. There's no adapter and no per-library branch in the library, and if you don't want a dependency, `schema()` / `field` build one from rpc's own primitives.
+
+The client stub is typed from the schema's **input** and the handler from its **output**, so a coercing schema lets the browser send `"2"` while your function receives `2` — no cast. A rejection names the failing path and any hints you attached — **in production as well as development**. The only thing production drops is the validator library's own message, because some libraries interpolate the value that failed into it (valibot does; zod and arktype report the type only). A `path` is safe because the caller supplied the field, and a `hint` is safe because you wrote it, so both are sent — and an author who attaches no hints still learns *which* field to fix.
 </details>
 
 ## Examples
@@ -195,23 +249,41 @@ Check [Configuration Guide](wiki/configuration.md) for details.
 Create `src/api/server.ts`:
 
 ```ts
-import { createServerFunction, RPCError } from "@thednp/rpc/server";
+import { createServerFunction, schema, field, RPCError } from "@thednp/rpc/server";
 
-export const greet = createServerFunction("greet", (signal, name: string) => {
-  // access AbortSignal
-  signal.throwIfAborted();
+// A `schema` describes the input, so rpc validates it before the handler runs
+// and a bad input is a 422 — your function is never entered with one.
+const GreetSchema = schema({ name: field.string() });
 
-  // add validation and other server ONLY functionality
+export const greet = createServerFunction(
+  "greet",
+  (signal, { name }) => {
+    // access AbortSignal
+    signal.throwIfAborted();
 
-  // throw typed errors for server-side failures
-  if (!name) throw new RPCError("Name is required", "EMPTY_NAME");
+    // throw typed errors for server-side failures
+    if (!name) throw new RPCError("Name is required", "EMPTY_NAME");
 
-  // return the result of processing
-  return `Hello, ${name}!`;
-});
+    // return the result of processing
+    return `Hello, ${name}!`;
+  },
+  { schema: GreetSchema },
+);
 ```
 
-`RPCError` is the typed error helper — in development its message (and `code`/`data`) reach the client for instant debugging; in production the response is always a generic `Internal Server Error`.
+That example uses rpc's built-in `schema()` so the quickstart adds no dependency. Any [Standard Schema](https://standardschema.dev) works unchanged — swap in zod, valibot, arktype, or effect and the `schema` option stays the same:
+
+```ts
+import { z } from "zod";
+
+const GreetSchema = z.object({ name: z.string().min(1) });
+```
+
+A rejected input is a **`422`** in both environments — not `400`, which now means only "this request could not be understood". A client can therefore tell a malformed request from a rejected one by status alone.
+
+In production the body still names **which field** failed, plus any `hint` you wrote. The one thing it drops is the validator library's own `message`, and that is deliberate rather than merely cautious: going through the same `~standard.validate` call rpc makes, valibot answers `"Expected string but received 12345"` for a failed `name: 12345`, where zod and arktype report the type only. Whether a message is safe to send depends on which library you picked — and depending on one also ties your error copy to that library's releases. A `path` is safe because the caller supplied the field; a `hint` is safe because you wrote it. So an author who writes `hints` gets them in production for free, and one who writes none still learns *which* field to fix.
+
+`RPCError` is the typed error helper for *server-side* failures — in development its message (and `code`/`data`) reach the client for instant debugging; in production the response is always a generic `Internal Server Error`.
 
 Create `src/api/index.ts`:
 
@@ -261,7 +333,21 @@ pnpm test:watch   # Run tests in watch mode with coverage
 pnpm test:ui      # Run tests with UI
 ```
 
-Tests use **Vitest** with **Istanbul** coverage — 11 test files covering the plugin, scanning, server/client helpers, request context, the adapter type-export surface, and all five adapters, at 100% coverage.
+Tests use **Vitest** with **Istanbul** coverage — 16 test files covering the plugin, scanning, body parsing and limits, the schema, the fallback, the dispatch hook, server/client helpers, request context, the adapter type-export surface, and all five adapters, at 100% coverage.
+
+Two further gates are worth knowing about, because each has caught something the unit tests could not:
+
+```bash
+pnpm check:ts5    # Type-checks the examples under a pinned TypeScript 5.9.3
+```
+
+The project compiles on TypeScript 7, which passes code an editor bundling TS 5.x rejects — a heavy vendor schema type can blow the inference budget and fail with `TS2589`. This gate exists to catch that, and it is **not** part of `pnpm lint` because it only resolves while the examples point at this repo.
+
+```bash
+cd examples/advanced && pnpm verify
+```
+
+Drives a live Express server and asserts the library's documented behaviour end to end — the cross-origin matrix, both validation bodies, the option combinations, protocol statuses, typed errors, redaction, roles, and the direct-call path. Two bugs were found this way that 100% line coverage had not, one of them a `bodyLimit` that never applied to the most common content type.
 
 ### Live Testing
 
@@ -295,7 +381,7 @@ pnpm test:ui      # Run tests with UI
 pnpm build        # Bundle with tsdown (tsdown)
 ```
 
-All changes should pass `pnpm lint && pnpm format && pnpm test` before submitting. See [AGENTS.md](./AGENTS.md) for the full command reference and project conventions.
+All changes should pass `pnpm lint && pnpm format && pnpm test` before submitting. Note the order: `pnpm build` first, because `dist/` is tracked and `tsc` type-checks against it — a stale bundle silently validates the wrong types. See [AGENTS.md](./AGENTS.md) for the full command reference and project conventions.
 
 ## Security
 
@@ -322,7 +408,11 @@ When a server function throws, the client receives a clean, generic error messag
 <details>
 <summary><b>Body size limits</b></summary>
 
-The `readBody` utility of each adapter doesn't cap raw request bodies by default. You need to use the middleware provided by your server framework of choice.
+Since 0.4.0 rpc caps request bodies itself — **10 MiB by default**, raised or disabled with the `bodyLimit` middleware option. The cap is enforced *while the body streams*, not after buffering, which is the difference that matters: a `readBody`-then-check shape provides no memory-exhaustion protection at all. Past the cap the remainder is drained and discarded up to a ceiling, so the `413` is deliverable without becoming a slowloris.
+
+It is not redundant with your framework's parser, and the reason was measured rather than assumed: `express.json({ limit })` **declines** urlencoded and multipart, leaves them on the stream, and rpc read that stream uncapped — a 20 MB multipart POST used to return `200` with 20,971,594 bytes buffered.
+
+Two limits worth knowing. A body some *other* layer already buffered cannot be capped, because rpc never reads it — under `@hono/node-server`, and when a host middleware got there first. And Fastify is effectively exempt, because its content-type parser answers before any hook runs; set **Fastify's** `bodyLimit`, not this one. The per-adapter table, with measured behaviour, is in [Security — Body Size Limits](./wiki/security.md#body-size-limits).
 </details>
 
 <details>
@@ -341,12 +431,99 @@ Request bodies are validated against the function's declared `contentType` befor
 The full threat model, including edge cases and configuration options for tightening things further, is documented in [Security](./wiki/security.md).
 
 
+## Known limitations
+
+Stated here rather than left for someone to discover in production. Each is a
+consequence of a deliberate choice, and each has a workaround.
+
+### ~~A no-JS `<form>` cannot render validation errors~~ — fixed in 0.4.0
+
+**This used to be a limitation, and the guidance was to work around it. Don't
+follow that advice any more.** Attaching a `schema` to a function pointed at by a
+native `<form>` used to navigate to a `422` carrying a JSON body, which the
+browser rendered as raw text — the user saw a wall of JSON instead of their form
+with the bad field marked.
+
+A function that sets **`fallback`** now answers a native submission with a
+Post/Redirect/Get `303` and the failure as a flash, so the page re-renders with
+the field marked. It runs *inside* the dispatch, so it is subject to the
+cross-origin check — unlike the app-layer middleware this replaces, which answered
+a form post from any origin and was a CSRF hole.
+
+```ts
+createServerFunction("contact", handler, {
+  contentType: "application/x-www-form-urlencoded",
+  schema: schema({ email: field.string() }),
+  fallback: { to: "/contact", replay: ["email"] },
+});
+```
+
+`replay` takes an explicit allowlist and **defaults to empty**, because a URL
+reaches browser history, the `Referer` of the next navigation, and every access
+log in between. See [Native Form Fallback](./wiki/nojs-fallback.md).
+
+
+### `multipart/form-data` + `schema` needs a host parser, and the array-root rule
+
+Still true, for the same reason: a `schema` validates `args[0]`, and for multipart
+that argument is the `{ raw: <string> }` object rpc passes through (Node has no
+built-in multipart parser), so a schema describing your fields rejects it with a
+`422` on the path `raw`.
+
+Register a host multipart parser — `multer`, `@fastify/multipart`, `koa-body` —
+**before** the RPC middleware and the pre-parsed fields object becomes the
+argument, so the schema applies normally.
+
+**Or just use `application/x-www-form-urlencoded`**, which rpc parses itself and
+which the demo now uses for *both* clients — the generated stub and a native
+`<form>`. That makes it the worked example of why the fallback's discriminator
+cannot be the content type: with both clients on one encoding, `Accept` /
+`Sec-Fetch-*` are the only thing separating a navigation from an RPC call.
+
+Related: a **root array** is refused outright. `z.array(Item)` / `v.array(Item)`
+as the whole payload throws, because everything downstream — `fieldErrors`, the
+no-JS flash, a client resolver — needs *named* fields, and an array index cannot
+label an input. Wrap it: `{ items: field.custom(z.array(Item)) }`. See
+[Server Functions — Input Validation](./wiki/server-functions.md#validated-functions-take-a-single-payload-argument).
+
+### Development and production bodies differ in shape
+
+A rejected input carries each issue's `message` in development and omits it in
+production. Making the shapes identical would mean sending vendor messages in
+production, which is the thing the split exists to prevent. Clients should read
+`path` and `hint`, both of which are sent in either environment — which is what
+`fieldErrors` / `fieldErrorText` / `fieldErrorHint` do.
+
+## Fact checks
+
+Claims in this README that could be marketing, with what was actually measured.
+Every number below was reproduced against this codebase, not taken from a
+framework's own documentation.
+
+| claim | measured |
+| --- | --- |
+| Bodies are capped, on every adapter | `bodyLimit: 64` with a 4 KB body: h3 → `413`. Hono returned **`200` with the payload parsed** — `bodyLimit` was silently not applied to declared-JSON, because `c.req.json()` reads the stream itself and sits on no capped path. Fixed; JSON now takes the same capped read as h3. |
+| A 20 MB multipart POST is not silently buffered | Express with `express.json({ limit: "1mb" })` **declines** urlencoded and multipart, leaving them on the stream; rpc read that stream uncapped and answered `200` with **20,971,594** bytes buffered. Hence the 10 MiB default, enforced *while streaming*. |
+| Production bodies are safe to send | valibot returns `"Invalid type: Expected string but received 12345"` — it interpolates the value that failed. zod returns `"Invalid input: expected string, received number"`, type only. Whether a message is safe therefore depends on which library the author picked, so `message` is withheld structurally in production and `path` + `hint` are sent instead. |
+| The origin check is stricter than the alternatives | Counted from a request-shape table: **3 stricter, 2 more lenient** against TanStack Start, both leniencies deliberate and named. An earlier draft of the comparison claimed "4 stricter", which its own table did not support. See [Comparison](./wiki/comparison.md). |
+| Tests measure behaviour, not just lines | The Hono `bodyLimit` bug shipped at **100% line coverage** — the suite had no `bodyLimit` test at all. Coverage measured that a branch ran, not that it bounded anything. |
+| Async validators are not skipped | A runner that read `~standard.validate`'s result synchronously would see `issues === undefined` **on the Promise**, conclude the input was valid, and hand the handler a Promise. Effect's adapter is async, so this is load-bearing; the async shape is pinned in the test suite. |
+| A flash can survive a real proxy | The flash URL is **re-requested** by the browser, so it becomes a request line — nginx's default `large_client_header_buffers 4 8k` caps that at 8 KiB. Hence a 4 KiB bound, dropped rather than truncated past it. |
+
+Two claims we deliberately do **not** make. We do not say the origin check is
+"as secure as" anything: it is a `Host` comparison, so TLS termination needs no
+action but a proxy that rewrites `Host` to another port rejects everything until
+you preserve `Host` or name the public origin. And we do not say we do no
+validation — `schema` runs in the dispatch before the handler, on the HTTP path
+and on direct calls.
+
 ## Documentation
 
 - [Quick Start](./wiki/quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
 - [Getting Started](./wiki/getting-started.md) — Installation, project structure, and your first function
 - [Configuration](./wiki/configuration.md) — Full configuration reference
 - [Server Functions](./wiki/server-functions.md) — Creating server functions
+- [Multi-Prefix Support](./wiki/multi-prefix-guide.md) — Parallel RPC instances with versioned/namespaced prefixes
 - [Middleware](./wiki/middleware.md) — Universal middleware via the request context
 - [Native Form Fallback](./wiki/nojs-fallback.md) — Making RPC endpoints work as a no-JS `<form>` action
 - [Client Usage](./wiki/client-usage.md) — Client-side usage
@@ -355,6 +532,7 @@ The full threat model, including edge cases and configuration options for tighte
 - [Comparison](./wiki/comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./wiki/best-practices.md) — Tips and best practices
 - [Security](./wiki/security.md) — Security hardening
+- [Migration](./wiki/migration.md) — Upgrading from 0.3.x, or coming from another RPC framework
 
 ## License
 

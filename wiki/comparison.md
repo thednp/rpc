@@ -23,18 +23,18 @@ boundary specifically.
 ## The short, honest version
 
 `@thednp/rpc` is a **transport**, not a framework — so it draws the line in a
-different place than the others. It has no opinion about your public origin, so
-it does not guess one: enforcement is **opt-in**, and you name your origins
-explicitly. That is the only meaningful difference from TanStack Start and
-Next.js, and it is a single option (`origin`) rather than a fixed policy.
+different place than the others. It has no opinion about your *public* origin, so
+it does not guess one: it uses the request's own `Host` header. Enforcement is
+**on by default** (as of 0.4.0; it was opt-in before), and `origin` is only needed
+to admit origins *other* than your own.
 
-**Once you set it, `@thednp/rpc` is the strictest of the group on the paths they share.**
+**`@thednp/rpc` is the strictest of the group on the paths they share.**
 An explicit `allowlist` rejects an untrusted `Origin` *even when
 `Sec-Fetch-Site: same-origin` claims otherwise* — which is exactly the case
 TanStack's tier order waves through, since it returns on `Sec-Fetch-Site` before
-it ever inspects `Origin`. It also rejects `Origin: null` and lookalike hosts
-outright. Measured against TanStack's documented algorithm across realistic
-request shapes:
+it ever inspects `Origin`. It also rejects `Origin: null`, lookalike hosts, and
+every request with no browser provenance at all. Measured against TanStack's
+documented algorithm across realistic request shapes:
 
 |                                                    | `@thednp/rpc` | TanStack |
 | ----------------------------------------------------| ---------------| ----------|
@@ -45,15 +45,29 @@ request shapes:
 | no `Origin`, `Sec-Fetch-Site: cross-site`          | `403`         | `403`    |
 | no `Origin` + `Sec-Fetch-Site: same-origin`        | passes        | passes   |
 | allowlisted sibling + `Sec-Fetch-Site: same-site`  | passes        | `403`    |
-| no `Origin`, no `Sec-Fetch-Site` (curl)            | passes        | `403`    |
+| no `Origin`, no `Sec-Fetch-Site` (curl)            | `403`¹        | `403`    |
 
-`@thednp/rpc` is stricter in three cases and more permissive in two — and **both of the
-lenient ones are the point**: the `allowlisted` sibling is precisely what an
-allowlist exists to admit, and the headerless case is the deliberate
-curl/native-client hole. So the trade is not "weaker check, more options". It
-is **fail-open by default, strictest-once-configured, and multi-origin without
-a proxy rewriting headers** — which is a capability the `Host`-comparison model
-has to fight for.
+Counted from that table: **3 stricter, 1 more lenient, 4 equal** — and the lenient
+one is the point, since the allowlisted sibling is precisely what an allowlist
+exists to admit. (An earlier draft of this page said "4 stricter", which its own
+table does not support; the `cross-site`, stripped-`Origin` and
+`Sec-Fetch-Site: cross-site` rows are `403` on both sides.) A second leniency
+sits outside the table: with `allowHeaderless: true`, rpc passes the headerless
+`curl` row that TanStack refuses, and rpc has no `Referer` tier where TanStack
+falls back to it. So **3 stricter / 2 more lenient** counting both, and both
+leniencies are deliberate and named.
+
+So the trade is not "weaker check, more options". It is
+**secure by default, strictest-once-configured, and multi-origin without a proxy
+rewriting headers** — a capability the `Host`-comparison model otherwise has to
+fight for.
+
+¹ Unless you set `allowHeaderless: true`, which is the documented opt-in for
+`curl` and server-to-server callers. This was the "documented curl/native hole"
+in earlier drafts, and 0.4.0 closed it by default. The no-JS `<form>` fallback is
+**not** in that category: a browser navigation sends `Origin`, so it passes the
+default policy — and because the fallback runs *inside* the dispatch it is
+checked, which is the point. See the progressive-enhancement row below.
 
 Two more places `@thednp/rpc` is ahead regardless of configuration: its `Origin: null`
 handling is correct by default (Next.js shipped
@@ -63,20 +77,23 @@ prototype-pollution class tRPC hit in
 [`CVE-2025-68130`](https://nvd.nist.gov/vuln/detail/CVE-2025-68130) — verified
 against live `__proto__` payloads.
 
-What that framing does **not** excuse is leaving `origin` unset. If you want
-TanStack's fail-closed default, set `origin` to your own origin; if you want
-zero configuration, that is the one axis where a framework is genuinely the
-better fit. (Telefunc, discussed below, appears to sit below `@thednp/rpc` on this axis entirely.)
+**Where this costs you.** An ingress that *rewrites* `Host` to a different name
+than the browser used gets a `403`, and the fix is to name the public origin in
+`origin` — because the alternative, trusting `X-Forwarded-Host`, is how Next.js
+ends up comparing a client-influenceable header. Plain TLS termination is fine:
+the scheme is never compared, so nothing is needed there.
 
 **Where this page has been wrong before.** An earlier draft stated that Next.js
 *aborts* a request with no `Origin`, treating the missing header as a `Host`
 mismatch. That is not what Next.js does: an absent `Origin` is let through with a
 dev warning, on the stated reasoning that a handcrafted request cannot carry
-unwilling victim credentials — the same fail-open posture `@thednp/rpc` takes for
-the curl/native hole. It also overstated TanStack, which rejects a request with
-*no* signal at all rather than specifically one lacking `Origin`. Both are
-corrected in the table above. The `3 stricter / 2 more lenient` tally is measured
-against TanStack only and is unchanged.
+unwilling victim credentials. `@thednp/rpc` shared that posture until 0.4.0 and
+has since closed it by default, which is why Next.js now sits on the more
+permissive side of the headerless row. The same draft also overstated TanStack,
+which rejects a request with *no* signal at all rather than specifically one
+lacking `Origin`. Both are corrected in the table above. The tally is measured
+against TanStack only, and it reads **3 stricter / 2 more lenient** from the
+table and the two named gaps — not the "4 stricter" an earlier draft claimed.
 
 ---
 
@@ -84,17 +101,17 @@ against TanStack only and is unchanged.
 
 |                             | `@thednp/rpc`                                 | Next.js Server Actions                                                                             | TanStack Start                                                                                                                         | SvelteKit                                                                                      | tRPC                                                                            |
 |------------------------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| Enabled by default           | **No** — opt-in via `origin`                   | **Yes**                                                                                             | **Yes** — auto-installed unless you define `src/start.ts`                                                                               | **Yes**, in production only                                                                     | No origin check; ships POST `Content-Type` enforcement as a form-CSRF mitigation |
-| Mechanism                    | Exact-match allowlist (`string` or `string[]`) | `Origin` vs `Host` / `X-Forwarded-Host`                                                             | `Sec-Fetch-Site` → `Origin` → `Referer`                                                                                                 | `Origin` vs the server's own origin, for form submissions                                       | Bring your own (`CORS`/middleware)                                               |
+| Enabled by default           | **Yes** — `origin: "self"`; `origin` is only needed for other origins | **Yes**                                                                                             | **Yes** — auto-installed unless you define `src/start.ts`                                                                               | **Yes**, in production only                                                                     | No origin check; ships POST `Content-Type` enforcement as a form-CSRF mitigation |
+| Mechanism                    | `Host` + port comparison (`"self"`), **extended** by an optional list | `Origin` vs `Host` / `X-Forwarded-Host`                                                             | `Sec-Fetch-Site` → `Origin` → `Referer`                                                                                                                         | `Origin` vs the server's own origin, for form submissions                                       | Bring your own (`CORS`/middleware)                                               |
 | Allow multiple origins       | Yes — `origin: [...]`                          | Yes — `serverActions.allowedOrigins`, incl. `*.domain` wildcards                                    | Yes — `createCsrfMiddleware({ origin })`                                                                                                | Yes — `csrf.trustedOrigins`                                                                     | Framework-dependent                                                              |
-| Request with **no** `Origin` | **Passes** (documented curl/native hole)       | **Passes** — an absent `Origin` is let through with a dev warning, not treated as a `Host` mismatch | **Rejected** only when `Sec-Fetch-Site` **and** `Referer` are absent too; a no-`Origin` request with a same-origin `Referer` is allowed | Aborted for form submissions                                                                    | Framework-dependent                                                              |
-| Applies to GET / queries?    | Yes, if you set `origin`                       | No — actions are POST-only                                                                          | `filter` can target only server fns                                                                                                     | CSRF covers `POST`/`PUT`/`PATCH`/`DELETE` **form** content types only                           | Framework-dependent                                                              |
+| Request with **no** `Origin` | **Rejected** unless `allowHeaderless: true`     | **Passes** — an absent `Origin` is let through with a dev warning, not treated as a `Host` mismatch | **Rejected** only when `Sec-Fetch-Site` **and** `Referer` are absent too; a no-`Origin` request with a same-origin `Referer` is allowed | Aborted for form submissions                                                                    | Framework-dependent                                                              |
+| Applies to GET / queries?    | Yes                                            | No — actions are POST-only                                                                          | `filter` can target only server fns                                                                                                     | CSRF covers `POST`/`PUT`/`PATCH`/`DELETE` **form** content types only                           | Framework-dependent                                                              |
 | Uses `Sec-Fetch-Site`        | Yes — tier-3 fallback                          | No                                                                                                  | Yes — **checked first**                                                                                                                 | No                                                                                              | No                                                                               |
 | Uses `Referer`               | No                                             | No                                                                                                  | Yes — third fallback, on by default                                                                                                     | No                                                                                              | No                                                                               |
 | Tier order                   | `Origin` → `Sec-Fetch-Site`                    | n/a (single comparison)                                                                             | `Sec-Fetch-Site` → `Origin` → `Referer`                                                                                                 | n/a (single comparison)                                                                         | n/a                                                                              |
-| Escape hatch                 | None (by design — don't set `origin`)          | `allowedOrigins` config                                                                             | `allowRequestsWithoutOriginCheck` (default `false`)                                                                                     | `csrf.trustedOrigins: ['*']` — but **not** for a missing `Origin`, and not for remote functions | Framework-dependent                                                              |
+| Escape hatch                 | `allowHeaderless` for non-browser clients; `origin` for a rewritten `Host` | `allowedOrigins` config                                                                             | `allowRequestsWithoutOriginCheck` (default `false`)                                                                                     | `csrf.trustedOrigins: ['*']` — but **not** for a missing `Origin`, and not for remote functions | Framework-dependent                                                              |
 | Custom failure response      | No (fixed `403`)                               | No                                                                                                  | Yes — `failureResponse`                                                                                                                 | No                                                                                              | Framework-dependent                                                              |
-| Automatic input validation   | **No** — handler validates its own args        | No                                                                                                  | No                                                                                                                                      | No — but remote functions take a Standard Schema                                                | Opt-in `.input()` validator                                                      |
+| Input validation           | **Opt-in `schema`** — any Standard Schema, validated before the handler is entered; issues returned in development                  | No                                                                                                  | No                                                                                                  | No — but remote functions take a Standard Schema                                                | Opt-in `.input()`; issues only via a custom `errorFormatter`                                   |
 
 **SvelteKit caveats worth knowing.** Its CSRF protection is scoped to *form
 submissions* (`application/x-www-form-urlencoded`, `multipart/form-data`,
@@ -136,6 +153,32 @@ to consult a coarse enum first, because the precise comparison is free.
 
 ---
 
+## Progressive enhancement (no-JS `<form>`)
+
+A separate axis from CSRF enforcement, and measured separately. Setting
+`fallback` on a function turns it into a usable HTML `<form action>` with
+JavaScript disabled: the native post is answered with a `303` and the failure
+flashed, instead of a JSON body the browser renders raw.
+
+| | `@thednp/rpc` | Next.js Server Actions | TanStack Start | SvelteKit | tRPC | Vike / Telefunc |
+| --- | --- | --- | --- | --- | --- | --- |
+| No-JS `<form>` | **Built in** — `fallback` on the function, all five adapters | **Yes, when the Server Function is passed directly to `<form action>`** — progressive enhancement works, including without JavaScript ([React `<form>`](https://react.dev/reference/react-dom/components/form#handle-form-submission-with-a-server-function), [Next.js forms](https://nextjs.org/docs/app/guides/forms)) | **Yes** — form actions | **Yes** — form actions | **No** | **No** |
+| Failure transport | `__flash` in the redirect URL, 4 KiB cap, **dropped** not truncated | normal navigation/rerender; displaying server validation errors before hydration generally needs client React state (for example `useActionState`) | cookie, where oversized `Set-Cookie` values are rejected rather than truncated | the re-rendered page receives only the fields the handler returns, for example through `fail(status, data)` ([SvelteKit form actions](https://svelte.dev/docs/kit/form-actions)) | n/a | n/a |
+| Replayed values | **Explicit allowlist, empty by default** | n/a | **every** decoded submitted field by default ([TanStack source](https://github.com/TanStack/form/blob/main/packages/react-form-start/src/createServerValidate.tsx)) | only the fields the handler chooses to return | n/a | n/a |
+| Subject to the origin check | **Yes** — it runs inside the dispatch | Yes | Yes | Yes | Yes | Yes |
+| Off-origin success target | `redirect()` from the request context, which wins over `fallback` | Yes | Yes | Yes | Yes | Yes |
+
+Two honest notes on the shape of this. An app-layer fallback middleware mounted
+*before* the RPC middleware is **not** subject to the origin check, and answering
+a form post from any origin is a CSRF hole — so the built-in's placement is the
+security-relevant part, not just the convenience. TanStack Form persists server
+validation state in a cookie, while SvelteKit returns the handler-selected fields
+to the re-rendered page; browser cookie limits mean a very large TanStack flash can
+be rejected rather than truncated. A related failure shape appears in SolidStart's
+open issue on large no-JS submissions losing SSR input
+([#2179](https://github.com/solidjs/solid-start/issues/2179)).
+
+
 ## Vike and Telefunc — considered, and why the reasoning matters
 
 **Vike is not in the table, but not for quite the reason it first appears.**
@@ -153,8 +196,10 @@ Telefunc is worth a mention because it inverts two of the axes above:
   primitives, not just top-level arguments. One caveat: it is **off in
   development** by default (`config.shield.dev`, since Telefunc only generates it
   when building for production), so argument types are not checked in `dev` unless
-  you opt in. tRPC requires you to attach a validator; `@thednp/rpc` and TanStack
-  don't validate for you at all.
+  you opt in. tRPC requires you to attach a validator, and so does
+  `@thednp/rpc` — its `schema` option takes any Standard Schema and is checked
+  by the middleware before the handler runs. Neither is on unless you ask, and
+  TanStack Start does not validate for you at all.
 - **Its security model is explicitly authorization, not cross-origin.** The docs
   state plainly that "telefunctions are public and can be called by anyone", and
   that you protect each one with `throw Abort()` / `shield()`. We found **no
@@ -162,14 +207,19 @@ Telefunc is worth a mention because it inverts two of the axes above:
   *absence of evidence*, not a confirmed absence, so treat it as "unverified"
   rather than "none".
 
-So on the cross-origin axis Telefunc would rank **below** `@thednp/rpc`, which at least
-offers an opt-in allowlist; and on the validation axis it would rank **above**
-everyone. If you want it as a full column, say so — it is a small addition once
-the rest of the page is settled.
+So on the cross-origin axis Telefunc would rank **below** `@thednp/rpc`, which now
+enforces a check by default. On the validation axis it still ranks **above**
+everyone, and the gap is narrower than it was: `@thednp/rpc` now has an opt-in
+`schema` option, comparable to tRPC's `.input()`. Telefunc is stronger on two
+specific counts that a per-function schema does not replicate — `shield()` is
+auto-generated rather than something you attach, and it covers values arriving
+through streaming primitives, not just top-level arguments. If you want it as a
+full column, say so — it is a small addition once the rest of the page is
+settled.
 
 ## Where our rpc is stronger
 
-- **`Origin: null` is rejected whenever an allowlist is set.** Next.js shipped
+- **`Origin: null` is rejected by default.** Next.js shipped
   [`GHSA-mq59-m269-xvcx`](https://github.com/vercel/next.js/security/advisories/GHSA-mq59-m269-xvcx)
   ([CVE-2026-27978](https://nvd.nist.gov/vuln/detail/CVE-2026-27978), published
   2026-03-16, Moderate 5.3) for treating `origin: null` as a *missing* origin,
@@ -179,6 +229,14 @@ the rest of the page is settled.
   host, so it is rejected unless `'null'` is explicitly allowlisted.
   `@thednp/rpc`'s exact-match allowlist never equals `null`, so it rejects by
   default and has no equivalent window.
+- **Your own origin is never something you have to remember to allow.** The default is
+  `origin: "self"`, so a deployment that serves one domain configures nothing, and the
+  option exists to *extend* that — an admin subdomain, a marketing site — rather
+  than to enumerate what is acceptable. Next.js's `allowedOrigins` is the inverse: you
+  list what you accept, so a single-site deployment either writes a redundant
+  entry or runs unprotected. rpc's list form widens `"self"` rather than replacing
+  it, which is what makes it safe to write down: naming an extra origin can no
+  longer lock the operator out of their own site.
 - **No prototype pollution via body keys.** tRPC shipped
   [`CVE-2025-68130`](https://nvd.nist.gov/vuln/detail/CVE-2025-68130)
   ([GHSA-43p4-m455-4f4j](https://github.com/trpc/trpc/security/advisories/GHSA-43p4-m455-4f4j),
@@ -191,6 +249,16 @@ the rest of the page is settled.
   and cannot invoke a `__proto__` setter — and it has no `FormData`-normalising
   path at all. Verified against live `__proto__[isAdmin]=true` and
   `constructor[prototype][isAdmin]=true` bodies: the prototype stays clean.
+- **A per-dispatch hook that owns none of your data.** `onDispatch` reports one
+  redacted `DispatchContext` per dispatch on all five adapters — which origin
+  tier decided, the matched function and its siblings, declared vs actual method
+  and content type, the *shape* of the arguments, status, error class and
+  duration — and the library **retains nothing**: no buffer, no ring, no TTL. The
+  competition's equivalent is a logging call you wire up, which means either you
+  hold request data by default or you get nothing; and the shape detail is what
+  makes a `403` diagnosable without guessing. `argShape` never captures values,
+  so it is safe to log despite arguments routinely carrying passwords. See
+  [Observing Dispatches](./middleware.md#observing-dispatches-ondispatch).
 - **No transport-level crash surface.** tRPC 11's WebSocket `connectionParams`
   validation had an unhandled throw that crashed the process —
   [`CVE-2025-43855`](https://github.com/trpc/trpc/security/advisories/GHSA-pj3v-9cm8-gvj8).
@@ -201,70 +269,116 @@ the rest of the page is settled.
 Everything here is a real cost, and none of it is hidden — but most of it is the
 price of the capability above rather than a gap in it.
 
-- **The check is opt-in.** With no `origin` configured there is no cross-origin
-  enforcement at all. This is the one axis where TanStack or Next.js is the
-  better fit, and the honest cost of a transport that refuses to guess your
-  public origin. Setting it is one line.
-- **Both headers absent ⇒ allowed.** curl and native clients keep working by
-  design; that is also a hole a header-stripping attacker can use *if* they can
-  strip `Sec-Fetch-Site` too. Setting `origin` does not close this one — it is
-  the deliberate curl/native hole, and closing it would mean breaking non-browser
-  clients. Worth being precise about the field here: **Next.js now behaves the
-  same way** — it lets an absent `Origin` through with a dev warning, on the
-  reasoning that a handcrafted request cannot carry unwilling victim credentials.
-  So this is a shared posture, not a gap unique to `@thednp/rpc`. TanStack Start
-  is the one that differs, rejecting a request carrying *no* signal at all.
-- **Origin matching is case-sensitive.** DNS names are case-insensitive
-  (RFC 1035 §2.3.3), so `HTTPS://APP.EXAMPLE.COM` is rejected against
-  `https://app.example.com`. Next.js had the same bug class and fixed it in
+- **Both headers absent ⇒ rejected** (0.4.0). This is stricter than Next.js,
+  which lets an absent `Origin` through with a dev warning, and it will break a
+  `curl` command or a server-to-server client until you add
+  `allowHeaderless: true`. That is a deliberate trade: a headerless POST is
+  indistinguishable on the wire from a cross-site form post whose headers were
+  stripped, and a check nobody has to opt into is a check most deployments never
+  have. The one-line opt-in is the price.
+- **A rewritten `Host` is a 403.** An ingress that rewrites `Host` to a different
+  name than the browser used means the `Origin` the browser sent names a host the
+  server no longer sees. The fix is to name the public origin in `origin` —
+  deliberately not a `trustProxy` switch, because trusting `X-Forwarded-Host` is
+  exactly how Next.js ends up comparing a client-influenceable header. Plain TLS
+  termination needs nothing: the scheme is not compared.
+- **Case sensitivity depends on which tier decides.** The `"self"` comparison is
+  **case-insensitive** — hosts are lowercased on both sides, because DNS names are
+  (RFC 1035 §2.3.3). Literal allowlist entries are still an exact byte match, so
+  `HTTPS://APP.EXAMPLE.COM` must be spelled as you intend. Next.js had the
+  case-sensitivity bug class and fixed it in
   [PR #89127](https://github.com/vercel/next.js/pull/89127) (merged 2026-01-29),
-  so its allowlist is now case-insensitive. A pinned test documents
-  `@thednp/rpc`'s current behaviour; it is a known sharp edge, not an oversight.
+  so its allowlist is now case-insensitive throughout.
 - **Literal origins only** — no `*.example.com` wildcards, as Next.js's
   `allowedOrigins` allows (it supports both `*` for a single label and `**` for
   multiple). Enumerate the subdomains you actually serve.
 - **No `Referer` tier — deliberately.** TanStack falls back to `Referer`; `@thednp/rpc` does not, because [Google's own guidance](https://web.dev/articles/referrer-best-practices) is explicit: *"Don't use referrers for Cross-Site Request Forgery (CSRF) protection… use `Origin` and `Sec-Fetch-Site`."* `@thednp/rpc` consults exactly those two.
   The practical cost is that a user sending `Referrer-Policy: no-referrer` with `Sec-Fetch-Site` stripped is treated as a native client and allowed.
 - **No server-side batching limits exist to abuse** — but also no batching, so tRPC's unbounded-batch complaint ([#5825](https://github.com/trpc/trpc/issues/5825)) has no analogue.
-- **No automatic input validation.** Telefunc's `shield()` and tRPC's `.input()` both give you runtime argument checking; `@thednp/rpc` leaves it entirely to the handler.
-  `wiki/client-usage.md` shows the resulting pattern — validate inside the
-  function, and return `{ error }` as data rather than throwing.
+- **Input validation is opt-in, and the detail is development-only.** As of 0.4.0
+  `@thednp/rpc` has a `schema` option — any Standard Schema, validated by the
+  middleware before the handler is entered, so a bad input is a `422` rather than
+  a call into your code. On the *mechanism* that is level with tRPC's
+  `.input()`: both are opt-in, both run before the resolver, and both hand the
+  resolver the schema's output so coercion needs no cast.
+
+  The error surface is where the two differ, and it was measured against tRPC
+  11.19's `getErrorShape` rather than assumed (re-verified 2026-09-29):
+
+  | | rpc | tRPC |
+  | --- | --- | --- |
+  | validation issues in the response | **yes**, in development | **no** — the default shape omits them; you must write an `errorFormatter` to add `zodError` |
+  | error `message` in production | **not sent** — the status reason phrase only | **sent** — `message` is unconditional; only the stack is `isDev`-gated |
+  | who decides the error shape | rpc, with no app-level override | the app, per router, inferred to the client |
+  | client-side error type | `RPCResponseError` with `status`/`body`/`issues`/`hint` | `TRPCClientError` with a typed `data.code` |
+
+  So rpc teaches better out of the box and leaks less; tRPC is more configurable
+  and gives the client a compile-time error code. The missing piece on our side
+  is an app-level error formatter — without one, "strip in production" is a
+  decision rpc makes on your behalf.
+
+  It is still not Telefunc's `shield()`, which is auto-generated and
+  runtime-enforced in production. See
+  [Server Functions — Input Validation](./server-functions.md#input-validation).
 
 ## What none of these do for you
 
-All of these hand the following to the host. `@thednp/rpc` is the most explicit about it:
+All of these hand the following to the host. `@thednp/rpc` is the most explicit
+about it — and the one place it no longer fully delegates is body size limits,
+because 0.4.0 found a content type nothing was bounding:
 
 - **Authentication / authorization** — middleware registered before
   `createRPCMiddleware()`.
 - **Rate limiting** — see [Best Practices](./best-practices.md#rate-limiting).
 - **Security headers** (CSP, HSTS, `X-Frame-Options`) — reverse proxy or host.
-- **Body size limits** — the host framework's parser. `@thednp/rpc`'s raw `readBody` path
-  has **no built-in cap**; see [Security — Body Size Limits](./security.md#body-size-limits)
-  and note the `examples/spa/body-limit.ts` reference implementation.
-- **Input validation** — the handler validates its own arguments. (tRPC makes
-  this ergonomic with `.input()` validators, but still opt-in; there is "no magic
-  here".)
+- **Body size limits** — partly. `@thednp/rpc` enforces a **10 MiB default cap**
+  of its own (`bodyLimit`, `0` disables) on the paths it reads, *while the body
+  streams* rather than after buffering, for every content type. That is not
+  redundant with a host framework's limit, and the reason was measured:
+  `express.json({ limit: "1mb" })` **declines** urlencoded and multipart, leaves
+  them on the stream, and rpc read that stream uncapped — a 20 MB multipart POST
+  returned `200` with 20,971,594 bytes buffered. Next.js bounds Server Action
+  bodies via `bodySizeLimit`; tRPC and TanStack Start have nothing that applies
+  to a body rpc did not hand them.
+
+  Two caveats, both honest limits rather than omissions. A body some *other*
+  layer already buffered cannot be capped — under `@hono/node-server`, and when a
+  host middleware has read the body first — and there the host's own limit is
+  what bounds the upload. And Fastify is effectively exempt, because its
+  content-type parser answers before any hook runs. Per-adapter table, measured:
+  [Security — Body Size Limits](./security.md#body-size-limits). Reference
+  implementation: `examples/spa/body-limit.ts`.
 
 ---
 
 ## Choosing between them
 
 - Want **CSRF protection with zero configuration** in a React app you don't
-  already have a framework for → **TanStack Start**.
+  already have a framework for → **TanStack Start** (or `@thednp/rpc` as of
+  0.4.0, where it is the default rather than an opt-in).
 - Already in **Next.js** → its Server Actions check is on by default and needs no
   configuration, so there is no reason to add a second transport for this. Two
-  caveats worth knowing: it fails **open** on a request with no `Origin` (as
-  `@thednp/rpc` does), and it only covers POST, so it does nothing for a GET-based
-  transport.
+  caveats worth knowing: it fails **open** on a request with no `Origin` (which
+  `@thednp/rpc` closed in 0.4.0, at the cost of needing `allowHeaderless` for
+  non-browser clients), and it only covers POST, so it does nothing for a
+  GET-based transport.
 - Want a **typed API with batteries-included validation ergonomics** and control
   over batching/caching → **tRPC**.
 - Want a **transport that stays out of the way**: framework-agnostic, no runtime
-  lock-in, multi-prefix, and you will configure `origin` yourself → **`@thednp/rpc`**. Turn
-  `origin` on; that is the whole opt-in.
+  lock-in, multi-prefix, and a cross-origin check that is already on →
+  **`@thednp/rpc`**.
 
-> **The honest framing:** `@thednp/rpc` is not "more secure than Next.js". It is a smaller
-> surface that makes fewer decisions for you — and the one decision that matters
-> most (the cross-origin check) is one you have to make explicitly.
+> **If any of the above makes you want to try it:** the
+> [Migration guide](./migration.md) covers both directions — upgrading an
+> existing 0.3.x install (two defaults changed; one of them will surface as a
+> `403` or a `413`) and coming from one of the frameworks on this page. The
+> comparison above is meant to be read honestly, including the costs, so the
+> guide does not pretend the trade is free.
+
+> **The honest framing:** `@thednp/rpc` is not "more secure than Next.js". It is a
+> smaller surface that makes fewer decisions for you — and as of 0.4.0 the one
+> decision that matters most is made *for* you, on the secure side, rather than
+> waiting to be made. The bill for that is a `403` on your first `curl`.
 
 ---
 
@@ -280,6 +394,7 @@ Telefunc 0.2.24.
 - SvelteKit — [Configuration (`csrf.trustedOrigins`)](https://svelte.dev/docs/kit/configuration), [Remote functions](https://svelte.dev/docs/kit/remote-functions), [Form actions](https://svelte.dev/docs/kit/form-actions), [adapter-node (`ORIGIN`)](https://svelte.dev/docs/kit/adapter-node), the CSRF block in [`respond.js`](https://github.com/sveltejs/kit/blob/main/packages/kit/src/runtime/server/respond.js), missing-`Origin` gap [issue #15992](https://github.com/sveltejs/kit/issues/15992), remote-functions CSRF [PR #14795](https://github.com/sveltejs/kit/pull/14795) (**closed unmerged**), SvelteKit 3 migration guide
 - tRPC — [Input & Output Validators](https://trpc.io/docs/server/validators), [CORS is adapter-side](https://trpc.io/docs/client/cors), POST `Content-Type` enforcement [PR #5526](https://github.com/trpc/trpc/pull/5526), advisory [`CVE-2025-68130`](https://nvd.nist.gov/vuln/detail/CVE-2025-68130) / [`GHSA-43p4-m455-4f4j`](https://github.com/trpc/trpc/security/advisories/GHSA-43p4-m455-4f4j), advisory [`CVE-2025-43855`](https://github.com/trpc/trpc/security/advisories/GHSA-pj3v-9cm8-gvj8), batch limits [#5825](https://github.com/trpc/trpc/issues/5825)
 - Vike / Telefunc — [Vike RPC](https://vike.dev/RPC) (recommends *an* RPC tool, Telefunc first), [Telefunc RPC](https://telefunc.com/RPC), [`shield()`](https://telefunc.com/shield), [`shield()` config](https://telefunc.com/shield-config), [Permissions](https://telefunc.com/permissions)
+- Progressive enhancement — [React `<form>` Server Function](https://react.dev/reference/react-dom/components/form#handle-form-submission-with-a-server-function), [Next.js forms](https://nextjs.org/docs/app/guides/forms), [TanStack Form SSR](https://tanstack.com/form/latest/docs/framework/react/guides/ssr), [`createServerValidate` source](https://github.com/TanStack/form/blob/main/packages/react-form-start/src/createServerValidate.tsx)
 - `@thednp/rpc` — [Security](./security.md), [Wire Protocol](./wire-protocol.md)
 
 > **Next:** [Security](./security.md) — the full rules for this framework.

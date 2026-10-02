@@ -2,7 +2,7 @@ import type { Connect } from "vite";
 import type { AdapterName, MiddlewareOptions } from "@thednp/rpc";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { NextFunction, Request, Response } from "express";
-import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
+import type { RequestDetails, ResponseDetails } from "../adapter-types.d.ts";
 
 /**
  * Normalized request/response shapes, shared with every adapter so a wrapper

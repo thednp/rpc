@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { field, schema } from "../src/schema.ts";
+import { decodeFormFlash, FLASH_PARAM } from "../src/form-fallback.ts";
 import { Hono } from "hono";
-import { clientErrorStatus, isClientHttpError } from "../src/server-helpers.ts";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 import { serverFunctionsMap } from "../src/functionsMap.ts";
+import type { DispatchContext } from "../src/types.d.ts";
 import {
   getRequestContext,
   redirect as serverRedirect,
@@ -36,6 +39,20 @@ beforeEach(() => {
 
 describe("Hono helpers", () => {
   describe("readBody", () => {
+    it("should sniff a body with no Content-Type as JSON when it parses", async () => {
+      // New in 0.4.0. hono previously returned the raw string here while
+      // express, fastify, and koa parsed it — a cross-adapter inconsistency the
+      // readBody consolidation surfaced. The lenient sniff is the library's
+      // documented behaviour (curl and the nojs form fallback send JSON with no
+      // Content-Type), so hono now matches the other four.
+      const c = makeHonoContext({ body: '{"hello":"world"}' });
+      const result = await readBody(c);
+      expect(result.data).toEqual({ hello: "world" });
+      // The reported label still reflects the *declared* type, which is absent
+      // here — long-standing behaviour, not a consequence of the sniff.
+      expect(result.contentType).toBe("text/plain");
+    });
+
     it("should parse JSON via c.req.json()", async () => {
       const c = makeHonoContext({
         headers: { "content-type": "application/json" },
@@ -337,13 +354,21 @@ describe("Hono createRPCMiddleware", () => {
   // as a 500, even a well-formed one. These tests drive a real `Hono` app
   // through `app.fetch()` so `c.env` is genuinely absent.
   describe("on a runtime without c.env", () => {
+    // A native `Request` cannot carry `Host` (forbidden header name), so the
+    // default `origin: "self"` policy has nothing to compare against and
+    // correctly rejects. These tests are about `c.env` being absent, not about
+    // origin policy, so an explicit literal allowlist admits the request and the
+    // exact-match tier of the ladder is exercised instead.
     const call = async (path: string, body: unknown, contentType?: string) => {
       const app = new Hono();
-      app.use(createRPCMiddleware());
+      app.use(createRPCMiddleware({ origin: "http://localhost" }));
       return app.fetch(
         new Request(`http://localhost${path}`, {
           method: "POST",
-          headers: contentType ? { "content-type": contentType } : {},
+          headers: {
+            origin: "http://localhost",
+            ...(contentType ? { "content-type": contentType } : {}),
+          },
           body: JSON.stringify(body),
         }),
       );
@@ -371,11 +396,14 @@ describe("Hono createRPCMiddleware", () => {
     it("rejects a malformed JSON body with 400, not 500", async () => {
       createServerFunction("hono-bad", vi.fn().mockResolvedValue("ok"));
       const app = new Hono();
-      app.use(createRPCMiddleware());
+      app.use(createRPCMiddleware({ origin: "http://localhost" }));
       const res = await app.fetch(
         new Request("http://localhost/__rpc/hono-bad", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost",
+          },
           body: "{not json",
         }),
       );
@@ -388,33 +416,70 @@ describe("Hono createRPCMiddleware", () => {
       expect(res.status).toBe(404);
     });
 
-    it("preserves a client error the host already classified", async () => {
-      // If `c.req.json()` fails with something that already carries a 4xx —
-      // Hono's own HTTPException, say — the status is kept rather than
-      // relabelled.
+    it("answers 400 for malformed JSON, as h3 does", async () => {
+      // Previously a declared-JSON body was parsed by `c.req.json()`, so Hono
+      // threw its own HTTPException and rpc re-derived the status. Reading the
+      // body ourselves removes that failure mode: there is no host error left to
+      // preserve, and a bad body is rpc's own 400 on every adapter.
+      createServerFunction("hono-bad-json", vi.fn().mockResolvedValue("ok"));
       const app = new Hono();
-      app.use(createRPCMiddleware());
-      const hostile = {
-        env: undefined,
-        req: {
-          header: () => "application/json",
-          json: () => Promise.reject({ status: 422, message: "nope" }),
-          text: () => Promise.resolve(""),
-        },
-      };
-      const err = await readBody(hostile as never).catch((e: unknown) => e);
-      expect(isClientHttpError(err)).toBe(true);
-      expect(clientErrorStatus(err)).toBe(422);
+      app.use(createRPCMiddleware({ origin: "http://localhost" }));
+      const res = await app.fetch(
+        new Request("http://localhost/__rpc/hono-bad-json", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost",
+          },
+          body: "{not json",
+        }),
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it("uses a body a host middleware already read, rather than a spent stream", async () => {
+      // A host middleware that touches the body first — an auth step calling
+      // `c.req.json()`, say — consumes `c.req.raw` and leaves the result in
+      // Hono's body cache under a body-form key. rpc cannot re-read the stream,
+      // so it has to take the cache. Note the cache holds the *raw text*, not a
+      // parsed object: `c.req.json()` caches the text and parses it itself
+      // afterwards, so handing that straight to a pre-parsed path would return
+      // the caller a string and silently lose the object.
+      createServerFunction(
+        "hono-precached",
+        vi.fn().mockResolvedValue("ok"),
+      );
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        await c.req.json();
+        await next();
+      });
+      app.use(createRPCMiddleware({ origin: "http://localhost" }));
+      const fn = vi.fn().mockResolvedValue("ok");
+      createServerFunction("hono-precached-fn", fn);
+      const res = await app.fetch(
+        new Request("http://localhost/__rpc/hono-precached-fn", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost",
+          },
+          body: JSON.stringify({ n: 7 }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(fn).toHaveBeenCalledWith(expect.anything(), { n: 7 });
     });
 
     it("rejects a malformed ?args= with 400, not 500", async () => {
       const fn = vi.fn();
       createServerFunction("hono-malformed-args", fn, { method: "GET" });
       const app = new Hono();
-      app.use(createRPCMiddleware());
+      app.use(createRPCMiddleware({ origin: "http://localhost" }));
       const res = await app.fetch(
         new Request(
           "http://localhost/__rpc/hono-malformed-args?args=not%20json",
+          { headers: { origin: "http://localhost" } },
         ),
       );
       expect(fn).not.toHaveBeenCalled();
@@ -893,7 +958,7 @@ describe("Hono createRPCMiddleware", () => {
     const c = makeHonoContext({
       path: "/__rpc/hono-fn",
       method: "POST",
-      headers: { "sec-fetch-site": "cross-site" },
+      headers: { origin: undefined, "sec-fetch-site": "cross-site" },
     });
     const next = makeHonoNext();
     await mw(c, next);
@@ -908,6 +973,7 @@ describe("Hono createRPCMiddleware", () => {
       path: "/__rpc/hono-fn",
       method: "POST",
       headers: {
+        origin: undefined,
         "sec-fetch-site": "same-origin",
         "content-type": "application/json",
       },
@@ -916,6 +982,41 @@ describe("Hono createRPCMiddleware", () => {
     const next = makeHonoNext();
     await mw(c, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("default policy rejects a cross-origin request with no options at all", async () => {
+    // Proves the secure default is wired through this adapter, not merely
+    // implemented in the shared helper. Creating the middleware with no options
+    // must already be protected.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com", "sec-fetch-site": "cross-site" },
+      body: JSON.stringify(["x"]),
+    });
+    await mw(c, makeHonoNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(c.json).toHaveBeenCalledWith({ error: "Forbidden" }, 403);
+  });
+
+  it("default policy admits the server's own host, comparing host only", async () => {
+    // `http://` against the fixture's `Host` proves the scheme is not part of
+    // the comparison, so a TLS-terminating proxy needs no configuration.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-fn", fn);
+    const mw = createRPCMiddleware();
+    const c = makeHonoContext({
+      path: "/__rpc/hono-fn",
+      method: "POST",
+      headers: { host: "app.example.com", origin: "http://app.example.com" },
+      body: JSON.stringify(["x"]),
+    });
+    await mw(c, makeHonoNext());
+    expect(fn).toHaveBeenCalled();
     expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
   });
 
@@ -1005,5 +1106,623 @@ describe("Hono createRPCMiddleware", () => {
     await mw(c, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
     expect(c.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+  });
+
+  it("validates the input against the function schema before dispatch", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("validated", fn, {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+      hint: "a single function-wide hint",
+    });
+    const mw = createRPCMiddleware({ allowHeaderless: true });
+    const ok = makeHonoContext({
+      path: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "a@b.c" }),
+    });
+    await mw(ok, makeHonoNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      email: "a@b.c",
+    });
+    expect(ok.json).toHaveBeenCalledWith({ data: "ok" }, 200);
+
+    const bad = makeHonoContext({
+      path: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: 5 }),
+    });
+    await mw(bad, makeHonoNext());
+    expect(bad.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: "Validation failed" }),
+      422,
+    );
+    expect(fn).toHaveBeenCalledTimes(1);
+    const body = bad.json.mock.calls.at(-1)?.[0] as { hint?: string };
+    expect(body.hint).toMatch(
+      /^a single function-wide hint — .*wiki\/server-functions\.md#input-validation$/,
+    );
+
+    // Without a function-wide hint, the pointer stands alone.
+    createServerFunction("validated", vi.fn(), {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+    });
+    const plain = makeHonoContext({
+      path: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: 5 }),
+    });
+    await mw(plain, makeHonoNext());
+    expect(
+      (plain.json.mock.calls.at(-1)?.[0] as { hint?: string }).hint,
+    ).toBe(
+      "input did not match the function's schema; see wiki/server-functions.md#input-validation",
+    );
+  });
+
+  it("answers a JSON array body with 400 because it is an argument list, not one array argument", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("array-payload", fn, {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+    });
+    const mw = createRPCMiddleware({ allowHeaderless: true });
+    const bad = makeHonoContext({
+      path: "/__rpc/array-payload",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([[1, 2]]),
+    });
+    await mw(bad, makeHonoNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(bad.json).toHaveBeenCalledWith({ error: "Bad Request" }, 400);
+  });
+});
+
+/* ─── onDispatch ────────────────────────────────────────────────────────────
+ * hono returns a `Response`, so the id is merged by cloning and re-serialising
+ * the body — the one adapter whose `withId` has to be async.
+ */
+
+describe("hono onDispatch", () => {
+  const HOST = "http://localhost";
+  const seen: DispatchContext[] = [];
+
+  const go = async (
+    path: string,
+    body: unknown = [],
+    headers: Record<string, string> = {},
+  ) => {
+    const app = new Hono();
+    app.use(
+      createRPCMiddleware({
+        origin: HOST,
+        onDispatch: (ctx: DispatchContext) => {
+          seen.push(ctx);
+        },
+      }),
+    );
+    const res = await app.fetch(
+      new Request(`${HOST}${path}`, {
+        method: "POST",
+        headers: {
+          origin: HOST,
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify(body),
+      }),
+    );
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seen.length = 0;
+  });
+
+  it("records a successful dispatch", async () => {
+    createServerFunction("hono-ok", vi.fn().mockResolvedValue("ok"));
+    const { status } = await go("/__rpc/hono-ok", ["x"]);
+    expect(status).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      prefix: "__rpc",
+      functionName: "hono-ok",
+      method: "POST",
+      declaredMethod: "POST",
+      declaredContentType: "application/json",
+      contentTypeMatched: true,
+      status: 200,
+      outcome: "ok",
+    });
+  });
+
+  it("shapes the args and never records a value", async () => {
+    createServerFunction("hono-shape", vi.fn().mockResolvedValue("ok"));
+    await go("/__rpc/hono-shape", [{ a: 1, password: "correct-horse" }]);
+    expect(seen[0].argShape).toBe("[{a:number,password:string}]");
+    expect(JSON.stringify(seen[0])).not.toContain("correct-horse");
+  });
+
+  it("records the 404 and lists the sibling names", async () => {
+    createServerFunction("hono-known", vi.fn().mockResolvedValue("ok"));
+    const { status } = await go("/__rpc/nope");
+    expect(status).toBe(404);
+    expect(seen[0]).toMatchObject({
+      functionName: "nope",
+      status: 404,
+      outcome: "client-error",
+    });
+    expect(seen[0].registeredNames).toContain("hono-known");
+  });
+
+  it("records the origin rejection", async () => {
+    createServerFunction("hono-forbidden", vi.fn().mockResolvedValue("ok"));
+    const app = new Hono();
+    app.use(createRPCMiddleware({
+      origin: HOST,
+      onDispatch: (ctx: DispatchContext) => {
+        seen.push(ctx);
+      },
+    }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/hono-forbidden`, {
+        headers: { origin: "https://evil.test" },
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(seen[0]).toMatchObject({ status: 403, originTier: "origin" });
+  });
+
+  it("records a thrown handler as a server error", async () => {
+    createServerFunction(
+      "hono-boom",
+      vi.fn().mockRejectedValue(new Error("b")),
+    );
+    const { status } = await go("/__rpc/hono-boom");
+    expect(status).toBe(500);
+    expect(seen[0]).toMatchObject({
+      status: 500,
+      outcome: "server-error",
+    });
+  });
+
+  it("merges the id into the Response body, and the record agrees", async () => {
+    const { body } = await go("/__rpc/nope");
+    const id = (body as { id?: string }).id;
+    expect(id).toMatch(/^[0-9a-f]{16}$/);
+    expect(seen[0].id).toBe(id);
+  });
+
+  it("leaves the body alone with no hook registered", async () => {
+    seedServerMap();
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/noSuchFn`, { headers: { origin: HOST } }),
+    );
+    expect(await res.json()).toEqual({ error: "Function not found" });
+  });
+
+  it("records a declared contentType, not just the default", async () => {
+    createServerFunction("hono-text", vi.fn().mockResolvedValue("hi"), {
+      contentType: "text/plain",
+    });
+    const app = new Hono();
+    app.use(createRPCMiddleware({
+      origin: HOST,
+      onDispatch: (ctx: DispatchContext) => {
+        seen.push(ctx);
+      },
+    }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/hono-text`, {
+        method: "POST",
+        headers: { origin: HOST, "content-type": "text/plain" },
+        body: "[]",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(seen[0]).toMatchObject({
+      declaredContentType: "text/plain",
+      actualContentType: "text/plain",
+      contentTypeMatched: true,
+    });
+  });
+
+  it("records a GET function called with no ?args= at all", async () => {
+    const handler = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-noargs", handler, { method: "GET" });
+    const app = new Hono();
+    app.use(createRPCMiddleware({
+      origin: HOST,
+      onDispatch: (ctx: DispatchContext) => {
+        seen.push(ctx);
+      },
+    }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/hono-noargs`, { headers: { origin: HOST } }),
+    );
+    expect(res.status).toBe(200);
+    expect(seen[0]).toMatchObject({
+      functionName: "hono-noargs",
+      status: 200,
+      argShape: "[]",
+    });
+  });
+
+  it("falls back to the default contentType for a hand-registered entry", async () => {
+    serverFunctionsMap.set("no-options", {
+      handler: (async () => "bare") as never,
+    } as never);
+    const app = new Hono();
+    app.use(createRPCMiddleware({
+      origin: HOST,
+      onDispatch: (ctx: DispatchContext) => {
+        seen.push(ctx);
+      },
+    }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/no-options`, {
+        method: "POST",
+        headers: { origin: HOST, "content-type": "application/json" },
+        body: "[]",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(seen[0]).toMatchObject({ declaredContentType: "application/json" });
+  });
+
+  it("does not take down the request when the hook throws", async () => {
+    createServerFunction("hono-throw", vi.fn().mockResolvedValue("ok"));
+    const app = new Hono();
+    app.use(createRPCMiddleware({
+      origin: HOST,
+      onDispatch: () => {
+        throw new Error("log exploded");
+      },
+    }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/hono-throw`, {
+        method: "POST",
+        headers: { origin: HOST, "content-type": "application/json" },
+        body: "[]",
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("Hono bodyLimit", () => {
+  const HOST = "http://localhost";
+
+  // `headers` is merged rather than spread from an `init` object: spreading
+  // `init` after `headers` replaced the whole record, dropping `origin` and
+  // turning these into 403s from the cross-origin check instead of the 413
+  // under test.
+  const post = (
+    body: BodyInit,
+    headers: Record<string, string> = {},
+    fn = "hono-limit",
+    extra: RequestInit = {},
+  ) =>
+    new Request(`${HOST}/__rpc/${fn}`, {
+      method: "POST",
+      headers: {
+        origin: HOST,
+        "content-type": "application/json",
+        ...headers,
+      },
+      body,
+      ...extra,
+    });
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+  });
+
+  it("caps a declared-JSON body, which is the case that was uncapped", async () => {
+    // This is the regression guard. `readBody` used to return early for
+    // declared-JSON via `c.req.json()`, which reads the stream itself and sits
+    // on no capped path — so `bodyLimit` silently did not apply to JSON on
+    // Hono, while it applied to every other content type and to the identical
+    // body on h3. The suite had no Hono cap test at all, which is how that
+    // survived at 100% line coverage: coverage measured that the branch ran,
+    // not that it bounded anything.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-limit", fn);
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST, bodyLimit: 64 }));
+
+    const res = await app.fetch(post(JSON.stringify(["x".repeat(4096)])));
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "Payload Too Large" });
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("caps a body with no Content-Length, so the cap is enforced while streaming", async () => {
+    // A `Content-Length` pre-check is not a cap: a Request built in JavaScript
+    // carries none, which is the normal case for `app.fetch()`, Workers, Bun,
+    // Deno and serverless. This is the path that must actually count bytes.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-limit", fn);
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST, bodyLimit: 64 }));
+
+    const chunked = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(JSON.stringify(["x".repeat(4096)])));
+        c.close();
+      },
+    });
+    const res = await app.fetch(
+      post(chunked as unknown as BodyInit, {}, "hono-limit", {
+        // @ts-expect-error - Node requires this for a streaming request body
+        duplex: "half",
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("accepts a body under the cap", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-limit", fn);
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST, bodyLimit: 1024 }));
+
+    const res = await app.fetch(post(JSON.stringify(["small"])));
+    expect(res.status).toBe(200);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("caps a text body too, so the behaviour matches h3 for every content type", async () => {
+    createServerFunction("hono-limit-text", vi.fn().mockResolvedValue("ok"), {
+      contentType: "text/plain",
+    });
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST, bodyLimit: 64 }));
+
+    const res = await app.fetch(
+      post(
+        "x".repeat(4096),
+        { "content-type": "text/plain" },
+        "hono-limit-text",
+      ),
+    );
+    expect(res.status).toBe(413);
+  });
+});
+
+describe("Hono body cache", () => {
+  const HOST = "http://localhost";
+
+  /**
+   * `c.req.bodyCache` is keyed by *body form*, and Hono stores the raw body
+   * under the form key its accessor was asked for — `c.req.json()` asks for
+   * `text` and parses the result itself. So the same cache can hand rpc a parsed
+   * value or raw bytes depending on who wrote it, and those need different
+   * treatment. Each case below writes the cache directly, which is what a host
+   * middleware does.
+   */
+  const withCache = async (
+    key: string,
+    value: unknown,
+    declared: string,
+    // the function's declared content type, so content-type strictness does not
+    // answer 415 before the body is ever read
+    fnContentType: "json" | "text" = "json",
+  ) => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-cache", fn, {
+      ...(fnContentType === "text" ? { contentType: "text/plain" } : {}),
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      // Hono types the cache as `Partial<Body>`, so a dynamic key needs the cast
+      // the production code also needs.
+      (c.req.bodyCache as Record<string, Promise<unknown>>)[key] = Promise
+        .resolve(value);
+      await next();
+    });
+    app.use(createRPCMiddleware({ origin: HOST }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/hono-cache`, {
+        method: "POST",
+        headers: { origin: HOST, "content-type": declared },
+        body: "consumed-elsewhere",
+      }),
+    );
+    return { res, fn };
+  };
+
+  it("parses a cached raw text body, which is what c.req.json() leaves", async () => {
+    const { res, fn } = await withCache(
+      "text",
+      '{"n":7}',
+      "application/json",
+    );
+    expect(res.status).toBe(200);
+    // The text must be parsed, not handed through as a string.
+    expect(fn).toHaveBeenCalledWith(expect.anything(), { n: 7 });
+  });
+
+  it("accepts a cached value already parsed under the json key", async () => {
+    const { res, fn } = await withCache("json", { n: 7 }, "application/json");
+    expect(res.status).toBe(200);
+    expect(fn).toHaveBeenCalledWith(expect.anything(), { n: 7 });
+  });
+
+  it("accepts a cached non-string raw body", async () => {
+    // `arrayBuffer` / `blob` / `formData` all hold bytes, not text, so they take
+    // the pre-parsed path rather than `parseRawBody`.
+    const { res } = await withCache(
+      "arrayBuffer",
+      new TextEncoder().encode("payload").buffer,
+      "text/plain",
+      "text",
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("prefers a parsed json entry over raw text when both are cached", async () => {
+    // Hono's own lookup accepts whichever form was cached first, so a cache
+    // holding both is ambiguous by construction. Whichever wins, the caller
+    // must get a parsed object rather than a raw string.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("hono-cache", fn);
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      const cache = c.req.bodyCache as Record<string, Promise<unknown>>;
+      cache.json = Promise.resolve({ n: 1 });
+      cache.text = Promise.resolve('{"n":2}');
+      await next();
+    });
+    app.use(createRPCMiddleware({ origin: HOST }));
+    const res = await app.fetch(
+      new Request(`${HOST}/__rpc/hono-cache`, {
+        method: "POST",
+        headers: { origin: HOST, "content-type": "application/json" },
+        body: "x",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const received = fn.mock.calls[0]?.[1] as { n: number };
+    expect(received.n).toBe(1);
+  });
+});
+
+describe("Hono no-JS form fallback (dispatch)", () => {
+  const BODIES: Record<string, string> = {
+    bad: "age=nope",
+    ok: "age=7",
+    replay: "age=nope&note=hello",
+  };
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seedServerMap();
+  });
+
+  const formCtx = (kind: string, accept = "text/html") => {
+    return makeHonoContext({
+      path: "/__rpc/contact",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept },
+      body: BODIES[kind],
+    });
+  };
+
+  // The load-bearing claim: a rejected *navigation* redirects. It only holds
+  // because the fallback branch sits ahead of the client-error branch, which
+  // would otherwise claim the ValidationError and answer a 422 JSON body.
+  it("redirects a rejected native form instead of answering 422", async () => {
+    const handler = vi.fn().mockResolvedValue("sent");
+    createServerFunction("contact", handler, {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+      fallback: "/contact",
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("bad");
+    await mw(ctx as never, makeHonoNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/contact",
+    );
+    const flash = decodeFormFlash(
+      new URL(ctx.redirect.mock.calls[0]?.[0] as string, "http://localhost")
+        .searchParams.get(FLASH_PARAM)!,
+    );
+    expect(flash!.errors?.age).toBeDefined();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  // The other load-bearing claim: the generated stub posts form encodings too,
+  // so the discriminator has to be the navigation, not the content type.
+  it("leaves a fetch from the client stub on the JSON path", async () => {
+    const handler = vi.fn().mockResolvedValue("sent");
+    createServerFunction("contact", handler, {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+      fallback: "/contact",
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("bad", "application/json");
+    await mw(ctx as never, makeHonoNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toBe(null);
+  });
+
+  it("redirects a successful navigation to the author's target", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      fallback: "/thanks",
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("ok");
+    await mw(ctx as never, makeHonoNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/thanks",
+    );
+    // A success carries no failure to report, so no flash at all.
+    expect(
+      new URL(ctx.redirect.mock.calls[0]?.[0] as string, "http://localhost")
+        .searchParams.get(FLASH_PARAM),
+    ).toBeNull();
+  });
+
+  // A real fault must not be laundered into a friendly redirect.
+  it("keeps an unexpected throw a 500 even on a navigation", async () => {
+    createServerFunction(
+      "contact",
+      vi.fn().mockRejectedValue(new Error("boom")),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/contact",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("ok");
+    await mw(ctx as never, makeHonoNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toBe(null);
+  });
+
+  it("replays only the fields the author named", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number(), note: field.string() }),
+      fallback: { to: "/contact", replay: ["note"] },
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("replay");
+    await mw(ctx as never, makeHonoNext());
+    const url = new URL(
+      ctx.redirect.mock.calls[0]?.[0] as string,
+      "http://localhost",
+    );
+    const flash = decodeFormFlash(url.searchParams.get(FLASH_PARAM)!);
+    expect(flash!.values).toEqual({ note: "hello" });
+    expect(url.search).not.toContain("nope");
+  });
+
+  it("does not redirect when the function sets no fallback", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("bad");
+    await mw(ctx as never, makeHonoNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toBe(null);
   });
 });

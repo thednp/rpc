@@ -33,6 +33,7 @@ function createServerFunction<TArgs extends JsonArray, TResult>(
     credentials?: "same-origin" | "include" | "omit",
     method?: "GET" | "POST",
     rpcPrefix?: string,
+      fallback?: string | FormFallbackOptions,
   }
 ): ClientFunction<TArgs, TResult>;
 ```
@@ -48,6 +49,9 @@ function createServerFunction<TArgs extends JsonArray, TResult>(
 - **`options`** — Optional credentials, serialization strategy, HTTP method, and RPC prefix
   * `contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data'` - Defaults to `'application/json'`.
   * `credentials?: "include" | "same-origin" | "omit"` - Defaults to `'same-origin'`.
+  * `fallback?: string | { to: string | (outcome) => string; replay?: string[] }` —
+    enables the no-JS `<form>` flow for this function. Absent by default.
+    See [No-JS Form Fallback](#no-js-form-fallback-fallback).
   * `method?: "GET" | "POST"` - Defaults to `'POST'`.
   * `rpcPrefix?: string` - Registers the function under a custom prefix so multiple RPC instances can coexist (versioned/namespaced APIs) — the same name may be reused under different prefixes. Omitted, it resolves to the **global prefix** (whatever `setGlobalPrefix` / `loadRPCConfig` published) and only then to `'__rpc'`, so the effective default follows your config rather than being hard-coded. Every adapter resolves its dispatch prefix the same way, so a registered function is always reachable. See [Multi-Prefix Support](./multi-prefix-guide.md) and [Configuration](./configuration.md#loadrpcconfig).
 
@@ -57,6 +61,17 @@ function createServerFunction<TArgs extends JsonArray, TResult>(
 - `'text/plain'` — the single argument (or `JSON.stringify` of the args array) travels as plain text.
 - `'application/x-www-form-urlencoded'` — designed for native HTML forms: the generated client serializes the single object argument with `new URLSearchParams(args[0]).toString()`, so a `<form>` can POST straight to your RPC endpoint without client-side serialization. Server-side, the adapters parse `key=value&key2=value2` into an object with `URLSearchParams`; if you register your framework's urlencoded parser (`express.urlencoded()`, `@fastify/formbody`, `koa-body`) **before** the RPC middleware, the pre-parsed object is used directly. Each value is a string (repeated keys collapse — see [Wire Protocol — urlencoded](./wire-protocol.md#post--applicationx-www-form-urlencoded)).
 - `'multipart/form-data'` — designed for file uploads. The generated client sends the `FormData` you pass as the first argument (the browser sets the boundary — never set `Content-Type` yourself). Server-side, Node has no built-in multipart parser: register your framework's parser middleware (`multer`/`express-fileupload`, `@fastify/multipart`, `koa-body`, or Hono's `hono/body-limit` + `formData` helpers) **before** the RPC middleware, and the adapter forwards the parsed fields object as the function's argument. Without a parser, the raw multipart body arrives as `{ raw: <string> }` — parse it inside the handler with `busboy` or `formidable` (see [Wire Protocol — Multipart](./wire-protocol.md#post--multipartform-data)).
+
+> **`multipart/form-data` and `schema` cannot be combined today.** They are each
+> documented on their own, and together they cannot work: a `schema` validates
+> `args[0]`, and for multipart `args[0]` is the `{ raw: <string> }` object rpc
+> hands through, so any schema describing your fields rejects it with a `422` on
+> the path `raw`. Pinned as current behaviour in `examples/advanced/verify.mjs`
+> (section D), so that changing it is a deliberate decision rather than an
+> accident. Workarounds: register a host multipart parser **before** the RPC
+> middleware, which makes the pre-parsed fields object the argument and the
+> schema then applies normally; or use `application/x-www-form-urlencoded`, which
+> rpc parses itself.
 
 > **Content-type enforcement:** the adapters validate the incoming `Content-Type` against the declared `contentType` before parsing, returning `415 Unsupported Media Type` on a mismatch. JSON and text functions are strict (exact match after stripping `charset`/`boundary`); the two form encodings are interchangeable, so native urlencoded submissions keep working on multipart-declared functions — this is what lets server functions double as the `action` of a nojs `<form>`. Requests with no `Content-Type` header are exempt. The check is available programmatically via `hasContentTypeMismatch`/`isFormContentType` from `@thednp/rpc/server`.
 
@@ -188,49 +203,343 @@ The return value of `handler` is serialized to JSON and sent as the HTTP respons
 
 ## Input Validation
 
-Server functions receive raw, untrusted client data. **Always validate data within your server functions before use.**
+Server functions receive raw, untrusted client data. Pass a `schema` and rpc validates **before the handler is entered** — a rejected input is a `422`, never a call into your code with garbage.
 
-**zod:**
+### The `schema` option
+
+`schema` accepts any [Standard Schema](https://standardschema.dev) — zod, valibot, arktype, effect `Schema`, or a hand-rolled `{ "~standard": … }` object. There is no adapter and no per-library branch anywhere in rpc — see [How rpc runs it](#how-rpc-runs-it) for what that means in practice.
 
 ```ts
-import { z } from 'zod';
-import { createServerFunction } from '@thednp/rpc/server';
+import { z } from "zod";
+import { createServerFunction } from "@thednp/rpc/server";
 
 const AddSchema = z.object({
-  a: z.number(),
-  b: z.number(),
+  a: z.union([z.string(), z.number()]),
+  b: z.union([z.string(), z.number()]),
 });
 
-export const add = createServerFunction('add', async (signal, raw) => {
-  const parsed = AddSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { error: parsed.error.flatten() };
+export const add = createServerFunction(
+  "add",
+  async (signal, { a, b }) => Number(a) + Number(b),
+  {
+    schema: AddSchema,
+    // A form sends strings; say so once, instead of at every call site.
+    hint: "a and b are numbers; the form sends strings",
+  },
+);
+```
+
+The same option, three syntaxes:
+
+| validator | declaration | note |
+| --- | --- | --- |
+| **zod** | `z.object({ a: z.number() })` | builder chain |
+| **valibot** | `v.object({ a: v.number() })` | value-first, composes with `v.pipe` for coercion |
+| **arktype** | `type({ a: "number" })` | type-first |
+
+### How rpc runs it
+
+`schema` **delegates**. rpc does not re-implement validation, and does not
+re-interpret your library's rules: it reads `schema["~standard"]` and calls that
+library's own `validate`. So everything your validator can express is enforced —
+coercion, refinements, `.transform()`, brand checks, custom issues, and
+asynchronous rules — because it is the *same function* that runs.
+
+The whole interface rpc depends on is this:
+
+```ts
+{
+  "~standard": {
+    version: 1,
+    vendor: "zod",                      // a label; rpc branches on nothing
+    validate: (value: unknown) => ({ value }) | ({ issues }),
+  };
+}
+```
+
+Four consequences worth knowing, because each is a way a naive integration
+silently does the wrong thing:
+
+- **It is version-pinned to `1`**, and throws on anything else. Honouring an
+  interface rpc does not understand is precisely what would make "any Standard
+  Schema validator" false, so it refuses rather than guesses.
+- **The result is awaited.** The spec permits a Promise, and a runner that read it
+  synchronously would see `issues === undefined` *on the Promise object*,
+  conclude the input was valid, and hand your handler the Promise — skipping
+  validation entirely, with no error. Effect's adapter is async, so this is
+  load-bearing rather than theoretical.
+- **Success is a falsy `issues`,** per the spec, not `=== undefined`. Every
+  conforming library is handled by the same rule.
+- **The returned `value` replaces `args[0]`,** which is why a transform runs on
+  both the HTTP path and a direct call. The two cannot drift.
+
+Issue `path`s arrive as the spec's `PropertyKey[]` and are **normalised to a
+string** — `address.city`, `tags[0]` — so one body shape drives `fieldErrors`,
+the no-JS flash and a client resolver regardless of which library produced it.
+
+No vendor is privileged. The test suite pins this by running the same contract
+through mocks shaped like each library's real output — including one that echoes
+the rejected value into its message and one that validates asynchronously — and
+asserting the results are identical, so a future `if (vendor === "zod")` in the
+dispatch fails the build.
+
+### Input is not Output
+
+Standard Schema splits the two, and rpc honours the split:
+
+- the **client stub** is typed from the schema's **Input** — what the browser may send;
+- the **handler parameter** is typed from the schema's **Output** — what arrives after transforms.
+
+So a coercing schema lets the client send `"2"` while the handler receives `2`, with no cast. That is the entire reason the spec distinguishes the two, and `v.pipe(v.string(), v.transform(Number), v.number())` is the canonical example.
+
+### What a rejection looks like
+
+The status is **`422`** in both environments. The body differs:
+
+```jsonc
+// development
+{
+  "error": "Validation failed",
+  "code": "VALIDATION",
+  "data": { "issues": [ { "path": "email", "message": "expected a string", "hint": "the address you signed up with" } ] },
+  "hint": "input did not match the function's schema; see wiki/server-functions.md#input-validation"
+}
+
+// production
+{
+  "error": "Unprocessable Content",
+  "code": "VALIDATION",
+  "data": { "issues": [ { "path": "email", "hint": "the address you signed up with" } ] },
+  "hint": "input did not match the function's schema; see wiki/server-functions.md#input-validation"
+}
+```
+
+**Why `422` and not `400`.** `400` means the request could not be understood — a body that does not parse, a `?args=` that is not an array. A validation failure is not that: the body parsed fine and the *fields* are wrong. Before 0.4.0 both were `400`, so a client could not tell a broken request from a rejected one without reading prose. `422 Unprocessable Content` is the widely-understood code for exactly this, and it makes the status a usable discriminator: branch on `res.status` and you do not have to parse anything. Elysia answers `422` for the same reason.
+
+**What production keeps, and what it drops.** The split is drawn on *authorship*, not on the environment alone. Production keeps every string that rpc or you wrote — the reason phrase, the `code`, each issue's `path`, each `hint` — and drops the one string the validator library wrote, `message`.
+
+- `path` is safe because it names a field the caller itself supplied, and can already see in the form it loaded or the client bundle.
+- `hint` is safe because you wrote it in `ServerFunctionOptions`, so disclosing it was a deliberate act.
+- `message` is neither, and it is **not safe to send** — because some libraries interpolate the value that failed into it. Measured through `~standard.validate`, the same path rpc uses, with `name: 12345`:
+
+  | library | default message | echoes the value? |
+  | --- | --- | --- |
+  | valibot | `Invalid type: Expected string but received 12345` | **yes** |
+  | zod | `Invalid input: expected string, received number` | no |
+  | arktype | `name must be a string (was a number)` | no |
+
+  Whether a message is safe depends on which library you picked, which cannot be reasoned about portably — so it is withheld structurally rather than by a rule each author has to remember. Depending on a vendor message also couples your error text to that library's release cycle, which is a second reason not to.
+
+So an author who writes `hints` gets them in production automatically, and an author who writes none still gets *which field* failed. Neither needs to configure anything.
+
+> **Never encode an existence check in a schema.** `~standard.validate` may be async, so a refinement that hits your database can put "already registered" into an issue — and a `path` and a `hint` are both sent in production. Do existence checks in the handler and throw one neutral `RPCError`. For a login, answer identically for "no such account" and "wrong password"; `NotFoundError` and `ForbiddenError` are the wrong pair there, and a status-code difference enumerates accounts on its own.
+
+The client's `data` promise rejects with an `RPCResponseError`, which carries `status`, `body`, and — in both environments — `issues` and `hint` as getters. The `issues` an issue carries in production simply have no `message` key:
+
+```ts
+import { RPCResponseError } from "@thednp/rpc/helpers";
+
+try {
+  const { data } = add({ a: 1, b: 2 });
+  await data;
+} catch (err) {
+  if (err instanceof RPCResponseError && err.status === 422) {
+    err.issues?.forEach((i) => console.error(i.path, i.message, i.hint));
   }
-  return parsed.data.a + parsed.data.b;
+}
+```
+
+Both getters return `undefined` for any other status, so you can branch without inspecting the shape.
+
+### Hints
+
+A validator's message says what is wrong; a hint says what to do about it. Hints are **dev-only** (they live in the stripped body) and are never inferred — you write them, because only you know the intent.
+
+- `hint: "…"` — one string for the whole function. rpc appends its own docs pointer, so you don't have to.
+- `hints: { email: "…", "profile.email": "…" }` — per rendered path, for when one message needs different advice per field.
+- `field.string({ hint: "…" })` — declared on an rpc builder schema, where it stays next to the rule it describes.
+
+### No validator dependency
+
+`schema()` builds one from rpc's own primitives — useful when you want a contract without a dependency, and stricter than the libraries (see the limits below).
+
+```ts
+import { createServerFunction, schema, field, optional, array } from "@thednp/rpc/server";
+
+const UserSchema = schema({
+  email: field.string({ hint: "the address you signed up with" }),
+  name: optional(field.string()),
+  tags: array(field.string()),
+});
+
+export const update = createServerFunction(
+  "update",
+  async (signal, user) => user.email,
+  { schema: UserSchema },
+);
+```
+
+Primitives: `field.string`, `field.number` (rejects `NaN`/`Infinity`), `field.boolean`, plus `optional`, `nullable`, `array`, `record`, and `field.custom(inner)` to wrap any Standard Schema as a leaf.
+
+The builder checks **types and structure, not ranges**. `field.string()` accepts `""` and `field.number()` accepts `0` and `-1` — that is the literal reading of the type, and expressing "at least 1 character" needs `field.custom(z.string().min(1))` or a real library. Likewise the builder is **structural only**: no `transform`, no coercion. Reach for zod/valibot/arktype when you need a constraint or a conversion; use the builder when you need a contract and no dependency.
+
+### The inference boundary (`schema.from`)
+
+`schema.from(vendorSchema)` returns the **same object**, typed as the plain spec interface. It validates nothing and converts nothing — every decision about what counts as valid still belongs to the library. What it changes is *where TypeScript does the work*.
+
+```ts
+import { createServerFunction, schema } from '@thednp/rpc/server';
+import { type } from 'arktype';
+
+const s = schema.from(
+  type('string <= 64').narrow((v, ctx) =>
+    v.trim().length >= 1 ? true : ctx.mustBe('a non-empty user id')),
+);
+
+export const getUser = createServerFunction('get-user', async (signal, id) => id, {
+  schema: s,
 });
 ```
 
-**valibot:**
+Without the wrapper that call fails with `TS2589: Type instantiation is excessively deep and possibly infinite` on TypeScript 5.x, and compiles on 7.x — the same code, the same schema, the same compiler version being the only variable. The instantiation budget is **per inference site**, so the wrapper splits one expensive inference into two cheap ones: the deep structural match happens at `schema.from`, and `createServerFunction` only ever sees `StandardSchemaV1<in, out>`.
+
+Three things worth knowing:
+
+- **It is transparent, deliberately.** It does not check whether the object conforms, so a non-conforming validator still fails loudly at the first call with a clear message — the wrapper cannot launder a schema it knows nothing about.
+- **It is a boundary, not a guarantee.** A genuinely pathological type could exhaust the budget *at the wrapper*. For that case annotate explicitly instead: `const s: StandardSchemaV1<string, string> = type(...)`, which is equally type-only and pins the types.
+- **It is not needed for rpc's own builder**, whose types are already small. Reach for it when a vendor type is heavy — measured: arktype's `.narrow()` and its function pipes, zod and valibot not.
+
+### Limits worth knowing
+
+| | |
+| --- | --- |
+| **An array payload is refused, by name.** | `schema` describes one argument as *named fields*, and everything downstream — `fieldErrors`, the no-JS flash, a client resolver — keys off those names. A root array could only report positional issues (`items[0].sku`), which cannot label an input, so `z.array()` / `v.array()` as a whole payload throws. Wrap it: `{ items: field.custom(z.array(Item)) }`. |
+| **Only the first argument is validated.** | The schema describes `args[0]`, after the `AbortSignal`. `login(username, password)` validates the username and not the password — restructure to one object argument if both need checking. A schema on a handler declaring more than one argument logs a development warning rather than failing silently, but a default or rest parameter makes the check blind. |
+
+### Validated functions take a single payload argument
+
+`schema` validates **`args[0]`** — the first argument after the `AbortSignal`, and
+nothing else. This is the one structural rule worth knowing before you design a
+function's signature, because it decides the shape of every validated function.
+
+```ts
+// ✅ the validated shape: one object, named fields, errors that map to inputs
+createServerFunction("login", async (signal, input: { user: string; pass: string }) => {
+  // input.user / input.pass are validated and, for a coercing schema, transformed
+}, { schema: schema({ user: field.string(), pass: field.string() }) });
+
+// ⚠️ positional: not validated at all
+createServerFunction("add", async (signal, a: number, b: number) => a + b);
+```
+
+So `login(user, pass)` and `add(a, b)` **cannot** be validated. There is no
+per-argument option, and no way to describe "validate each of my three arguments"
+— the wire format is a positional array (`[a, 1, 2]`) and rpc hands the schema
+element `0`.
+
+**Array payloads are refused.** An array `args[0]` throws, by name, on both call
+paths:
+
+```
+rpc: `schema` validates a single object argument, so an array payload is not
+supported. Send one object — `fn({ a: 1, b: 2 })` — and describe any nested
+array with `field.custom(z.array(...))`.
+```
+
+The rule is about the **root**. An array-valued *field* is the supported way to
+express a field array; an array as the *entire* payload is not.
+
+### `z.array()` / `v.array()` are unsupported as a root schema
+
+```ts
+schema: z.array(Item)     // ❌ refused — array payload
+schema: v.array(Item)     // ❌ refused — same
+schema: { items: field.custom(z.array(Item)) }   // ✅ wrap it in an object
+```
+
+**The limitation, stated plainly.** `schema` validates one argument and describes
+it as a set of **named fields**, because everything downstream needs names:
+
+- `fieldErrors(err)` returns a record keyed by field name, so a form can mark the
+  input that failed.
+- The no-JS fallback's flash carries `errors` as a record, re-rendered server-side
+  from the same names.
+- A client resolver maps issues back onto inputs for the same reason.
+
+A root array can only produce **positional** issues — `items[0].sku` — and a
+position cannot label an input, a form field, or a `setError` call. Supporting it
+would mean inventing a second, index-keyed error shape beside the record one
+everything else already consumes, so the root is refused instead. That is a
+deliberate narrowing, not an oversight.
+
+Two further reasons it is refused rather than tolerated:
+
+- **It is indistinguishable from a wrong signature.** `schema: z.tuple([...])`
+  against `add(a, b)` looks correct and is not — the schema is handed `a` alone
+  and rejects with "expected array, received number". Refusing arrays outright
+  names the real problem instead of reporting it as bad data.
+- **Positional arguments are not validated anyway.** `login(user, pass)` and
+  `add(a, b)` cannot use `schema` at all, so an array root is either a redundant
+  single argument or a mistaken attempt at positional validation. Send one
+  object: `add({ a, b })`.
+
+**The trap worth naming.** A tuple schema *looks* like it should work and does not:
+
+```ts
+schema: z.tuple([z.number(), z.number()])   // against add(1, 2)
+```
+
+`args[0]` is `1`, so the tuple is asked to validate a number and rejects with
+"expected array, received number" — a message that describes a wiring mistake as
+a data error. If you want positional arguments, call the function with the tuple
+as one value: `add([1, 2])`, which validates correctly.
+
+**Why one payload is the right default anyway.** A form *is* one object, so
+validation errors map to named inputs rather than positions — which is what
+`fieldErrors`, the no-JS fallback's flash, and a client-side resolver all need. A
+position in an array is not something you can label. Positional args remain
+available and are the right choice for small, internal, trusted helpers; they
+simply are not validated.
+
+
+| **Unknown keys: rpc rejects, the libraries ignore.** | Measured on the same input, `schema({ a })` **rejected** `{ a: 1, b: "x" }`, while zod, valibot and arktype all passed it (zod strips, the others ignore). The builder is deliberately the strict one; strictness is not configurable. |
+| **A no-JS `<form>` submission renders the `422`, not JSON.** | A native form gets a `303` with the failure flashed, *provided* the function sets `fallback` and the failure is client-facing. Without `fallback` the browser shows the `422` body raw, so a form that must work without JavaScript needs either `fallback` or validation returned as data. See [Native Form Fallback](./nojs-fallback.md). |
+| **Heavy vendor types can exhaust TS 5.x.** | `createServerFunction` infers the handler's input by structurally matching the schema's type. arktype's `.narrow()` and its morph pipes produce a graph older TypeScript cannot walk within its instantiation budget, failing with `TS2589` on a call that passes on newer TS. Reach for [`schema.from`](#the-inference-boundary-schemafrom) — type-only, and it changes nothing at runtime. |
+| **A schema failure and a malformed body used to be both `400`.** | **Fixed in 0.4.0** — a schema failure is `422`, a malformed body is `400`, so the status alone separates them. |
+
+### Validation as data
+
+The `schema` option is the right default, but it is not the only way to validate — and for some endpoints it is the wrong one. Returning the outcome as data is a `200`, so it travels as a normal result the client can render:
 
 ```ts
 import * as v from 'valibot';
-import { createServerFunction } from '@thednp/rpc/server';
 
-const AddSchema = v.object({
-  a: v.number(),
-  b: v.number(),
-});
+const SignupSchema = v.object({ email: v.pipe(v.string(), v.email()) });
 
-export const add = createServerFunction('add', async (signal, raw) => {
-  const parsed = v.safeParse(AddSchema, raw);
-  if (parsed.issues) {
-    return { error: v.flatten(parsed.issues).nested };
-  }
-  return parsed.output.a + parsed.output.b;
-});
+export const submit = createServerFunction(
+  "submit",
+  async (signal, raw) => {
+    const parsed = v.safeParse(SignupSchema, raw);
+    if (parsed.issues) {
+      // Resolves with the outcome rather than rejecting: the client gets a `200`
+      // carrying the field errors, which is what lets a form re-render them.
+      return { error: v.flatten(parsed.issues).nested };
+    }
+    return { ok: true, email: parsed.output.email };
+  },
+  { contentType: "application/x-www-form-urlencoded" },
+);
 ```
 
-Validation errors return structured data instead of throwing. The middleware wraps every result in `{ data: ... }`, so a returned `{ error: ... }` arrives as **resolved data** on the client — check `'error' in result`, the promise does not reject. Only transport failures (404/405/500, network errors) reject the client's `data` promise. See [Wire Protocol](./wire-protocol.md) for the exact response envelope.
+The middleware wraps every result in `{ data: ... }`, so this arrives as **resolved data** — check `'error' in result`; the promise does not reject. Only non-`ok` transport failures (`400`/`403`/`404`/`405`/`409`/`413`/`415`/`422`/`500`, or a network error) reject.
+
+Choose it when the outcome is a normal result the client should render (a nojs form re-rendering with field errors, a multi-step flow), or when the endpoint deliberately accepts a union of shapes. Choose `schema` when bad input is a client bug you want stopped at the boundary.
+
+The two are not interchangeable, and the difference is the **status code**, not the body: `schema` gives a `422` and the client's `data` promise rejects, while returning `{ error }` gives a `200` and resolves. Migrating one to the other changes the client's control flow.
+
+::: warning Prefer `schema` unless you have a reason
+Validation-as-data is the *pre-0.4.0* pattern and most endpoints should move to `schema`: it stops bad input at the boundary instead of inside your handler, it applies the schema's transforms, and it produces per-field paths a client can render with one helper. Reach for validation-as-data when the outcome is genuinely a result. With a per-function `fallback`, a `schema` rejection can also re-render HTML: the native `<form>` gets a `303` redirect carrying structured field errors, and a bare `422` JSON body is only what a caller without `fallback` sees.
+:::
 
 ## Typed Errors (`RPCError`)
 
@@ -251,7 +560,56 @@ export const getProfile = createServerFunction('get-profile', async (signal, use
 });
 ```
 
-`RPCError` is exported by the `@thednp/rpc/server` barrel (as is `formatError`, used by the adapters). Its constructor is `new RPCError(message: string, code?: string, data?: unknown)`.
+`RPCError` is exported by the `@thednp/rpc/server` barrel (as is `formatError`, used by the adapters). Its constructor is `new RPCError(message: string, code?: string, data?: unknown, hint?: string)`.
+
+### The `hint` argument
+
+A **message** says what went wrong. A **hint** says what to do about it — and it is the difference between a failure that teaches and one that merely complains:
+
+```ts
+throw new RPCError(
+  'User not found',
+  'USER_NOT_FOUND',
+  { userId },
+  'ids look like u-42; the demo table is seeded with three of them',
+);
+```
+
+`hint` is **developer-facing and dev-only**, stripped in production for the same reason `code` and `data` are: it describes the server's internals, and shipping it maps them. On the client, read it from `err.hint` on an `RPCResponseError` — see [Client Usage](./client-usage.md#field-errors).
+
+### Typed subclasses
+
+Three cases are common enough to have a class, and each one is a **teaching** error, so `hint` is **required** rather than optional — a class whose whole purpose is to explain a failure should not be constructible without the explanation.
+
+```ts
+import {
+  ConflictError,
+  createServerFunction,
+  ForbiddenError,
+  NotFoundError,
+} from '@thednp/rpc/server';
+
+export const rename = createServerFunction('rename', async (signal, next) => {
+  if (await taken(next)) {
+    throw new ConflictError('Name already taken', 'pick another, or append -2');
+  }
+  if (!allowed(next)) {
+    throw new ForbiddenError('Not your tenant', 'pass a token for the right tenant');
+  }
+  if (!(await exists(next))) {
+    throw new NotFoundError('No such user', 'ids look like u-42');
+  }
+  return rename_(next);
+});
+```
+
+| class | status | code |
+| --- | --- | --- |
+| `NotFoundError(message, hint, data?)` | `404` | `NOT_FOUND` |
+| `ForbiddenError(message, hint, data?)` | `403` | `FORBIDDEN` |
+| `ConflictError(message, hint, data?)` | `409` | `CONFLICT` |
+
+Each carries a `status`, so an adapter answers that status instead of a `500` — a thrown `NotFoundError` is a `404` with `{ error: "Not Found" }` in production, and with the message, `code`, `data` and `hint` in development. That is a real improvement over a bare `RPCError`, which is always a `500`: a missing resource is not a server fault. The reason phrase comes from the status, never from the author's message.
 
 What happens when an `RPCError` (or any error) is thrown:
 
@@ -424,6 +782,42 @@ Because `getRequestContext()` works identically across all five adapters, you ca
 
 ---
 
+## No-JS Form Fallback (`fallback`)
+
+Setting `fallback` makes the function usable as a plain HTML `<form action>` with
+JavaScript disabled. A native submission is answered with a Post/Redirect/Get
+`303` and the failure flashed, instead of a JSON body the browser would render
+raw.
+
+```ts
+createServerFunction("contact", handler, {
+  contentType: "application/x-www-form-urlencoded",
+  schema: schema({ email: field.string() }),
+  fallback: { to: "/contact", replay: ["email"] },
+});
+```
+
+- **`to`** — where the redirect goes. Treated as untrusted and restricted to
+  root-relative paths, so a field or `Referer` value cannot turn it into an open
+  redirect. For an off-origin target, call `redirect()` from the request context
+  in the handler instead; a handler redirect takes precedence.
+- **`replay`** — field names permitted in the redirect URL. **Empty by default**,
+  so nothing is replayed unless named, because a URL reaches history, `Referer`
+  and access logs.
+- A bare string (`fallback: "/contact"`) is shorthand for one path and no replay.
+- A function receives `{ status, errors?, message? }` and picks a target per
+  outcome.
+
+Detection is whether the request is a **document navigation**, not its content
+type — a form-declared function is called by two clients that both send form
+encodings. Only a navigation redirects; a `fetch` from the generated stub still
+gets its `422`. A `JSON`-declared function still answers `415` for a form body.
+
+Read the flash in the browser with `decodeFormFlash` from `@thednp/rpc/flash`,
+which is client-safe. The full walkthrough, including the origin-check
+consequences and the 4 KiB flash bound, is in
+[Native Form Fallback](./nojs-fallback.md).
+
 ## Table of Contents
 
 - [Quick Start](./quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
@@ -437,5 +831,5 @@ Because `getRequestContext()` works identically across all five adapters, you ca
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

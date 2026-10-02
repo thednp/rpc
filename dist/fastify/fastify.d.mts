@@ -177,7 +177,13 @@ export declare function attachVite(app: FastifyInstance, vite: ViteDevServer): v
  * @returns A Fastify `onRequest` hook handler
  */
 export declare function viteMiddleware(vite: ViteDevServer): (request: FastifyRequest$1, reply: FastifyReply$1) => Promise<void>;
-export declare const readBody: (req: FastifyRequest$1) => Promise<BodyResult>;
+/**
+ * Reads and parses the HTTP request body from a Fastify request.
+ * If Fastify's body parser already consumed the stream, uses the pre-parsed body from `req.body`.
+ * @param req - Fastify request object
+ * @returns A promise resolving to the parsed body with its content type
+ */
+export declare const readBody: (req: FastifyRequest$1, limit?: number) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Fastify reply using the native
  * `reply.redirect(location, status)` API (Fastify v5 signature: destination

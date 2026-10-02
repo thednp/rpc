@@ -33,8 +33,8 @@ const parseCookies = (header: string | undefined): Record<string, string> => {
 export const getSession = (): Session | null => {
   const event = getRequestContext();
   const { headers } = getRequestMeta(event);
-  const raw = (headers["cookie"] as string | undefined) ??
-    (headers["Cookie"] as string | undefined);
+  const raw = ((headers["cookie"]) ??
+    (headers["Cookie"])) as string | undefined;
   const cookies = parseCookies(raw);
   const sid = cookies[SESSION_COOKIE];
   if (!sid) return null;

@@ -28,6 +28,57 @@ Earlier names still resolve and are not deprecated: `Express`, `Fastify`, `Hono`
 
 `tests/adapter-exports.test.ts` guards this contract by asserting the required names are present in each adapter's emitted declaration — type-only exports are erased from the `.mjs`, so a runtime check cannot see them.
 
+## Options every adapter shares
+
+`createRPCMiddleware` takes the same options whichever adapter it is mounted on, so anything below applies to all five:
+
+| option | default | |
+| --- | --- | --- |
+| `rpcPrefix` | `"__rpc"` | the URL prefix this instance dispatches under; see [Multi-Prefix](./multi-prefix-guide.md) |
+| `origin` | `"self"` | cross-origin policy, **on by default**; see [Security](./security.md#origin-validation) |
+| `allowHeaderless` | `false` | permit requests carrying neither `Origin` nor `Sec-Fetch-Site` (curl, native clients) |
+| `bodyLimit` | `10485760` (10 MiB) | cap on the bodies rpc reads itself; `0` disables. See [Body Size Limits](#body-size-limits) |
+| `onDispatch` | — | called once per dispatch with a redacted `DispatchContext`; see [Observing Dispatches](./middleware.md#observing-dispatches-ondispatch) |
+| `serverFiles` / `scanRoot` | `"exact"` / `<root>/src/api` | lazy production scan, used only on the first request |
+| `method` / `contentType` | `"POST"` / `"application/json"` | per-function, not per-middleware — see [Server Functions](./server-functions.md) |
+
+`onDispatch` and `bodyLimit` are the two that changed most in 0.4.0. The first is new; the second replaced a path that had no cap at all.
+
+## Behind a reverse proxy
+
+Applies to all five adapters, because the origin check does. rpc compares the
+request's `Origin` against its `Host` header — **host and port** — and never
+consults a forwarded header. So:
+
+**Preserve `Host`.** A proxy that rewrites it to an internal name makes every
+check fail, and the symptom is a bare `403 {"error":"Forbidden"}` with no other
+clue. This is easy to trip over because rewriting `Host` is the common default:
+
+- `http-proxy-middleware` — `changeOrigin` defaults to **`true`**
+- Vite `preview.proxy` — needs **`changeOrigin: false`** for this reason
+- nginx — `proxy_set_header Host $proxy_host;` rewrites it; use `$host`
+
+The `Host` the client asked for is also the host the check *should* be judging,
+so preserving it is the correct configuration rather than a workaround.
+
+**Or name the public origins.** Where the ingress cannot preserve `Host`:
+
+```ts
+createRPCMiddleware({ origin: ["https://app.example.com", "https://admin.example.com"] });
+```
+
+An array *widens* `"self"` rather than replacing it, so naming an extra origin
+can never lock you out of your own site. This is the supported shape for a
+rewritten `Host`, and it records what you trust rather than switching the check
+off with `allowHeaderless: true`.
+
+**TLS termination needs nothing.** The scheme is not part of the comparison, so
+a browser sending `https://app.example.com` to a server that sees `http://` is
+still self. Only *default* ports are normalised, so `https://app.example.com:443`
+matches `Host: app.example.com` but `:8443` does not.
+
+See [Security — Origin Validation](./security.md).
+
 ## Common Pattern
 
 All adapters share the same two-function API:
@@ -82,6 +133,12 @@ Register the body parser with a size limit before mounting RPC (see [examples/ex
 ```ts
 app.use(express.json({ limit: 1024 * 1024 })); // 1 MB
 ```
+
+> Since 0.4.0 rpc also enforces a **10 MiB default** of its own on the
+> paths it reads itself (`bodyLimit`). Registering a framework parser does
+> not replace it — a framework parser only limits the content types it
+> claims. Full per-adapter table, including which paths rpc's cap actually
+> covers, in [Security — Body Size Limits](./security.md#body-size-limits).
 
 ## Fastify
 
@@ -139,6 +196,12 @@ fastify.addHook('onRequest', viteMiddleware(vite));
 
 This is the same pattern as h3 and Hono's `viteMiddleware` — all three adapters export a standalone middleware factory for custom setups. Express does not need it — mount `vite.middlewares` directly as Connect/Express middleware.
 
+> Since 0.4.0 rpc also enforces a **10 MiB default** of its own on the
+> paths it reads itself (`bodyLimit`). Registering a framework parser does
+> not replace it — a framework parser only limits the content types it
+> claims. Full per-adapter table, including which paths rpc's cap actually
+> covers, in [Security — Body Size Limits](./security.md#body-size-limits).
+
 ## Hono
 
 ### Installation
@@ -183,9 +246,24 @@ import { bodyLimit } from 'hono/body-limit';
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 })); // 1 MB
 ```
 
+rpc's own `bodyLimit` covers declared-JSON on Hono as well as every other
+content type — the two are equivalent here, and `hono/body-limit` composes
+rather than replaces. There are exactly two cases where rpc's cap cannot apply,
+because the body is already in memory before the RPC middleware sees it: under
+`@hono/node-server`, which decodes onto `c.env.incoming`, and when a host
+middleware has already read the body and left it in `c.req.bodyCache`. In both,
+the host's own limit is what bounds the upload. See
+[Security — Body Size Limits](./security.md#body-size-limits).
+
 ### Header Fallback
 
 `getRequestMeta` reads `req?.raw?.headers` as a fallback when `req?.headers` is undefined. This matches Hono's internal request structure where native `Headers` live on `req.raw`. If you use custom Hono middleware that replaces `req.raw`, ensure headers are still accessible at `req.raw.headers`.
+
+> Since 0.4.0 rpc also enforces a **10 MiB default** of its own on the
+> paths it reads itself (`bodyLimit`). Registering a framework parser does
+> not replace it — a framework parser only limits the content types it
+> claims. Full per-adapter table, including which paths rpc's cap actually
+> covers, in [Security — Body Size Limits](./security.md#body-size-limits).
 
 ## Koa
 
@@ -237,6 +315,12 @@ app.use(koaBody({ jsonLimit: 1024 * 1024 })); // 1 MB
 
 ---
 
+> Since 0.4.0 rpc also enforces a **10 MiB default** of its own on the
+> paths it reads itself (`bodyLimit`). Registering a framework parser does
+> not replace it — a framework parser only limits the content types it
+> claims. Full per-adapter table, including which paths rpc's cap actually
+> covers, in [Security — Body Size Limits](./security.md#body-size-limits).
+
 ## h3
 
 ### Installation
@@ -279,7 +363,7 @@ createServer(toNodeListener(app)).listen(3000);
 
 ### Body Size Limits
 
-Cap request bodies with h3's native `bodyLimit(limit)`, which swaps `event.req` for a bounded stream so the cap is enforced *while* the body streams rather than after buffering it. Both enforcement paths answer `413 Payload Too Large` — the up-front `Content-Length` check, and the mid-read check for chunked bodies, which the adapter surfaces out of its dispatch `try` rather than reporting as a `500`. See [Best Practices — Body Limits](./best-practices.md#body-limits), or use a reverse proxy. See [Best Practices — Body Limits](./best-practices.md#body-limits) for the pattern, and the extracted `middleware/bodyLimit.js` in the [h3 example](../examples/h3/middleware/bodyLimit.js).
+Cap request bodies with h3's native `bodyLimit(limit)`, which swaps `event.req` for a bounded stream so the cap is enforced *while* the body streams rather than after buffering it. Both enforcement paths answer `413 Payload Too Large` — the up-front `Content-Length` check, and the mid-read check for chunked bodies, which the adapter surfaces out of its dispatch `try` rather than reporting as a `500`. See [Best Practices — Body Limits](./best-practices.md#body-limits) for the pattern and the extracted `middleware/bodyLimit.js` in the [h3 example](../examples/h3/middleware/bodyLimit.js).
 
 ### Static Assets
 
@@ -338,6 +422,12 @@ See the working example in [demo/netlify/functions/rpc.ts](../demo/netlify/funct
 
 ---
 
+> Since 0.4.0 rpc also enforces a **10 MiB default** of its own on the
+> paths it reads itself (`bodyLimit`). Registering a framework parser does
+> not replace it — a framework parser only limits the content types it
+> claims. Full per-adapter table, including which paths rpc's cap actually
+> covers, in [Security — Body Size Limits](./security.md#body-size-limits).
+
 ## Table of Contents
 
 - [Quick Start](./quickstart.md) — Rebuild the Express SSR example from `create-vite` in under a minute
@@ -351,5 +441,5 @@ See the working example in [demo/netlify/functions/rpc.ts](../demo/netlify/funct
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

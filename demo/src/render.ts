@@ -45,8 +45,8 @@ const features = [
   },
   {
     icon: iconFolder,
-    title: "Zero configuration",
-    text: "Export a function from src/api/server.ts and the plugin turns it into an endpoint. No routers, no schemas, no codegen step.",
+    title: "Minimal setup",
+    text: "Export a function from src/api/server.ts and the plugin turns it into an endpoint. No routers, hand-written client stubs, or separate API routes.",
   },
   {
     icon: iconPlug,
@@ -61,7 +61,8 @@ const features = [
   {
     icon: iconCheck,
     title: "Validation at the boundary",
-    text: "Bring your own validator — valibot, zod, arktype — and enforce it server-side on every single call.",
+      text:
+        "Bring your own validator — any Standard Schema: valibot, zod, arktype, effect — and enforce it server-side for every function that sets a schema. A rejected input is a <code class=\"font-mono code-hl-inline\" translate=\"no\">422</code> naming the fields, in production too.",
   },
   {
     icon: iconCache,
@@ -82,6 +83,18 @@ const features = [
     icon: iconShield,
     title: "Enforced at the boundary",
     text: "HTTP method and <code class=\"font-mono code-hl-inline\" translate=\"no\">Content-Type</code> are checked before dispatch, with anchored prefix matching. Wrong method, wrong media type, or prefix tricks get a clean 405, 415, or 404.",
+    },
+    {
+      icon: iconShield,
+      title: "Cross-origin on by default",
+      text:
+        "An untrusted <code class=\"font-mono code-hl-inline\" translate=\"no\">Origin</code> is refused even when <code class=\"font-mono code-hl-inline\" translate=\"no\">Sec-Fetch-Site</code> claims otherwise, and a request carrying no browser provenance is refused unless you opt in. Your own origin needs no configuration at all.",
+    },
+    {
+      icon: iconShield,
+      title: "Bodies capped while streaming",
+      text:
+        "A 10 MiB default limit, counted as the bytes arrive rather than after buffering, so an oversized upload is a clean 413 instead of a slow exhaustion. Raise it, or set <code class=\"font-mono code-hl-inline\" translate=\"no\">0</code> to rely on your own proxy.",
   },
   {
     icon: iconCode,
@@ -498,7 +511,7 @@ export const renderPage = (state?: FormState): string => `
           ${iconBolt}
           <span>
             <strong>Pro tip:</strong> this form posts to <code class="font-mono">POST /@demo/submit-contact</code>,
-            validated server-side with valibot. Errors below are field-level validation responses over the wire.
+            validated server-side with valibot. Errors come back as a <code class="font-mono">422</code> with per-field messages, and a submission from a browser without JavaScript is redirected back to this page with the same failing fields marked.
           </span>
         </div>
 

@@ -25,6 +25,12 @@ const { createRPCMiddleware } = await import("@thednp/rpc/express");
 const adminMiddleware = createRPCMiddleware({
   rpcPrefix: "admin:rpc",
   serverFiles: "glob",
+// Since 0.4.0 the cross-origin check is on by default (`origin: "self"`), so a
+// request with no `Origin` and no `Sec-Fetch-Site` is refused. These example
+// servers are meant to be poked with `curl` and the no-JS form fallback, which
+// send neither header — hence `allowHeaderless: true`. A real deployment should
+// leave it off and name its public origins instead.
+  allowHeaderless: true,
 });
 
 // Add Vite or respective production middlewares
@@ -49,7 +55,12 @@ if (!isProduction) {
   // load RPC configuration
   const { loadRPCConfig } = await import("@thednp/rpc");
   const options = await loadRPCConfig();
-  app.use(createRPCMiddleware(options));
+  // Since 0.4.0 the cross-origin check is on by default (`origin: "self"`), so a
+  // request with no `Origin` and no `Sec-Fetch-Site` is refused. These example
+  // servers are meant to be poked with `curl` and the no-JS form fallback,
+  // which send neither header — hence `allowHeaderless: true`. A real deployment
+  // should leave it off and name its public origins instead.
+  app.use(createRPCMiddleware({ allowHeaderless: true, ...options }));
   app.use(adminMiddleware);
 
   // other middleware

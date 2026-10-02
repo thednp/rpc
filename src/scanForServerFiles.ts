@@ -10,6 +10,7 @@ import { walkGlobFiles } from "./server-helpers.ts";
 import {
   DUPLICATE_FUNCTION_NAME,
   ERROR_LOADING_FILE,
+  EXACT_NAMES,
   NO_SERVER_FUNCTION_FOUND,
 } from "./constants.ts";
 
@@ -27,8 +28,6 @@ const scannedTargets = new Set<string>();
 
 /** Absolute ids (normalized) of the scanned server function files. */
 export const scannedServerFiles: Set<string> = new Set<string>();
-
-const EXACT_NAMES = ["server.ts", "server.js", "server.mjs", "server.mts"];
 
 /**
  * Scans `src/api/` (or an explicit `scanRoot`) for server function files

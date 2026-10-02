@@ -9,12 +9,50 @@ The best thing to do **first** is to understand `@thednp/rpc` is that it only ha
 It does not provide:
 - Caching
 - Authentication
-- Validation
 - State management
-- Request limits
 - Retry logic
 
 Use dedicated tools for these concerns.
+
+**Two of these used to be on that list, and as of 0.4.0 they are not.** The framing
+above is still true of the four above; it is no longer true of:
+
+- **Input validation** — built in via [`schema`](#input-validation). Any [Standard
+  Schema](https://standardschema.dev/) (zod, valibot, arktype, effect) or rpc's dependency-free builder,
+  enforced in the dispatch *before* the handler is entered, on **both** the HTTP
+  path and a direct call. It is opt-in — a function without a `schema` is
+  validated by nothing — but the machinery is rpc's, not yours. See
+  [Server Functions — Input Validation](./server-functions.md#input-validation)
+  for what it does and does not do, including why a root array is refused.
+- **Request limits** — built in via `bodyLimit`, a **10 MiB default** enforced
+  while the body is *streamed*, not after it is buffered. See
+  [Body Limits](#body-limits) for the per-adapter table, including the two paths
+  that cannot be capped because the body is already read.
+
+**Authentication is still yours**, deliberately: it belongs in middleware
+registered *before* `createRPCMiddleware()` — see [Authentication](#authentication).
+**Caching is still yours** too, and the intended answer is TanStack Query rather
+than a hand-rolled cache — see [Client-Side Caching](#client-side-caching).
+
+**Two of these used to be on that list, and as of 0.4.0 they are not.** The framing
+above is still true of the four that remain; it is no longer true of:
+
+- **Input validation** — built in via [`schema`](#input-validation). Any Standard
+  Schema (zod, valibot, arktype, effect) or rpc's dependency-free builder, enforced
+  in the dispatch *before* the handler is entered, on **both** the HTTP path and a
+  direct call. It is opt-in — a function without a `schema` is validated by nothing
+  — but the machinery is rpc's, not yours. See [Server Functions — Input
+  Validation](./server-functions.md#input-validation) for what it does and does not
+  do, including why a root array is refused.
+- **Request limits** — built in via `bodyLimit`, a **10 MiB default** enforced
+  while the body is *streamed*, not after it is buffered. See [Body Limits](#body-limits)
+  for the per-adapter table, including the two paths that cannot be capped because
+  the body is already read.
+
+**Authentication is still yours**, deliberately: it belongs in middleware registered
+*before* `createRPCMiddleware()` — see [Authentication](#authentication). **Caching is
+still yours** too, and the intended answer is TanStack Query rather than a hand-rolled
+cache — see [Client-Side Caching](#client-side-caching).
 
 ## Client-Side Caching
 
@@ -28,10 +66,13 @@ Always check `signal.aborted` or call `signal.throwIfAborted()` in long-running 
 
 ## Input Validation
 
-Client-provided data is untrusted — always validate before use. Return expected problems (validation failures, business rules) as structured data so the client can type-narrow on the result; **throw** `RPCError` only for server-side failures:
+Client-provided data is untrusted — always validate before use. There are three shapes, and picking the wrong one is a common mistake:
 
-- Return `{ error: ... }` → arrives as resolved `data` (no rejection) — [Server Functions — Input Validation](./server-functions.md#input-validation) shows both zod and valibot patterns
-- Throw `new RPCError(msg, code, data)` → client's `data` promise rejects with the message — [Server Functions — Typed Errors](./server-functions.md#typed-errors-rpcerror)
+- **Pass a `schema`** → validated by the middleware *before the handler is entered*; a bad input is a `422` and your code is never called with it. Accepts any [Standard Schema](https://standardschema.dev) (zod, valibot, arktype, effect) or rpc's dependency-free `schema()`. Production keeps each issue's `path` and any `hint` you wrote, and drops the validator library's `message` — see [What a rejection looks like](./server-functions.md#what-a-rejection-looks-like) for why. This is the default choice for JSON endpoints — [Server Functions — Input Validation](./server-functions.md#input-validation)
+- **Return `{ error: ... }`** → arrives as resolved `data` (no rejection), so the client can type-narrow on the outcome. Right for a result the client should *render* (a nojs `<form>` re-rendering field errors, a multi-step flow) rather than a client bug you want stopped at the boundary — [Validation as data](./server-functions.md#validation-as-data)
+- **Throw `new RPCError(msg, code, data)`** → client's `data` promise rejects with the message. **Server-side failures only** — never for expected user-facing problems — [Server Functions — Typed Errors](./server-functions.md#typed-errors-rpcerror)
+
+Note that the first two are not interchangeable: `schema` gives you a `422` (transport error, promise rejects) and returning `{ error }` gives you a `200` (resolved value). Migrating one to the other changes the client's control flow, not just its body.
 
 ## Authentication
 
@@ -132,7 +173,14 @@ if (!user || !roleAccess[fnName]?.includes(user.role)) {
 
 ## Body Limits
 
-In most cases you should rely on your framework's body-parser middleware:
+Since 0.4.0 rpc enforces a **10 MiB default cap** of its own on the paths it
+reads, so a framework parser is complementary rather than required. Set
+`bodyLimit` to change it, or `bodyLimit: 0` to defer entirely to the host.
+See [Security — Body Size Limits](./security.md#body-size-limits) for which paths
+rpc's cap covers per adapter, and for the measurement showing why a framework
+limit alone is not sufficient.
+
+In most cases you should still set your framework's body-parser middleware:
 
 ```ts
 // Express
@@ -325,7 +373,7 @@ app.use(rateLimit.middleware({ interval: { min: 1 }, max: 60 }));
 
 ## Origin / CSRF Protection
 
-`@thednp/rpc` performs **no origin validation by default** — like authentication, it is opt-in so the host decides.
+Cross-origin protection is **on by default**: with no `origin` option, the request's origin must match the server's own host and port. You only need to configure `origin` when your endpoints are reachable from more than one public origin, and `allowHeaderless: true` only for non-browser clients (`curl` and server-to-server calls), which send no browser provenance and are otherwise `403`. A browser's native `<form>` navigation sends `Origin`, so the built-in no-JS fallback is checked normally. See [Security → Origin Validation](./security.md#origin-validation).
 
 ### Option A: `origin` middleware option
 
@@ -346,9 +394,19 @@ A single string still works and is equivalent to a one-element array:
 app.use(createRPCMiddleware({ origin: 'https://app.example.com' }));
 ```
 
-Requests are rejected with `403 Forbidden` unless they carry an `Origin` header matching one of the entries. When `Origin` is absent, the middleware falls back to `Sec-Fetch-Site` and allows only `same-origin` or `none` — so a proxy or CDN that strips `Origin` cannot silently turn the check into a no-op. Requests carrying **neither** header (curl, native apps) pass through. Matching is exact, so a lookalike host such as `https://app.example.com.evil.com` is rejected.
+The list **extends** the default rather than replacing it, so your own origin keeps working alongside
+the entries — naming an extra origin can never lock you out of your own site. An untrusted `Origin` is
+rejected with `403 Forbidden`, and matching is exact, so a lookalike host such as
+`https://app.example.com.evil.com` never matches.
 
-No new option is involved: setting `origin` is the opt-in, and it is the only condition under which the `Sec-Fetch-Site` fallback can fire.
+When `Origin` is absent, the rule falls back to `Sec-Fetch-Site` and allows only `same-origin` or `none`
+— so a proxy or CDN that strips `Origin` cannot silently turn the check into a no-op. That tier applies
+whether or not you configured `origin`: `"self"` is the default, not the absence of one.
+
+Requests carrying **neither** header — `curl`, native apps, most server-to-server clients — are `403`
+until you opt in with `allowHeaderless: true`. This is the one place 0.4.0 breaks an existing
+deployment, and it is deliberate: a headerless POST is indistinguishable on the wire from a cross-site
+form post whose headers were stripped.
 
 > `SameSite=Lax` cookies already block cross-site `POST` from HTML forms; the `origin` option closes the remaining "sibling subdomain" case. See [Security — Origin Validation](./security.md#origin-validation) for the full rule table.
 
@@ -405,5 +463,5 @@ export default { sayHi, add };
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

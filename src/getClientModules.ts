@@ -18,7 +18,7 @@ import {
  * All interpolated values are validated to prevent code injection.
  * @param fnName - Registered RPC function name (validated as path segment)
  * @param fnEntry - Export name used in the generated module (validated as identifier)
- * @param options - Content type, credentials, and RPC prefix settings
+ * @param options - Content type, credentials, and RPC prefix settings. Both `contentType` and `rpcPrefix` are required for the generated module
  * @returns A string of JavaScript code exporting the client stub
  */
 const getModule = (

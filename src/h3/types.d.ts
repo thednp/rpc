@@ -41,7 +41,7 @@ export type H3EventWithBody = H3Event & { body?: unknown };
  * Framework types re-exported from `h3` so consumers can annotate apps and
  * events without a direct dependency on h3 types.
  */
-import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
+import type { RequestDetails, ResponseDetails } from "../adapter-types.d.ts";
 
 /**
  * Normalized request/response shapes, shared with every adapter so a wrapper

@@ -19,6 +19,7 @@ const sharedCfg: UserConfig = {
       "@thednp/rpc",
       "@thednp/rpc/express",
       "@thednp/rpc/server",
+      "@thednp/rpc/flash",
     ],
     onlyBundle: false
   },
@@ -96,6 +97,15 @@ export default defineConfig([
       helpers: "src/client-helpers.ts",
     },
     outDir: "dist/helpers",
+  },
+  // the flash codec — client-safe, unlike `server`, so a page can rehydrate a
+  // flash in the browser as well as render it on the server
+  {
+    ...sharedCfg,
+    entry: {
+      flash: "src/form-flash.ts",
+    },
+    outDir: "dist/flash",
   },
   // vite-free config helpers
   {

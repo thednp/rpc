@@ -1,6 +1,6 @@
 {
   "name": "@thednp/rpc",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "license": "MIT",
   "author": "thednp",
   "description": "⚡ A Vite plugin for creating server functions with automatic Remote Procedure Calls (RPC)",
@@ -43,6 +43,7 @@
     "./express": "./dist/express/express.mjs",
     "./fastify": "./dist/fastify/fastify.mjs",
     "./fastify/plugin": "./dist/fastify/plugin/fastify/plugin.mjs",
+    "./flash": "./dist/flash/flash.mjs",
     "./h3": "./dist/h3/h3.mjs",
     "./helpers": "./dist/helpers/helpers.mjs",
     "./hono": "./dist/hono/hono.mjs",
@@ -83,28 +84,30 @@
     "prepareOnly": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "prepublishOnly_": "pnpm upd && pnpm up:deno && pnpm lint && pnpm format && pnpm audit:src && pnpm build",
     "build": "tsdown",
-    "check:tests": "tsc -p tsconfig.tests.json --noEmit"
+    "check:tests": "tsc -p tsconfig.tests.json --noEmit",
+    "check:ts5": "node node_modules/typescript-5/bin/tsc --noEmit -p examples/advanced/tsconfig.json && node node_modules/typescript-5/bin/tsc --noEmit -p examples/express/tsconfig.json"
   },
   "dependencies": {
     "express": "^5.2.1",
     "fastify": "^5.12.5",
     "fastify-plugin": "^6.0.0",
     "h3": "2.0.1-rc.32",
-    "hono": "^4.13.9",
+    "hono": "^4.13.12",
     "koa": "^3.2.1",
-    "vite": "^8.3.1"
+    "vite": "^8.3.2"
   },
   "devDependencies": {
-    "@hono/node-server": "^2.1.1",
+    "@hono/node-server": "^2.1.3",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
-    "@types/node": "^26.6.3",
-    "@vitest/coverage-istanbul": "^5.0.2",
-    "@vitest/ui": "^5.0.2",
+    "@types/node": "^26.6.4",
+    "@vitest/coverage-istanbul": "^5.0.3",
+    "@vitest/ui": "^5.0.3",
     "tsdown": "^0.23.0",
     "typescript": "^7.0.2",
+    "typescript-5": "npm:typescript@7.0.2",
     "vite-plugin-strip-comments": "^0.0.10",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.3"
   },
-  "packageManager": "pnpm@11.22.0"
+  "packageManager": "pnpm@12.8.1+sha512.f64ba907507f5ceafe06c8d38e6052d0179444580ec1279ddd5bfc11cb48aa8a2644b66598e07e761da84872a9fc57d5f902b87fa49d024198d558612aabbe45"
 }

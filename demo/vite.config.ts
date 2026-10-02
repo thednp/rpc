@@ -4,7 +4,6 @@ import { pathToFileURL } from "node:url";
 import { defineConfig, type ViteDevServer, type Plugin } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { default as rpc } from "@thednp/rpc";
-import { createFormFallback } from "./src/lib/form-fallback.ts";
 import { parseFormState } from "./src/lib/contact-form.ts";
 
 const RPC_PREFIX = "@demo"
@@ -17,11 +16,6 @@ const APP_CONTENT_REGEX = /<!-- app-content -->[\s\S]*?<!-- \/app-content -->/;
 function prerender(): Plugin {
   let devServer: ViteDevServer | undefined;
   let builtTemplate: string | undefined;
-
-  const formFallback = createFormFallback({
-    rpcPrefix: RPC_PREFIX,
-    functionName: "submit-contact",
-  });
 
   const loadRender = async () => {
     let renderPage: (state?: unknown) => string;
@@ -42,7 +36,6 @@ function prerender(): Plugin {
     enforce: "pre",
     configureServer(server) {
       devServer = server;
-      server.middlewares.use(formFallback);
     },
     configurePreviewServer(server) {
       // In `vite preview` the app shell in dist/index.html is baked at build
@@ -99,7 +92,19 @@ export default defineConfig(async (config) => {
       proxy: {
         [`/${RPC_PREFIX}`]: {
           target: `http://localhost:${proxyPort}`,
-          changeOrigin: true,
+          // Deliberately **false**. rpc's origin check compares the request's
+          // `Origin` against its `Host` header, and a non-default port has to
+          // match on both sides. `changeOrigin: true` rewrites `Host` to the
+          // proxy target (`localhost:3000`), so the browser's
+          // `Origin: http://localhost:5173` no longer matches and every native
+          // form submission is rejected with 403 before it is ever dispatched.
+          //
+          // The `Host` the client actually asked for is also the host the
+          // origin check *should* be judging, so preserving it is the honest
+          // option rather than a workaround. Behind a TLS-terminating proxy,
+          // keep `Host` intact — rpc never trusts `X-Forwarded-Host` — and
+          // declare the public origin in `origin` instead.
+          changeOrigin: false,
           secure: false,
         },
       },

@@ -59,9 +59,9 @@ This works because TypeScript resolves `./api` to the real typed server module (
 ## Error Handling
 
 - **Fetch errors** (network failure, CORS) — thrown from `await data`
-- **HTTP 4xx/5xx responses** — thrown from `await data`. The rejection's `message` is `"Fetch error: " + response.statusText` — the **status text only**. The response body is deliberately not read on this path, so nothing the server put in it reaches you here
+- **HTTP 4xx/5xx responses** — thrown from `await data`. The rejection's `message` is `"Fetch error: " + response.statusText` — the **status text only**. `handleResponse` reads the parsed JSON body so `RPCResponseError` can expose it as `body` (including `issues`/`hint` getters), but the rejection message itself does not carry server text
 - **A top-level `error` in a 2xx body** — thrown from `await data` with that string as the message. This is the only path where server-provided text surfaces, and it only happens when the response was already `ok`
-- **Validation-as-data** — returned `{ error }` from a server function resolves normally; check `'error' in result` (see [Server Functions](./server-functions.md#input-validation))
+- **Validation-as-data** — returned `{ error }` from a server function resolves normally; check `'error' in result`. This is *not* the same as a function's `schema` option, which rejects at the boundary with a `422` and an `RPCResponseError` carrying `status`/`body`/`issues`/`hint` (see [Server Functions](./server-functions.md#input-validation))
 - **Cancellation** — rejects the in-flight `fetch` (you get the `AbortError`), it does not resolve
 
 When a server function **throws** (including `RPCError`, see [Server Functions](./server-functions.md#typed-errors-rpcerror)), the response is a `500` — and because that is not `ok`, the rejection carries the generic status text in **both** development and production:
@@ -78,6 +78,51 @@ try {
 > **This is deliberate, and it is the reason you cannot branch on server error text.** A thrown handler is an *unexpected* failure, so the server returns a generic body (`{ error: "Internal Server Error" }`) and the generated stub never reads it — nothing internal leaks to the browser, in dev or prod. In development the 500 body additionally carries the `RPCError` `code` and `data` fields; you can inspect those in devtools with a raw `fetch`, but they are not re-exposed on the rejection. The `code`/`data` pair is server-side only, and `RPCError` is not a client export.
 
 If you need to *branch* on a failure rather than just report one, model it as data instead of throwing: return `{ error, code }` from the handler with a `200`, and the client resolves it as a value you can discriminate on. That is the difference between the two bullets above.
+
+### Field errors
+
+A function with a [`schema`](./server-functions.md#the-schema-option) rejects with a `400`, and the rejection is an `RPCResponseError` carrying the **normalised** issues the server produced. Three helpers read them, and they are what replace the per-app `getError(error, field)` / `isValiError(error)` pair most projects end up writing:
+
+```ts
+import { RPCResponseError, fieldErrorText, fieldErrors } from '@thednp/rpc/helpers';
+
+try {
+  const { data } = add({ a: 1, b: 2 });
+  await data;
+} catch (err) {
+  if (err instanceof RPCResponseError && err.status === 422) {
+    // every message, keyed by the path that failed
+    for (const [path, messages] of Object.entries(fieldErrors(err))) {
+      showError(path, messages.join(' '));
+    }
+    // or one field, ready for textContent — '' when the field passed, so there
+    // is no guard at the call site
+    emailError.textContent = fieldErrorText(err, 'email');
+  }
+}
+```
+
+| helper | returns |
+| --- | --- |
+| `fieldErrors(err)` | `Record<string, string[]>`, keyed by the rendered path (`'email'`, `'address.city'`, `''` for a top-level scalar) |
+| `fieldErrorText(err, field)` | that field's messages joined, or `''` — safe to assign directly |
+| `fieldErrorHint(err, field)` | the field's hint, falling back to the function-wide `hint`; `''` when there is none |
+
+**They are validator-agnostic, and that is the point.** The server normalises every library's issues into `{ path, message, hint? }`, so the same three lines render a zod rejection, a valibot rejection, an arktype rejection or an effect rejection without knowing which produced it. The only difference between the four is the *wording* of the message:
+
+```ts
+fieldErrorText(err, 'age');
+// valibot:  "Invalid integer: Received 3.7"
+// zod:      "Invalid input: expected int, received number"
+// arktype:  "age must be an integer (was 3.7)"
+// effect:   "Expected an integer, actual 3.7"
+```
+
+These work in **production** too. A production rejection carries each issue's `path` and any `hint` you wrote, but not the validator library's `message`, so `fieldErrors` falls back to the hint; an issue with neither still appears as a key with empty text, which is enough to mark an input invalid. `fieldErrorHint` returns the hint in both environments, because a hint is author-written and so was meant to be sent.
+
+A `message`-free production issue means `fieldErrorText` can be empty for a field that genuinely failed — that is the field-with-no-hint case, not a bug. If your form needs per-field prose in production, write `hints` (or `field.string({ hint })` on the builder); that is what they are for. To have full control over the shape, validate with [validation-as-data](./server-functions.md#validation-as-data) and a `200` instead — see [Server Functions](./server-functions.md#validation-as-data).
+
+`RPCResponseError` also exposes `status` and `body` directly, and `issues` / `hint` as getters, so a client that needs something the helpers do not provide can read the raw shape.
 
 ## Multipart / File Uploads
 
@@ -110,7 +155,7 @@ if (!res.ok) throw new Error(json.error);  // transport-level failure
 const result = unwrapEnvelope<string>(json); // "Hello World!"
 ```
 
-`unwrapEnvelope` throws when the body carries a **top-level** `error` with no `data` key — the shape the server returns for `400`/`403`/`404`/`405`/`415`/`500`:
+`unwrapEnvelope` throws when the body carries a **top-level** `error` with no `data` key — the failure shape the server uses for client and server transport errors, including `400`/`403`/`404`/`405`/`409`/`413`/`415`/`422`/`500`:
 
 ```ts
 import { unwrapEnvelope } from '@thednp/rpc/helpers';
@@ -124,7 +169,7 @@ try {
 
 Two things it deliberately does **not** do:
 
-- **It does not throw for `{ data: { error } }`.** That is a `200` carrying a validation outcome as its result — the validation-as-data contract — and it resolves normally. Only a top-level `error` with no `data` aborts.
+- **It does not throw for `{ data: { error } }`.** That is a `200` carrying a validation outcome as its result — the validation-as-data contract — and it resolves normally. Only a top-level `error` with no `data` aborts. A function's `schema` option is the other shape: it rejects at the boundary with a `422`, so it *does* throw here (as an `RPCResponseError`), with `issues` and `hint` attached in both development and production (the production body drops only the vendor library's `message`).
 - **It is status-code agnostic.** Keep the `res.ok` check; that is what distinguishes a real `200` from a body that merely parses.
 
 > `RPCError` is a **server-side** export (`@thednp/rpc/server`), not a client one — it is not available from `@thednp/rpc/helpers`, and its `code`/`data` are stripped from responses in production regardless.
@@ -231,5 +276,5 @@ Because the query is only created on demand (client-side), nothing async is seri
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

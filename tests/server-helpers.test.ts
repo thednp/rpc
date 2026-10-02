@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   clientErrorMessage,
   clientErrorStatus,
+  ConflictError,
+  describeOriginRequest,
+  ForbiddenError,
   formatError,
   hasContentTypeMismatch,
   httpError,
@@ -9,6 +12,8 @@ import {
   isFormContentType,
   isOriginAllowed,
   isOriginRequestAllowed,
+  isRPCError,
+  NotFoundError,
   RPCError,
   safeURL,
   walkGlobFiles,
@@ -23,10 +28,28 @@ describe("clientErrorMessage", () => {
     expect(clientErrorMessage(415)).toBe("Unsupported Media Type");
   });
 
+  // A thrown `NotFoundError` is answered 404; before the table grew, its body
+  // said "Bad Request", which is a right status carrying a wrong meaning.
+  it("maps the statuses a typed RPCError subclass can carry", () => {
+    expect(clientErrorMessage(403)).toBe("Forbidden");
+    expect(clientErrorMessage(404)).toBe("Not Found");
+    expect(clientErrorMessage(409)).toBe("Conflict");
+  });
+
   it("falls back to Bad Request for every other client error", () => {
-    for (const s of [400, 401, 402, 403, 404, 409, 422, 499]) {
+    // 422 is deliberately absent: it has its own entry, so a validation failure
+    // is not reported as "Bad Request" just because the table's last branch
+    // catches it. That was the bug the entry was added to prevent.
+    for (const s of [400, 401, 402, 499]) {
       expect(clientErrorMessage(s)).toBe("Bad Request");
     }
+  });
+
+  it("answers a 422 with its own reason phrase, never `Bad Request`", () => {
+    // Without this entry, a 422 would ship the string "Bad Request" — the right
+    // status carrying the wrong meaning.
+    expect(clientErrorMessage(422)).toBe("Unprocessable Content");
+    expect(clientErrorMessage(422)).not.toBe("Bad Request");
   });
 });
 
@@ -148,93 +171,292 @@ describe("isOriginAllowed", () => {
 });
 
 describe("isOriginRequestAllowed", () => {
-  // The behaviour matrix from the change request, verbatim.
+  const HOST = "app.example.com";
+  const SELF = "https://app.example.com";
   const ALLOW = ["https://example.com", "https://admin.example.com"];
 
-  it("tier 1 — unset allowlist passes everything", () => {
-    expect(isOriginRequestAllowed(undefined, "https://evil.com", "cross-site"))
-      .toBe(true);
-    expect(isOriginRequestAllowed(undefined, undefined, undefined)).toBe(true);
-    expect(isOriginRequestAllowed(undefined, "null", "same-origin")).toBe(true);
+  describe('the secure default — an absent policy is "self", not "unchecked"', () => {
+    it("rejects a foreign Origin", () => {
+      expect(
+        isOriginRequestAllowed({
+          origin: "https://evil.com",
+          site: "cross-site",
+          host: HOST,
+        }),
+      ).toBe(false);
+    });
+
+    it("admits the server's own host", () => {
+      expect(isOriginRequestAllowed({ origin: SELF, host: HOST })).toBe(true);
+    });
+
+    it("rejects a headerless request", () => {
+      expect(
+        isOriginRequestAllowed({ host: HOST }),
+      ).toBe(false);
+    });
+
+    it('resolves an explicitly undefined policy to "self" rather than to no check', () => {
+      // `Object.assign(defaults, options)` copies an explicit
+      // `origin: undefined` over the default, so the helper has to make the
+      // secure choice itself. Otherwise `origin: undefined` would be a
+      // one-liner that silently disables the protection.
+      expect(
+        isOriginRequestAllowed({
+          allowed: undefined,
+          origin: "https://evil.com",
+          host: HOST,
+        }),
+      ).toBe(false);
+      expect(
+        isOriginRequestAllowed({
+          allowed: undefined,
+          origin: SELF,
+          host: HOST,
+        }),
+      ).toBe(true);
+    });
+
+    it('never treats "self" as a literal origin string', () => {
+      // Guards the `allowed === "self"` branch from falling through to the
+      // exact-match path, where it would be compared as a literal and match
+      // nothing.
+      expect(
+        isOriginRequestAllowed({ allowed: "self", origin: "self", host: HOST }),
+      ).toBe(false);
+    });
   });
 
-  it("tier 2 — Origin in the allowlist passes, whatever Sec-Fetch-Site says", () => {
-    expect(isOriginRequestAllowed(ALLOW, "https://example.com", undefined))
-      .toBe(true);
-    expect(
-      isOriginRequestAllowed(ALLOW, "https://admin.example.com", "same-site"),
-    )
-      .toBe(true);
+  describe("host-only comparison", () => {
+    it("ignores the scheme, so TLS termination needs no action", () => {
+      expect(
+        isOriginRequestAllowed({
+          origin: "http://app.example.com",
+          host: HOST,
+        }),
+      ).toBe(true);
+    });
+
+    it("drops a default port, matching the Host a browser sends", () => {
+      // `new URL` normalises `https://host:443` to `host`. Without this a
+      // browser behind TLS termination would carry a port the Host header
+      // lacks and every POST would be rejected.
+      expect(
+        isOriginRequestAllowed({
+          origin: "https://app.example.com:443",
+          host: HOST,
+        }),
+      ).toBe(true);
+    });
+
+    it("still requires a non-default port to match", () => {
+      expect(
+        isOriginRequestAllowed({
+          origin: "https://app.example.com:8443",
+          host: HOST,
+        }),
+      ).toBe(false);
+      expect(
+        isOriginRequestAllowed({
+          origin: "https://app.example.com:8443",
+          host: "app.example.com:8443",
+        }),
+      ).toBe(true);
+    });
+
+    it("compares the host case-insensitively", () => {
+      expect(
+        isOriginRequestAllowed({
+          origin: "https://APP.Example.COM",
+          host: "app.example.com",
+        }),
+      ).toBe(true);
+    });
+
+    it("rejects a lookalike host rather than testing a prefix", () => {
+      expect(
+        isOriginRequestAllowed({
+          origin: "https://app.example.com.evil.com",
+          host: HOST,
+        }),
+      ).toBe(false);
+    });
+
+    it("fails closed when the Host header is absent", () => {
+      // There is no forwarded-header fallback: a header the client may influence
+      // must never answer "which host am I?". This is what makes the absence of
+      // a `trustProxy` option safe rather than merely convenient.
+      expect(
+        isOriginRequestAllowed({ origin: SELF, host: undefined }),
+      ).toBe(false);
+    });
+
+    it("rejects `Origin: null`, which never names a host", () => {
+      expect(
+        isOriginRequestAllowed({
+          origin: "null",
+          site: "same-origin",
+          host: HOST,
+        }),
+      ).toBe(false);
+    });
   });
 
-  it("tier 2 — Origin not in the allowlist is rejected", () => {
-    expect(isOriginRequestAllowed(ALLOW, "https://evil.com", "same-origin"))
-      .toBe(false);
+  describe("explicit allowlist", () => {
+    it("matches a listed origin exactly", () => {
+      expect(
+        isOriginRequestAllowed({
+          allowed: ALLOW,
+          origin: "https://admin.example.com",
+          host: HOST,
+        }),
+      ).toBe(true);
+    });
+
+    it("rejects an unlisted origin", () => {
+      expect(
+        isOriginRequestAllowed({
+          allowed: ALLOW,
+          origin: "https://evil.com",
+          host: HOST,
+        }),
+      ).toBe(false);
+    });
+
+    it('widens "self" instead of replacing it', () => {
+      // Naming an extra origin must never lock the operator out of their own
+      // site — the allowlist is additive.
+      expect(
+        isOriginRequestAllowed({ allowed: ALLOW, origin: SELF, host: HOST }),
+      ).toBe(true);
+    });
+
+    it("widens for a single string too, since it is a one-element list", () => {
+      expect(
+        isOriginRequestAllowed({
+          allowed: "https://example.com",
+          origin: SELF,
+          host: HOST,
+        }),
+      ).toBe(true);
+      expect(
+        isOriginRequestAllowed({
+          allowed: "https://example.com",
+          origin: "https://example.com",
+          host: HOST,
+        }),
+      ).toBe(true);
+      expect(
+        isOriginRequestAllowed({
+          allowed: "https://example.com",
+          origin: "https://evil.com",
+          host: HOST,
+        }),
+      ).toBe(false);
+    });
   });
 
-  it('tier 2 — Origin: "null" is rejected', () => {
-    expect(isOriginRequestAllowed(ALLOW, "null", "same-origin")).toBe(false);
-    expect(isOriginRequestAllowed("https://example.com", "null", undefined))
-      .toBe(false);
+  describe("fallback once Origin is gone", () => {
+    const site = (value: string) =>
+      isOriginRequestAllowed({
+        allowed: ALLOW,
+        origin: undefined,
+        site: value,
+        host: HOST,
+      });
+
+    it("admits same-origin and none", () => {
+      expect(site("same-origin")).toBe(true);
+      expect(site("none")).toBe(true);
+    });
+
+    it("rejects same-site, cross-site, and an unrecognised value", () => {
+      // A stripped Origin plus a coarse enum cannot name a host, so the check
+      // fails closed instead of degrading to a no-op.
+      expect(site("same-site")).toBe(false);
+      expect(site("cross-site")).toBe(false);
+      expect(site("bogus")).toBe(false);
+    });
   });
 
-  it("tier 3 — Origin absent, Sec-Fetch-Site: same-origin passes", () => {
-    expect(isOriginRequestAllowed(ALLOW, undefined, "same-origin")).toBe(true);
-  });
+  describe("headerless clients", () => {
+    it("rejects by default and admits when opted in", () => {
+      expect(isOriginRequestAllowed({ allowed: ALLOW, host: HOST })).toBe(
+        false,
+      );
+      expect(
+        isOriginRequestAllowed({
+          allowed: ALLOW,
+          host: HOST,
+          allowHeaderless: true,
+        }),
+      ).toBe(true);
+    });
 
-  it("tier 3 — Origin absent, Sec-Fetch-Site: none passes", () => {
-    expect(isOriginRequestAllowed(ALLOW, undefined, "none")).toBe(true);
-  });
-
-  it("tier 3 — Origin absent, Sec-Fetch-Site: same-site is rejected", () => {
-    expect(isOriginRequestAllowed(ALLOW, undefined, "same-site")).toBe(false);
-  });
-
-  it("tier 3 — Origin absent, Sec-Fetch-Site: cross-site is rejected", () => {
-    expect(isOriginRequestAllowed(ALLOW, undefined, "cross-site")).toBe(false);
-  });
-
-  it("tier 3 — Origin absent, an unrecognised Sec-Fetch-Site value is rejected", () => {
-    expect(isOriginRequestAllowed(ALLOW, undefined, "nonsense")).toBe(false);
-    expect(isOriginRequestAllowed(ALLOW, undefined, "SAME-ORIGIN")).toBe(false);
-    expect(isOriginRequestAllowed(ALLOW, undefined, " same-origin ")).toBe(
-      false,
-    );
-  });
-
-  it("tier 4 — both headers absent passes (curl / native client)", () => {
-    expect(isOriginRequestAllowed(ALLOW, undefined, undefined)).toBe(true);
+    it("does not weaken the check for requests that do carry an Origin", () => {
+      expect(
+        isOriginRequestAllowed({
+          allowed: ALLOW,
+          origin: "https://evil.com",
+          host: HOST,
+          allowHeaderless: true,
+        }),
+      ).toBe(false);
+    });
   });
 
   it("treats an empty or whitespace-only header value as absent", () => {
-    // Adapters disagree on what a missing header yields (Node: undefined,
-    // Hono's c.req.header(): ""), so the helper normalises both.
-    expect(isOriginRequestAllowed(ALLOW, "", "")).toBe(true);
-    expect(isOriginRequestAllowed(ALLOW, "   ", "\t")).toBe(true);
-    expect(isOriginRequestAllowed(ALLOW, "", "cross-site")).toBe(false);
+    // Adapters disagree on what a missing header yields — Node gives
+    // `undefined`, Hono's `c.req.header()` may give `""` — so the helper
+    // normalises rather than letting each adapter pick a convention.
+    expect(
+      isOriginRequestAllowed({
+        allowed: ALLOW,
+        origin: "  ",
+        site: "",
+        host: HOST,
+      }),
+    ).toBe(false);
+    expect(
+      isOriginRequestAllowed({
+        allowed: ALLOW,
+        origin: "",
+        site: "  ",
+        host: HOST,
+        allowHeaderless: true,
+      }),
+    ).toBe(true);
   });
 
   it("sibling subdomain survives: allowlisted Origin + same-site passes", () => {
-    // The regression guard for the tier order — if tier 3 ran first, this
-    // legitimate request from an allowlisted sibling would be rejected.
+    // Regression for the tier ordering. `Sec-Fetch-Site` alone would reject this
+    // as `same-site`; only because `Origin` is consulted first does the
+    // allowlist get to admit a sibling domain.
     expect(
-      isOriginRequestAllowed(ALLOW, "https://admin.example.com", "same-site"),
-    )
-      .toBe(true);
+      isOriginRequestAllowed({
+        allowed: ALLOW,
+        origin: "https://admin.example.com",
+        site: "same-site",
+        host: HOST,
+      }),
+    ).toBe(true);
   });
 
-  it("keeps working for a single-string allowlist", () => {
+  it("an allowlisted Origin wins over a contradicting Sec-Fetch-Site", () => {
+    // Tier order made explicit: `Origin` is consulted first and short-circuits,
+    // so an allowlisted origin is trusted even when the coarse enum says
+    // `cross-site`. The allowlist is the operator's explicit statement about
+    // which origins are trusted, and a four-value enum cannot name a host — so
+    // letting it override the allowlist would re-break the sibling-subdomain
+    // case above. Worth pinning because the alternative is defensible on paper.
     expect(
-      isOriginRequestAllowed(
-        "https://example.com",
-        "https://example.com",
-        undefined,
-      ),
+      isOriginRequestAllowed({
+        allowed: ALLOW,
+        origin: "https://admin.example.com",
+        site: "cross-site",
+        host: HOST,
+      }),
     ).toBe(true);
-    expect(
-      isOriginRequestAllowed("https://example.com", undefined, "cross-site"),
-    )
-      .toBe(false);
   });
 });
 
@@ -409,5 +631,194 @@ describe("hasContentTypeMismatch", () => {
     expect(
       hasContentTypeMismatch("application/json", "APPLICATION/JSON"),
     ).toBe(false);
+  });
+});
+
+/* ─── Typed error subclasses ───────────────────────────────────────────────
+ * These shipped on a claim of "verified" that came from a throwaway script, so
+ * every part of the contract is asserted here instead.
+ */
+
+describe("typed error subclasses", () => {
+  const cases = [
+    ["NotFoundError", NotFoundError, 404, "NOT_FOUND"],
+    ["ForbiddenError", ForbiddenError, 403, "FORBIDDEN"],
+    ["ConflictError", ConflictError, 409, "CONFLICT"],
+  ] as const;
+
+  for (const [name, Ctor, status, code] of cases) {
+    describe(name, () => {
+      it("carries the client-error status, so the adapter answers it directly", () => {
+        expect(new Ctor("nope", "do the thing").status).toBe(status);
+      });
+
+      it("uses the class name and a stable code", () => {
+        const err = new Ctor("nope", "do the thing");
+        expect(err.name).toBe(name);
+        expect(err.code).toBe(code);
+        expect(err instanceof RPCError).toBe(true);
+      });
+
+      it("requires a hint, so a teaching class cannot be built without the teaching", () => {
+        // Compile-time enforcement; asserted here only so the intent is recorded.
+        expect(new Ctor("nope", "do the thing").hint).toBe("do the thing");
+      });
+
+      it("is recognised as a client error, not a server fault", () => {
+        expect(isClientHttpError(new Ctor("nope", "hint"))).toBe(true);
+        expect(clientErrorStatus(new Ctor("nope", "hint"))).toBe(status);
+      });
+
+      it("keeps message, code, data and hint in development", () => {
+        const body = formatError(
+          new Ctor("no such user", "check the id", { id: 7 }),
+          false,
+        );
+        expect(body).toEqual({
+          error: "no such user",
+          code,
+          data: { id: 7 },
+          hint: "check the id",
+        });
+      });
+
+      it("strips everything but the status reason phrase in production", () => {
+        // A thrown error used to be answered with the right status and the body
+        // `{ error: "Bad Request" }` — right status, wrong meaning, and the
+        // author's code and hint discarded.
+        expect(
+          formatError(
+            new Ctor("no such user", "check the id", { id: 7 }),
+            true,
+          ),
+        )
+          .toEqual({ error: clientErrorMessage(status) });
+      });
+    });
+  }
+
+  it("omits the hint key when a thrown 4xx carries none", () => {
+    // A bare `RPCError` with a 4xx status: the body must not grow an empty
+    // `hint`, or every thrown client error changes shape for no reason.
+    const bare = new RPCError("gone", "GONE");
+    (bare as unknown as { status: number }).status = 410;
+    expect("hint" in formatError(bare, false)).toBe(false);
+  });
+
+  it("falls back to the reason phrase when a thrown error has an empty message", () => {
+    expect(formatError(new NotFoundError("", "hint"), false)).toMatchObject({
+      error: "Not Found",
+    });
+  });
+});
+
+describe("RPCError.hint", () => {
+  it("is optional and absent by default", () => {
+    expect(new RPCError("boom").hint).toBeUndefined();
+  });
+
+  it("is carried through formatError in development", () => {
+    expect(
+      formatError(new RPCError("boom", "X", { a: 1 }, "retry later"), false),
+    )
+      .toEqual({
+        error: "boom",
+        code: "X",
+        data: { a: 1 },
+        hint: "retry later",
+      });
+  });
+
+  it("is stripped in production, like code and data", () => {
+    expect(
+      formatError(new RPCError("boom", "X", { a: 1 }, "retry later"), true),
+    )
+      .toEqual({ error: "Internal Server Error" });
+  });
+
+  it("does not add a hint key when there is no hint", () => {
+    expect("hint" in formatError(new RPCError("boom"), false)).toBe(false);
+  });
+});
+
+describe("isRPCError", () => {
+  it("recognises an RPCError and its subclasses", () => {
+    expect(isRPCError(new RPCError("x"))).toBe(true);
+    expect(isRPCError(new NotFoundError("x", "h"))).toBe(true);
+  });
+
+  it("rejects anything else", () => {
+    expect(isRPCError(new Error("x"))).toBe(false);
+    expect(isRPCError(null)).toBe(false);
+    expect(isRPCError("x")).toBe(false);
+    expect(isRPCError({ code: "X" })).toBe(false);
+  });
+
+  it("survives the per-entry duplication tsdown produces", () => {
+    // Each build entry bundles its own copy of the class, so a ValidationError
+    // raised by `runValidation` inside dist/server is not `instanceof` the
+    // RPCError in dist/express. That silently answered `false` and made every
+    // execution record claim `isRPCError: false` — which is why the brand is a
+    // registered symbol rather than `instanceof` alone.
+    const branded = {
+      [Symbol.for("thednp.rpc.error")]: true,
+      code: "VALIDATION",
+      name: "ValidationError",
+    };
+    expect(new RPCError("x") instanceof RPCError).toBe(true);
+    expect(isRPCError(branded)).toBe(true);
+  });
+});
+
+describe("describeOriginRequest", () => {
+  it("reports tier 1 when Origin decides", () => {
+    expect(
+      describeOriginRequest({ origin: "https://app.test", host: "app.test" }),
+    ).toEqual({ allowed: true, tier: "origin" });
+  });
+
+  it("reports tier 1 on a rejected Origin too", () => {
+    expect(
+      describeOriginRequest({ origin: "https://evil.test", host: "app.test" }),
+    ).toEqual({ allowed: false, tier: "origin" });
+  });
+
+  it("reports tier 2 when only Sec-Fetch-Site survives", () => {
+    expect(describeOriginRequest({ site: "same-origin" })).toEqual({
+      allowed: true,
+      tier: "sec-fetch-site",
+    });
+    expect(describeOriginRequest({ site: "cross-site" })).toEqual({
+      allowed: false,
+      tier: "blocked",
+    });
+  });
+
+  it("reports tier 3 only when headerless is allowed", () => {
+    expect(describeOriginRequest({ allowHeaderless: true })).toEqual({
+      allowed: true,
+      tier: "headerless",
+    });
+    expect(describeOriginRequest({})).toEqual({
+      allowed: false,
+      tier: "blocked",
+    });
+  });
+
+  it("never disagrees with isOriginRequestAllowed, which it is defined in terms of", () => {
+    const inputs = [
+      { origin: "https://app.test", host: "app.test" },
+      { origin: "https://evil.test", host: "app.test" },
+      { site: "none" },
+      { site: "cross-site" },
+      { allowHeaderless: true },
+      {},
+      { origin: "   " },
+    ];
+    for (const input of inputs) {
+      expect(isOriginRequestAllowed(input)).toBe(
+        describeOriginRequest(input).allowed,
+      );
+    }
   });
 });

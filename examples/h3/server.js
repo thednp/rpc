@@ -47,7 +47,12 @@ if (!isProduction) {
   app.use(bodyLimit);
 
   // RPC Middleware
-  app.use(createRPCMiddleware(options));
+  // Since 0.4.0 the cross-origin check is on by default (`origin: "self"`), so a
+  // request with no `Origin` and no `Sec-Fetch-Site` is refused. These example
+  // servers are meant to be poked with `curl` and the no-JS form fallback,
+  // which send neither header — hence `allowHeaderless: true`. A real deployment
+  // should leave it off and name its public origins instead.
+  app.use(createRPCMiddleware({ allowHeaderless: true, ...options }));
 
   // Serve static files
   app.use(serveStatic);

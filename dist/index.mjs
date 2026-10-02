@@ -6,24 +6,6 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { setGlobalPrefix } from "@thednp/rpc/server";
 import { createRPCMiddleware } from "@thednp/rpc/express";
-//#region src/options.ts
-/**
-* The built-in RPC endpoint prefix, used when neither an explicit prefix nor a
-* global one (`getGlobalPrefix`) is supplied. Kept for backward compatibility
-* with pre-multi-prefix setups, where every function lived under this one map.
-*/
-const defaultPrefix = "__rpc";
-/**
-* Baseline plugin options. `defineConfig` merges a user's partial config over
-* these, and `loadRPCConfig` merges a loaded config file over them, so every
-* option has a defined value even when a config file omits it.
-*/
-const defaultRPCOptions = {
-	rpcPrefix: defaultPrefix,
-	serverFiles: "exact",
-	scanRoot: void 0
-};
-//#endregion
 //#region src/constants.ts
 /** Warning logged when a scanned server module exports nothing. */
 const NO_SERVER_FUNCTION_FOUND = "No server function found.";
@@ -41,6 +23,43 @@ const NO_CONFIG_FOUND = `  ⚡︎ No RPC config found, loading the defaults..`;
 const FAILED_LOAD_CONFIG = `  ⚠︎ Failed to load RPC config:`;
 /** Error template for duplicate server function names across files. @param name - The duplicate registered name */
 const DUPLICATE_FUNCTION_NAME = (name) => `Duplicate server function "${name}" detected. Each server function must have a unique name. Remove or rename the duplicate.`;
+/** Identifiers safe to interpolate into generated code without escaping. */
+const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+/** Path segments safe to interpolate, allowing the `@` and `/` a prefix uses. */
+const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/;
+/** The `credentials` values the client stubs accept. */
+const CREDENTIALS_VALUES = [
+	"same-origin",
+	"include",
+	"omit"
+];
+/** The exact basenames the `exact` scan mode recognises. */
+const EXACT_NAMES = [
+	"server.ts",
+	"server.js",
+	"server.mjs",
+	"server.mts"
+];
+/** Matches the `*.server.{ts,js,mjs,mts}` basename the `glob` scan mode uses. */
+const GLOB_REGEX = /^.+\.server\.(ts|js|mjs|mts)$/;
+//#endregion
+//#region src/options.ts
+/**
+* The built-in RPC endpoint prefix, used when neither an explicit prefix nor a
+* global one (`getGlobalPrefix`) is supplied. Kept for backward compatibility
+* with pre-multi-prefix setups, where every function lived under this one map.
+*/
+const defaultPrefix = "__rpc";
+/**
+* Baseline plugin options. `defineConfig` merges a user's partial config over
+* these, and `loadRPCConfig` merges a loaded config file over them, so every
+* option has a defined value even when a config file omits it.
+*/
+const defaultRPCOptions = {
+	rpcPrefix: defaultPrefix,
+	serverFiles: "exact",
+	scanRoot: void 0
+};
 //#endregion
 //#region src/functionsMap.ts
 /**
@@ -88,13 +107,6 @@ const serverFunctionsMap = {
 };
 //#endregion
 //#region src/validate.ts
-const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/;
-const CREDENTIALS_VALUES = [
-	"same-origin",
-	"include",
-	"omit"
-];
 /**
 * Validates that a string is a safe JavaScript identifier.
 * Used to prevent code injection when interpolating export names into generated client code.
@@ -151,7 +163,7 @@ function validateMethod(value) {
 * All interpolated values are validated to prevent code injection.
 * @param fnName - Registered RPC function name (validated as path segment)
 * @param fnEntry - Export name used in the generated module (validated as identifier)
-* @param options - Content type, credentials, and RPC prefix settings
+* @param options - Content type, credentials, and RPC prefix settings. Both `contentType` and `rpcPrefix` are required for the generated module
 * @returns A string of JavaScript code exporting the client stub
 */
 const getModule = (fnName, fnEntry, options) => {
@@ -191,7 +203,6 @@ ${Array.from(prefixMap.entries()).filter(([, entry]) => entry.exportName).map(([
 };
 //#endregion
 //#region src/server-helpers.ts
-const GLOB_REGEX = /^.+\.server\.(ts|js|mjs|mts)$/;
 /**
 * Recursively walks `dir` and collects absolute paths to files whose
 * basename matches the `*.server.{ts,js,mjs,mts}` glob pattern.
@@ -230,12 +241,6 @@ const walkGlobFiles = async (dir) => {
 const scannedTargets = /* @__PURE__ */ new Set();
 /** Absolute ids (normalized) of the scanned server function files. */
 const scannedServerFiles = /* @__PURE__ */ new Set();
-const EXACT_NAMES = [
-	"server.ts",
-	"server.js",
-	"server.mjs",
-	"server.mts"
-];
 /**
 * Scans `src/api/` (or an explicit `scanRoot`) for server function files
 * and populates the server functions map (scoped by rpcPrefix) with their exported functions.

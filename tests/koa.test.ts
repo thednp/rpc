@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { field, schema } from "../src/schema.ts";
+import { decodeFormFlash, FLASH_PARAM } from "../src/form-fallback.ts";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
@@ -22,6 +25,7 @@ import {
   createRPCMiddleware,
 } from "../src/koa/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
+import type { DispatchContext } from "../src/types.d.ts";
 import {
   makeKoaCtx,
   makeKoaNext,
@@ -956,7 +960,7 @@ describe("Koa createRPCMiddleware", () => {
     const ctx = makeKoaCtx({
       url: "/__rpc/koa-fn",
       method: "POST",
-      headers: { "sec-fetch-site": "cross-site" },
+      headers: { origin: undefined, "sec-fetch-site": "cross-site" },
     });
     const next = makeKoaNext();
     await mw(ctx, next);
@@ -972,6 +976,7 @@ describe("Koa createRPCMiddleware", () => {
       url: "/__rpc/koa-fn",
       method: "POST",
       headers: {
+        origin: undefined,
         "sec-fetch-site": "same-origin",
         "content-type": "application/json",
       },
@@ -980,6 +985,41 @@ describe("Koa createRPCMiddleware", () => {
     simulateKoaBody(ctx, JSON.stringify(["x"]));
     await mw(ctx, next);
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(ctx.status).toBe(200);
+  });
+
+  it("default policy rejects a cross-origin request with no options at all", async () => {
+    // Proves the secure default is wired through this adapter, not merely
+    // implemented in the shared helper. Creating the middleware with no options
+    // must already be protected.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { origin: "https://evil.com", "sec-fetch-site": "cross-site" },
+    });
+    await mw(ctx, makeKoaNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(ctx.status).toBe(403);
+    expect(ctx.body).toEqual({ error: "Forbidden" });
+  });
+
+  it("default policy admits the server's own host, comparing host only", async () => {
+    // `http://` against the fixture's `Host` proves the scheme is not part of
+    // the comparison, so a TLS-terminating proxy needs no configuration.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-fn", fn);
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-fn",
+      method: "POST",
+      headers: { origin: "http://app.example.com" },
+    });
+    simulateKoaBody(ctx, JSON.stringify(["x"]));
+    await mw(ctx, makeKoaNext());
+    expect(fn).toHaveBeenCalled();
     expect(ctx.status).toBe(200);
   });
 
@@ -1054,5 +1094,416 @@ describe("Koa createRPCMiddleware", () => {
     await mw(ctx, next);
     expect(ctx.status).toBe(403);
     expect(ctx.body).toEqual({ error: "Forbidden" });
+  });
+
+  it("validates the input against the function schema before dispatch", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("validated", fn, {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+      hint: "a single function-wide hint",
+    });
+    const mw = createRPCMiddleware({ allowHeaderless: true });
+    const ok = makeKoaCtx({
+      url: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ok, JSON.stringify({ email: "a@b.c" }));
+    await mw(ok, makeKoaNext());
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      email: "a@b.c",
+    });
+    expect(ok.status).toBe(200);
+
+    const bad = makeKoaCtx({
+      url: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(bad, JSON.stringify({ email: 5 }));
+    await mw(bad, makeKoaNext());
+    expect(bad.status).toBe(422);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect((bad.body as { hint?: string }).hint).toMatch(
+      /^a single function-wide hint — .*wiki\/server-functions\.md#input-validation$/,
+    );
+
+    // Without a function-wide hint, the pointer stands alone.
+    createServerFunction("validated", vi.fn(), {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+    });
+    const plain = makeKoaCtx({
+      url: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(plain, JSON.stringify({ email: 5 }));
+    await mw(plain, makeKoaNext());
+    expect((plain.body as { hint?: string }).hint).toBe(
+      "input did not match the function's schema; see wiki/server-functions.md#input-validation",
+    );
+  });
+
+  it("answers a JSON array body with 400 because it is an argument list, not one array argument", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("array-payload", fn, {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+    });
+    const mw = createRPCMiddleware({ allowHeaderless: true });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/array-payload",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, JSON.stringify([[1, 2]]));
+    await mw(ctx, makeKoaNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(ctx.status).toBe(400);
+    expect(ctx.body).toEqual({ error: "Bad Request" });
+  });
+});
+
+/* ─── onDispatch ────────────────────────────────────────────────────────────
+ * koa writes `ctx.status` / `ctx.body` and returns nothing, so the wrapper reads
+ * the status off the context and merges the id into `ctx.body`. Same record as
+ * the other four: the rule lives in `dispatchRequest`.
+ */
+
+describe("koa onDispatch", () => {
+  const seen: DispatchContext[] = [];
+
+  const mw = (options: Record<string, unknown> = {}) =>
+    createRPCMiddleware({
+      onDispatch: (ctx: DispatchContext) => {
+        seen.push(ctx);
+      },
+      ...options,
+    });
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seen.length = 0;
+  });
+
+  const go = async (
+    path: string,
+    body: unknown = [],
+    headers: Record<string, string> = {},
+  ) => {
+    const ctx = makeKoaCtx({
+      url: path,
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+    });
+    simulateKoaBody(ctx, JSON.stringify(body));
+    await mw()(ctx, makeKoaNext());
+    return { status: ctx.status, body: ctx.body as Record<string, unknown> };
+  };
+
+  it("records a successful dispatch", async () => {
+    createServerFunction("koa-ok", vi.fn().mockResolvedValue("ok"));
+    await go("/__rpc/koa-ok", ["x"]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      prefix: "__rpc",
+      functionName: "koa-ok",
+      method: "POST",
+      declaredMethod: "POST",
+      declaredContentType: "application/json",
+      contentTypeMatched: true,
+      status: 200,
+      outcome: "ok",
+    });
+  });
+
+  it("shapes the args and never records a value", async () => {
+    createServerFunction("koa-shape", vi.fn().mockResolvedValue("ok"));
+    await go("/__rpc/koa-shape", [{ a: 1, password: "correct-horse" }]);
+    expect(seen[0].argShape).toBe("[{a:number,password:string}]");
+    expect(JSON.stringify(seen[0])).not.toContain("correct-horse");
+  });
+
+  it("records the 404 and lists the sibling names", async () => {
+    createServerFunction("koa-known", vi.fn().mockResolvedValue("ok"));
+    const { status } = await go("/__rpc/nope");
+    expect(status).toBe(404);
+    expect(seen[0]).toMatchObject({
+      functionName: "nope",
+      status: 404,
+      outcome: "client-error",
+    });
+    expect(seen[0].registeredNames).toContain("koa-known");
+  });
+
+  it("records the origin rejection, which is also before the try", async () => {
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-ok",
+      method: "POST",
+      headers: { origin: "https://evil.test" },
+    });
+    await mw()(ctx, makeKoaNext());
+    expect(ctx.status).toBe(403);
+    expect(seen[0]).toMatchObject({ status: 403, originTier: "origin" });
+  });
+
+  it("records a thrown handler as a server error", async () => {
+    createServerFunction("koa-boom", vi.fn().mockRejectedValue(new Error("b")));
+    const { status } = await go("/__rpc/koa-boom");
+    expect(status).toBe(500);
+    expect(seen[0]).toMatchObject({
+      status: 500,
+      outcome: "server-error",
+    });
+    expect(seen[0].error?.isRPCError).toBe(false);
+  });
+
+  it("merges the id into ctx.body on a failure, and the record agrees", async () => {
+    const { body } = await go("/__rpc/nope");
+    expect(body.id).toMatch(/^[0-9a-f]{16}$/);
+    expect(seen[0].id).toBe(body.id);
+  });
+
+  it("leaves a success body alone", async () => {
+    createServerFunction("koa-ok2", vi.fn().mockResolvedValue("ok"));
+    const { body } = await go("/__rpc/koa-ok2");
+    expect(body).toEqual({ data: "ok" });
+  });
+
+  it("dispatches normally with no hook registered", async () => {
+    // The `if (emit)` guards in the body all take their false arm here, which no
+    // other test reaches: the other no-hook test is a 404, and it returns before
+    // the dispatch.
+    createServerFunction("koa-nohook", vi.fn().mockResolvedValue("ok"));
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-nohook",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, "[]");
+    await createRPCMiddleware()(ctx, makeKoaNext());
+    expect(ctx.status).toBe(200);
+    expect(ctx.body).toEqual({ data: "ok" });
+  });
+
+  it("leaves the body alone with no hook registered", async () => {
+    seedServerMap();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/noSuchFn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, "[]");
+    await createRPCMiddleware()(ctx, makeKoaNext());
+    expect(ctx.body).toEqual({ error: "Function not found" });
+  });
+
+  it("records a malformed ?args= on a GET function", async () => {
+    // A malformed query is a malformed request, answered 400 — and it returns
+    // before the dispatch try block, so it is a separate exit path.
+    createServerFunction("koa-get", vi.fn().mockResolvedValue("ok"), {
+      method: "GET",
+    });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-get?args=notjson",
+      method: "GET",
+    });
+    await mw()(ctx, makeKoaNext());
+    expect(ctx.status).toBe(400);
+    expect(seen[0]).toMatchObject({ status: 400, outcome: "client-error" });
+  });
+
+  it("records a non-array ?args= on a GET function", async () => {
+    createServerFunction("koa-get2", vi.fn().mockResolvedValue("ok"), {
+      method: "GET",
+    });
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-get2?args=%7B%22a%22%3A1%7D",
+      method: "GET",
+    });
+    await mw()(ctx, makeKoaNext());
+    expect(ctx.status).toBe(400);
+  });
+
+  it("records a GET function called with no ?args= at all", async () => {
+    // The `if (raw)` false path: no query, so `args` stays empty and the
+    // handler is called with none. Every other GET test here passes `?args=`.
+    const handler = vi.fn().mockResolvedValue("ok");
+    createServerFunction("koa-noargs", handler, { method: "GET" });
+    const ctx = makeKoaCtx({ url: "/__rpc/koa-noargs", method: "GET" });
+    await mw()(ctx, makeKoaNext());
+    expect(ctx.status).toBe(200);
+    expect(seen[0]).toMatchObject({
+      functionName: "koa-noargs",
+      status: 200,
+      argShape: "[]",
+    });
+  });
+
+  it("falls back to the default contentType for a hand-registered entry", async () => {
+    // `serverFunction.options?.contentType` — the optional chain, not just the
+    // `??`. Reached only by an entry registered without options, which is what a
+    // hand-registered or lazily-scanned entry can look like.
+    serverFunctionsMap.set("no-options", {
+      handler: (async () => "bare") as never,
+    } as never);
+    const ctx = makeKoaCtx({
+      url: "/__rpc/no-options",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, "[]");
+    await mw()(ctx, makeKoaNext());
+    expect(ctx.status).toBe(200);
+    expect(seen[0]).toMatchObject({ declaredContentType: "application/json" });
+  });
+
+  it("does not take down the request when the hook throws", async () => {
+    createServerFunction("koa-throw", vi.fn().mockResolvedValue("ok"));
+    const ctx = makeKoaCtx({
+      url: "/__rpc/koa-throw",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    simulateKoaBody(ctx, "[]");
+    await createRPCMiddleware({
+      onDispatch: () => {
+        throw new Error("log exploded");
+      },
+    })(ctx, makeKoaNext());
+    expect(ctx.status).toBe(200);
+  });
+});
+
+describe("Koa no-JS form fallback (dispatch)", () => {
+  const BODIES: Record<string, string> = {
+    bad: "age=nope",
+    ok: "age=7",
+    replay: "age=nope&note=hello",
+  };
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seedServerMap();
+  });
+
+  const formCtx = (kind: string, accept = "text/html") => {
+    const c = makeKoaCtx({
+      url: "/__rpc/contact",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept },
+    });
+    simulateKoaBody(c, BODIES[kind]);
+    return c;
+  };
+
+  // The load-bearing claim: a rejected *navigation* redirects. It only holds
+  // because the fallback branch sits ahead of the client-error branch, which
+  // would otherwise claim the ValidationError and answer a 422 JSON body.
+  it("redirects a rejected native form instead of answering 422", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+      fallback: "/contact",
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("bad");
+    await mw(ctx as never, makeKoaNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/contact",
+    );
+    const flash = decodeFormFlash(
+      new URL(ctx.redirect.mock.calls[0]?.[0] as string, "http://localhost")
+        .searchParams.get(FLASH_PARAM)!,
+    );
+    expect(flash!.errors?.age).toBeDefined();
+    expect(ctx.status).not.toBe(422);
+  });
+
+  // The other load-bearing claim: the generated stub posts form encodings too,
+  // so the discriminator has to be the navigation, not the content type.
+  it("leaves a fetch from the client stub on the JSON path", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+      fallback: "/contact",
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("bad", "application/json");
+    await mw(ctx as never, makeKoaNext());
+    expect(ctx.status).toBe(422);
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toBe(null);
+  });
+
+  it("redirects a successful navigation to the author's target", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      fallback: "/thanks",
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("ok");
+    await mw(ctx as never, makeKoaNext());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/thanks",
+    );
+    // A success carries no failure to report, so no flash at all.
+    expect(
+      new URL(ctx.redirect.mock.calls[0]?.[0] as string, "http://localhost")
+        .searchParams.get(FLASH_PARAM),
+    ).toBeNull();
+  });
+
+  // A real fault must not be laundered into a friendly redirect.
+  it("keeps an unexpected throw a 500 even on a navigation", async () => {
+    createServerFunction(
+      "contact",
+      vi.fn().mockRejectedValue(new Error("boom")),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/contact",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("ok");
+    await mw(ctx as never, makeKoaNext());
+    expect(ctx.status).toBe(500);
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toBe(null);
+  });
+
+  it("replays only the fields the author named", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number(), note: field.string() }),
+      fallback: { to: "/contact", replay: ["note"] },
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("replay");
+    await mw(ctx as never, makeKoaNext());
+    const url = new URL(
+      ctx.redirect.mock.calls[0]?.[0] as string,
+      "http://localhost",
+    );
+    const flash = decodeFormFlash(url.searchParams.get(FLASH_PARAM)!);
+    expect(flash!.values).toEqual({ note: "hello" });
+    expect(url.search).not.toContain("nope");
+  });
+
+  it("does not redirect when the function sets no fallback", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+    });
+    const mw = createRPCMiddleware();
+    const ctx = formCtx("bad");
+    await mw(ctx as never, makeKoaNext());
+    expect(ctx.status).toBe(422);
   });
 });

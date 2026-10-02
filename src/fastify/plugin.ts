@@ -1,11 +1,11 @@
 /** @module Fastify plugin. Exports the RPC plugin wrapped with `fastify-plugin` for lifecycle-compatible registration. */
 // inspired by https://github.com/royalswe/vike-fastify-boilerplate/blob/main/server/index.ts
-import fp from "fastify-plugin";
 import type { MiddlewareOptions } from "../types.d.ts";
 import type {
   FastifyRPCPlugin,
   RegisteredFastifyRPCPlugin,
 } from "./types.d.ts";
+import fp from "fastify-plugin";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 
 export type { MiddlewareOptions };

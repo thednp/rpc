@@ -63,4 +63,4 @@ export const serverFunctionsMap: Map<string, ServerFnEntry> = {
   ) => getFunctionsForPrefix(defaultPrefix).forEach(callback),
   [Symbol.iterator]: () =>
     getFunctionsForPrefix(defaultPrefix)[Symbol.iterator](),
-} as unknown as Map<string, ServerFnEntry>;
+} as Map<string, ServerFnEntry>;

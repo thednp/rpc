@@ -1,5 +1,4 @@
 import { createServerFunction } from "@thednp/rpc/server";
-import { normalizeValue } from "../util/helpers";
 import * as v from "valibot";
 
 export const sayHi = createServerFunction(
@@ -13,29 +12,30 @@ export const sayHi = createServerFunction(
   { contentType: "text/plain" },
 );
 
+/**
+ * The no-JS `<form>` fallback submits every field as a string, while a JSON
+ * client sends real numbers, so the schema accepts either and normalises to
+ * `number`. The handler therefore receives `a: number, b: number` with no cast
+ * and no hand-written coercion.
+ *
+ * This replaces a `normalizeValue` helper plus a `v.safeParse` + `v.flatten`
+ * sequence that ran inside the handler. The difference that matters: the old
+ * path coerced first and validated second, and its coercion accepted anything
+ * numeric-ish, so a typo became a silent `NaN` rather than a `400`.
+ */
 const AddSchema = v.object({
-  a: v.number(),
-  b: v.number(),
+  a: v.pipe(v.union([v.string(), v.number()]), v.transform(Number), v.number()),
+  b: v.pipe(v.union([v.string(), v.number()]), v.transform(Number), v.number()),
 });
 
 export const add = createServerFunction(
   "add-numbers",
-  async (signal, formData: string) => {
+  async (signal, { a, b }) => {
     await new Promise((res) => setTimeout(res, 331));
-    const json = JSON.parse(formData as string);
-    const preparsed = Object.fromEntries(
-      Object.entries(json).map(([key, val]) => [key, normalizeValue(val)]),
-    );
-    const valid = v.safeParse(AddSchema, preparsed);
     signal?.throwIfAborted();
-    if (valid.issues) {
-      const { nested } = v.flatten(valid.issues);
-      return { error: nested };
-    }
-    signal?.throwIfAborted();
-
-    return valid.output.a + valid.output.b;
+    return a + b;
   },
+  { schema: AddSchema, hint: "a and b are numbers; the form sends strings" },
 );
 export const getServerTime = createServerFunction(
   "get-server-time",

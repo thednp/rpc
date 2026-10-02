@@ -54,6 +54,12 @@ The first file found is used. If none is found, defaults are applied.
 
 ## Utilities
 
+### Middleware options
+
+The options `createRPCMiddleware` accepts are documented per-adapter in [Adapters — Options every adapter shares](./adapters.md#options-every-adapter-shares): `rpcPrefix`, `origin`, `allowHeaderless`, `bodyLimit`, `onDispatch`, and the lazy-scan pair. They are middleware options, not `rpc.config.ts` options — the config file chooses the prefix and the adapter, the middleware instance is configured where it is mounted.
+
+
+
 ### `defineConfig`
 
 Type-safe helper for creating the config object. Provides autocomplete and type checking for all options. Imported from **`@thednp/rpc/config`** — a Vite-free subpath so config files never drag the plugin (and Vite) into server-side bundles:
@@ -120,5 +126,5 @@ Both call forms are accepted: `loadRPCConfig(undefined, { silent: true })` and `
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

@@ -19,8 +19,14 @@ pnpm install
 ## 2. Install the library
 
 ```bash
-pnpm add @thednp/rpc valibot # or your validator of choice
+pnpm add @thednp/rpc
 ```
+
+Validation is optional and not coupled to a particular library — the `schema`
+option accepts any [Standard Schema](https://standardschema.dev) (zod, valibot,
+arktype, effect), and if you'd rather take no dependency at all, rpc ships a
+small builder (`schema()` / `field`). See
+[Server Functions — Input Validation](./server-functions.md#input-validation).
 
 ## 3. Configuration
 
@@ -59,16 +65,24 @@ export const sayHi = createServerFunction(
   { contentType: "text/plain" },
 );
 
-const AddSchema = v.object({ a: v.number(), b: v.number() });
+// The no-JS <form> sends both fields as strings, so the schema accepts either and
+// normalises to a number. Because the schema's *output* is what reaches the
+// handler, `a` and `b` are `number` here with no cast and no hand-written
+// conversion.
+const AddSchema = v.object({
+  a: v.pipe(v.union([v.string(), v.number()]), v.transform(Number), v.number()),
+  b: v.pipe(v.union([v.string(), v.number()]), v.transform(Number), v.number()),
+});
 
 export const add = createServerFunction(
   "add-numbers",
-  async (signal, formData: string) => {
-    const valid = v.safeParse(AddSchema, JSON.parse(formData));
+  // `formData` is the object, not a JSON string: with a `schema` the stub is
+  // typed, so there is no reason to serialise and re-parse it by hand.
+  async (signal, { a, b }) => {
     signal.throwIfAborted();
-    if (valid.issues) return { error: v.flatten(valid.issues).nested };
-    return valid.output.a + valid.output.b;
+    return a + b;
   },
+  { schema: AddSchema, hint: 'a and b are numbers; the form sends strings' },
 );
 
 export const getServerTime = createServerFunction(
@@ -220,5 +234,5 @@ In **production**, remember the prefix proxy must point at a real server that re
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

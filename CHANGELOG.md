@@ -1,5 +1,229 @@
 # Changelog
 
+## [0.4.0] - 2026-10-02
+
+The release that made the cross-origin boundary real, then filled in the two things the 0.3.x hardening left as promises. One item here is a **breaking change with a required migration**; read that first.
+
+### ⚠️ Breaking: cross-origin protection is now on by default
+
+`createRPCMiddleware` now ships `origin: "self"`. Requests are checked against three tiers, first signal wins:
+
+| request carries                   | outcome                                                                                                                                                                                                                                     |
+|-----------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Origin`                          | the policy decides — `"self"` compares the origin's **host and port** against the `Host` header, with *default* ports normalised, so TLS termination needs no action but a proxy that rewrites `Host` to another port rejects every request |
+| no `Origin`, but `Sec-Fetch-Site` | only `same-origin` and `none` pass, so a stripped `Origin` fails closed rather than degrading to a no-op                                                                                                                                    |
+| neither                           | **`403`**                                                                                                                                                                                                                                   |
+
+**The third row is what will break your tests and your scripts.** Browsers send `Origin`, including a native `<form>` navigation, so the built-in no-JS fallback is checked like any other request; `curl`, native clients and other headerless callers do not. Opt out explicitly for those scripted callers:
+
+```ts
+app.use(createRPCMiddleware({ allowHeaderless: true }));
+```
+
+Two deliberate consequences, both measured rather than assumed:
+
+- **An array `origin` widens `"self"`, it does not replace it** — the allowlist exists to admit a sibling subdomain, whose request carries `Sec-Fe29tch-Site: same-site`, which the second tier alone would reject.
+  `Origin` therefore short-circuits ahead of `Sec-Fetch-Site`.
+- **No forwarded header is trusted and there is no `trustProxy` option.** `X-Forwarded-Host` is attacker-influenceable. If an ingress rewrites `Host`, name the public origin in `origin` — that is a statement of what you trust, rather than a switch someone can flip.
+
+### Request bodies are capped (10 MiB default)
+
+New `bodyLimit` middleware option, `10485760` by default, `0` disables.
+Enforced **while the body streams**, never after buffering — a `readBody`-then-
+check shape provides no memory-exhaustion protection at all. Past the cap the
+body is drained and discarded with a drain ceiling, so the `413` is deliverable
+(closing a socket with unread request data makes Node emit `RST`) without
+becoming an unbounded slowloris.
+
+A `Content-Length` pre-check is not a cap, and this is measured: a `Request`
+built in JavaScript carries no `Content-Length` at all, which is the normal case
+for `app.fetch()`, Workers, Bun, Deno and serverless. The reason rpc needed its
+own limit is that `express.json({ limit })` **declines** urlencoded and
+multipart, leaving them on the stream, where a 20 MB multipart POST previously
+returned `200` with 20,971,594 bytes buffered.
+
+Per-adapter coverage is tabulated in
+[Security — Body Size Limits](./wiki/security.md#body-size-limits). Fastify is
+effectively exempt: its own parser, or its own `415`, always answers first.
+
+### Input validation via `schema`
+
+`createServerFunction` and the middleware now take a `schema` — any
+[Standard Schema](https://standardschema.dev) (zod, valibot, arktype, effect) or
+rpc's dependency-free builder. There is no per-library branch anywhere: rpc calls
+`schema["~standard"].validate()` and normalises the result.
+
+- Validated **before the handler is entered**, on both call paths — the
+  middleware *and* `createServerFunction`'s returned function, because that
+  function is also called directly by SSR and tests, which bypass the
+  middleware. Only `args[0]` is validated, and a schema on a handler declaring
+  more than one argument logs a development warning.
+- The client stub is typed from the schema's **Input** and the handler from its
+  **Output**, so a coercing schema crosses the wire uncast.
+- **422**, in both environments. It was `400` in 0.3.x, which meant a malformed
+  request and a rejected input were indistinguishable without reading prose. A
+  `400` now means only that the request could not be understood.
+- **Production keeps the paths and the hints, and drops only the validator's own
+  `message`.** The split is drawn on authorship, not on the environment: a `path`
+  names a field the caller itself supplied, and a `hint` is authored in
+  `ServerFunctionOptions`, so disclosing either was deliberate. A vendor `message`
+  is neither, and it is measurably unsafe to send — going through
+  `~standard.validate` with `name: 12345`, **valibot** answers `"Invalid type:
+  Expected string but received 12345"` while **zod** answers `"Invalid input:
+  expected string, received number"` and **arktype** answers `"name must be a
+  string (was a number)"`. Whether a message is safe depends on which library you
+  chose, which cannot be reasoned about portably, so it is withheld
+  structurally. Depending on one also couples your error text to that library's
+  release cycle.
+- **An author who writes no `hints` still gets *which field* failed** in
+  production. 0.3.x sent `{ error: "Bad Request" }` and nothing else, which made
+  a rejected form unactionable; fixing that needs no configuration.
+
+`hint`/`hints` are declarative options next to the schema, sent in **both**
+environments, and rendered by the new client helpers `fieldErrors`,
+`fieldErrorText` and `fieldErrorHint` — all of which work against a production
+body, where an issue carries no `message` and the helpers fall back to the hint.
+
+### `schema.from()` — for TypeScript 5.x and heavy vendor schemas
+
+The handler's parameter is derived with a *structural* match against the schema's
+own type, and a heavy vendor graph exceeds the instantiation budget an older
+TypeScript allows. Measured: arktype's `Type` fails on 5.9.2 with `TS2589`
+(*"Type instantiation is excessively deep and possibly infinite"*) at the
+`createServerFunction` call site, and valibot, zod and `type("string")` pass.
+`schema.from(vendorSchema)` splits one expensive inference into two cheap ones.
+It validates and converts nothing — a non-conforming schema still fails loudly
+at the first call. Type-only; not needed for rpc's own builder.
+
+This project compiles on TypeScript 7, which passes code an editor bundling TS
+5.x rejects, so `pnpm check:ts5` now type-checks the examples under a pinned
+5.9.3. It is deliberately **not** part of `pnpm lint`: the examples resolve
+`@thednp/rpc` through their installed `node_modules`, so it only works while they
+point at the repo.
+
+### Errors that explain themselves
+
+`RPCError` takes a fourth `hint` argument, and three typed subclasses exist:
+`NotFoundError`, `ForbiddenError` and `ConflictError`, each **requiring** a hint
+and carrying a status (404 / 403 / 409) so the adapter answers that instead of a
+`500`. Hints, `code` and `data` are stripped in production. `isRPCError` checks a
+`Symbol.for` brand, because a duplicated `dist` gives two module instances and
+`instanceof` then silently fails.
+
+### `onDispatch` — observing dispatches without owning your data
+
+One `DispatchContext` per dispatch on all five adapters, after the response
+settles, whatever the outcome: the resolved prefix, the matched function and its
+siblings, which origin tier decided, declared vs actual method and content type,
+the **shape** of the arguments, status, error class and duration.
+
+`argShape` never captures values — arguments routinely carry passwords — and is
+depth/key bounded and cycle-safe. A throwing hook is ignored rather than taking
+down the request it describes. The correlation `id` appears on failure bodies
+**only when a hook is registered**, so the default error body is byte-for-byte
+unchanged.
+
+**The library retains nothing**: no buffer, no ring, no TTL. A library-owned
+store was built and cut, because holding request data in the library is the exact
+risk the hook exists to let you avoid.
+
+### Built-in no-JS `<form>` fallback
+
+A function can now serve a plain HTML `<form action>` with JavaScript disabled.
+Set `fallback` and a native submission is answered with a Post/Redirect/Get
+**`303`** and the failure flashed, instead of a JSON body the browser renders
+raw.
+
+```ts
+createServerFunction("contact", handler, {
+  contentType: "application/x-www-form-urlencoded",
+  schema: schema({ email: field.string() }),
+  fallback: { to: "/contact", replay: ["email"] },
+});
+```
+
+- **A `schema` failure is flashed per field.** Validation runs in the dispatch
+  ahead of the client-error branch, so the rejected submission — the case the
+  feature exists for — reaches the browser as a redirect rather than the `422`
+  JSON. The `422` path is byte-for-byte unchanged for every other caller.
+- **Detection is the navigation, not the content type.** A form-declared function
+  is called by two clients that both send form encodings, so `Accept` /
+  `Sec-Fetch-Site` decide. A `fetch` from the generated stub still gets its
+  `422`; a `JSON`-declared function still gets `415` for a form body.
+- **Replay is opt-in and defaults to nothing.** A URL reaches browser history, the
+  `Referer` of the next navigation, and every access log in between, so `replay`
+  takes an explicit list of field names and only primitives are eligible.
+- **A genuine fault stays a `500`.** Only `RPCError` and its typed subclasses are
+  flashed; an unexpected throw is never laundered into a friendly redirect.
+- **`fallback.to` is root-relative only**, so it cannot become an open redirect.
+  For an off-origin target call `redirect()` from the request context, which takes
+  precedence over the fallback.
+- Wired into all five adapters, structurally identical in each.
+
+**New export — `@thednp/rpc/flash`.** `FLASH_PARAM`, `encodeFormFlash` and
+`decodeFormFlash` for reading a flash in the browser. It is separate from
+`@thednp/rpc/server` because a no-JS fallback has to be readable on both sides of
+the wire, and the server entry pulls in `bodyKind` and `isRPCError`. The split is
+by dependency: the codec imports nothing. The flash is capped at **4 KiB** and
+*dropped* rather than truncated past that, because the browser re-requests the
+redirect URL and it becomes a request line.
+
+Because the fallback runs inside the dispatch, it is subject to the origin check —
+unlike an app-layer middleware mounted before it, which answers a form post from
+any origin and is therefore a CSRF hole. Plan for `allowHeaderless` only when
+scripting against the endpoint (a browser navigation already supplies `Origin`), and **preserve `Host`** through any proxy (see below).
+
+- **The documentation understated the origin check.** `wiki/security.md`,
+  `AGENTS.md`, `llms.txt` and this changelog all said `"self"` "compares host
+  only". It compares host **and port**, with only *default* ports normalised. The
+  claim is what made a proxied deployment's bare `403 {"error":"Forbidden"}`
+  look like a bug rather than a rule: with Vite's `preview.proxy` at
+  `changeOrigin: true`, a browser `Origin` of `http://localhost:5173` was compared
+  against a rewritten `Host` of `localhost:3000`. Same request with `Host`
+  preserved: `303`. The behaviour is unchanged and was always deliberate and
+  tested; the docs now state it, name the `changeOrigin` trap, and record the one
+  asymmetry — the **scheme** is not compared, so same-host/different-scheme is
+  accepted (HSTS closes most of that in practice).
+- **A handler's own redirect was overwritten by the fallback.** The success path
+  assigned `requestEvent.redirected` unconditionally, so a handler that called
+  `redirect()` from the request context had its target silently replaced by
+  `fallback.to`. All five adapters now leave a handler redirect alone.
+- **The demo taught the app-layer pattern.** `demo/src/lib/form-fallback.ts` was
+  mounted *before* the RPC middleware, which is exactly the arrangement that
+  bypasses the origin check, and `wiki/nojs-fallback.md` documented it. The demo
+  now uses `fallback` on `submit-contact` — on `urlencoded` for both clients, so
+  it is also the worked example of why the discriminator cannot be the content
+  type — and the page is rewritten around the built-in.
+
+### Fixed
+
+- **`bodyLimit` did not apply to declared-JSON on Hono.** `readBody` returned
+  early through `c.req.json()`, which reads the stream itself and sits on no
+  capped path — so JSON, which is what every client stub sends, was uncapped
+  while every other content type and the identical body on h3 were capped.
+  Measured at `bodyLimit: 64` with a 4 KB body: Hono `200`, h3 `413`. It shipped
+  at 100% line coverage because the Hono suite had **no `bodyLimit` test at all**
+  — coverage measured that the branch ran, not that it bounded anything. JSON now
+  takes the same capped read as h3, and the two genuinely uncappable paths (a
+  body `@hono/node-server` or a host middleware already buffered) are documented
+  as such.
+- **The schema's transforms never ran on a direct call.** Only the schema's
+  output replaced the raw argument on the HTTP path, so `add({ a: "2", b: "40" })`
+  returned `"240"` in-process and `42` over HTTP. Both paths now validate, so
+  behaviour no longer depends on how a function was invoked.
+
+### Also in this release
+
+- `onDispatch` reports `describeOriginRequest` — which tier decided — so a `403`
+  is diagnosable without guessing.
+- Generic `404` bodies never echo the requested function name. The status still
+  distinguishes unknown from known functions; names ship in the client bundle
+  and are not secret.
+- `getFunctionsForPrefix` dispatches all five adapters, so parallel RPC
+  instances can coexist on their own prefixes.
+- `llms.txt` and the wiki document `schema.from`, the typed errors, the client
+  field helpers, the arity warning and `onDispatch`.
+
 ## [0.3.7] - 2026-09-27
 
 A correctness pass over the transport, found by auditing the codebase against its
@@ -110,7 +334,7 @@ One related thing was investigated and deliberately left alone: a config file th
 - **`AGENTS.md` — the deferred-findings section became a *Fixed in 0.3.7* section** once the two prefix bugs landed, so it now documents the guardrails instead of the open questions: `resolveRPCPrefix()` is the single resolution point and a local `a || b || c` in an adapter is a regression; the removed default injection is *why* the `|| getGlobalPrefix()` fallback was unreachable; the boundary regex must be built from the resolved prefix but still gated on an explicitly-supplied one, because building it unconditionally would start gating a bare `createMiddleware({ path, handler })`; and a throwing config file still resets the `RPCConfig` cache, deliberately. It also keeps the coverage lesson that let both bugs through at 100%.
 - **`wiki/middleware.md` — the framework-agnostic alternative to the `locals` bridge.** The page documented per-adapter recipes for reaching pre-dispatch framework state, but on Fastify and Hono those are five separate code paths with no coverage, and Fastify has no per-request store to bridge at all. New *The Framework-Agnostic Alternative: Handler Wrappers* section documents the part of the contract that actually carries: `event.locals` is a mutable object rpc passes into the request context, so a handler wrapper can resolve per-request data and store it there — identically on all five adapters, with no framework imports and no new rpc API. Includes a signed-cookie session worked example, a "when to use which" split against the framework-middleware path, and the honest tradeoff (a wrapper runs per function call, so request-pipeline concerns still belong in real framework middleware). The Fastify/Hono note now points at it as the better default
 - **New `wiki/comparison.md`** — the cross-origin / CSRF boundary compared against Next.js Server Actions, TanStack Start, SvelteKit, and tRPC, with a section covering Vike and Telefunc. Verified against vendor documentation on 2026-09-27 rather than written from memory, which changed several conclusions: TanStack's `createCsrfMiddleware` is auto-installed and **fails closed**; Next.js shipped `GHSA-mq59-m269-xvcx` for treating `origin: null` as missing (rpc rejects it by default); tRPC shipped `CVE-2025-68130` for prototype pollution via FormData keys (rpc's urlencoded path is verified immune). Measured against TanStack's documented algorithm, rpc is **stricter in three cases** — an untrusted `Origin` claiming `Sec-Fetch-Site: same-origin`, `Origin: null`, and lookalike hosts — because checking `Origin` first is what closes them, and more permissive in two, both deliberate (the allowlisted sibling, and the headerless curl case)
-- Framed as *fail-open by default, strictest-once-configured, multi-origin without a proxy* — with `Where the trade costs you` keeping the real sharp edges (case-sensitive origin matching, literal origins only, no automatic input validation, deliberate `Referer` omission). Linked from all 13 other wiki pages, `wiki/index.md`, `AGENTS.md`, and `llms.txt`; the `AGENTS.md` entry warns future agents to read it before writing security copy
+- Framed as *secure by default, strictest-once-configured, multi-origin without a proxy* — with `Where the trade costs you` keeping the real sharp edges (case-sensitive origin matching, literal origins only, no automatic input validation, deliberate `Referer` omission). Linked from all 13 other wiki pages, `wiki/index.md`, `AGENTS.md`, and `llms.txt`; the `AGENTS.md` entry warns future agents to read it before writing security copy
 - Two broken wiki anchors fixed: `client-usage.md#native-http-clients--unwrapenvelopet` and the tier-order slug in `comparison.md`. A link/anchor pass validates all 47.
 
 ## [0.3.6] - 2026-09-27
@@ -136,13 +360,13 @@ additive expansion of the adapter type exports.
 
 Wrapper libraries must be able to annotate apps, requests, responses, `next` functions and middleware **without depending on the framework**. The 0.3.2 re-exports were incomplete and irregular, so each adapter exposed a different shape. Now uniform and additive:
 
-| Adapter  | App (new)   | Request (new)             | Response (new)                | `next` (new)                       |
-| -------- | ----------- | ------------------------- | ----------------------------- | ---------------------------------- |
-| express  | `ExpressApp` | — (`ExpressRequest`)       | — (`ExpressResponse`)         | — (`ExpressNext`)                  |
-| fastify  | `FastifyApp` | — (`FastifyRequest`)      | `FastifyResponse`             | `FastifyNext`                      |
-| hono     | `HonoApp`    | `HonoRequest`             | `HonoResponse`                | `HonoNext`                         |
-| koa      | `KoaApp`     | `KoaRequest`              | `KoaResponse`                 | — (`KoaNext`)                      |
-| h3       | — (`H3App`) | `H3Request`               | `H3Response`                  | `H3Next`                           |
+| Adapter | App (new)    | Request (new)        | Response (new)        | `next` (new)      |
+|---------|--------------|----------------------|-----------------------|-------------------|
+| express | `ExpressApp` | — (`ExpressRequest`) | — (`ExpressResponse`) | — (`ExpressNext`) |
+| fastify | `FastifyApp` | — (`FastifyRequest`) | `FastifyResponse`     | `FastifyNext`     |
+| hono    | `HonoApp`    | `HonoRequest`        | `HonoResponse`        | `HonoNext`        |
+| koa     | `KoaApp`     | `KoaRequest`         | `KoaResponse`         | — (`KoaNext`)     |
+| h3      | — (`H3App`)  | `H3Request`          | `H3Response`          | `H3Next`          |
 
 - **`next` was missing on 3 of 5 adapters** — `createMiddleware` accepts a `HookHandlerDoneFunction` (Fastify), a `Next` (Hono) and a `next` callback (h3), and none of those types were exported, so a wrapper could not type a composed handler
 - **Hono had no request type.** Only `HonoContext` was exported, forcing consumers to cast the request object structurally
@@ -253,7 +477,7 @@ Wrapper libraries must be able to annotate apps, requests, responses, `next` fun
 
 ### Docs
 
-- `wiki/adapters.md` **Serverless section rewritten** around two rules: (1) import `defineConfig` from `@thednp/rpc/config`, never the main entry, with the cold-start crash explained; (2) set the prefix at the top of `src/api/server.ts`; references the working [demo/netlify/functions/rpc.ts](../demo/netlify/functions/rpc.ts) and keeps `netlify.toml external_node_modules = ["vite"]` documented as a size optimization
+- `wiki/adapters.md` **Serverless section rewritten** around two rules: (1) import `defineConfig` from `@thednp/rpc/config`, never the main entry, with the cold-start crash explained; (2) set the prefix at the top of `src/api/server.ts`; references the working [demo/netlify/functions/rpc.ts](./demo/netlify/functions/rpc.ts) and keeps `netlify.toml external_node_modules = ["vite"]` documented as a size optimization
 - `wiki/configuration.md` — `defineConfig` section documents the `/config` subpath and why the main entry must never be imported server-side
 - `README.md`, `wiki/quickstart.md`, `wiki/getting-started.md` — all `rpc.config.ts` snippets switched to `@thednp/rpc/config`
 - `AGENTS.md` — h3 added to the adapter list and body-size-limits row (`bodyLimit`/`assertBodySize`); build output table gains `dist/config/config.mjs`
@@ -328,9 +552,11 @@ Wrapper libraries must be able to annotate apps, requests, responses, `next` fun
 ### Docs
 
 - **New `wiki/middleware.md`** — universal adapter-agnostic middleware via the request context: the `locals` bridge table (Express `res.locals`, Koa `ctx.state`, h3 `event.context`, Fastify/Hono `{}` with `decorateRequest`/`c.set` workarounds), `getRequestMeta`, `functionName`, `sendResponse` per-adapter mapping, and wrap recipes for official framework middleware (Express session, Koa `ctx.state`, h3 `event.context`, Fastify `decorateRequest`, Hono `c.set`/`c.get`)
-- TOC sweep: `- [Middleware](./middleware.md)` entry added to all 11 wiki pages after Server Functions; cross-linked from `server-functions.md` (RequestEvent shape + "Writing Universal Middleware" section), `best-practices.md` (Authentication, Rate Limiting), and `adapters.md`; `wiki/index.md` updated
+- TOC sweep: `- [Middleware](wiki/middleware.md)` entry added to all 11 wiki pages after Server Functions; cross-linked from `server-functions.md` (RequestEvent shape + "Writing Universal Middleware" section), `best-practices.md` (Authentication, Rate Limiting), and `adapters.md`; `wiki/index.md` updated
 - Update `wiki/server-functions.md` RequestEvent reference for `send`/`sent`/`functionName` and re-point its "Next" pointer to `middleware.md`
-- `wiki/nojs-fallback.md`: explain the form markup and detection rule without embedding the whole `createFormFallback` implementation (now links to `demo/src/lib/form-fallback.ts`)
+- `wiki/nojs-fallback.md`: explain the form markup and detection rule without embedding the whole `createFormFallback` implementation   `demo/src/lib/form-fallback.ts` at the time (now retired as
+  `demo/src/lib/form-fallback.ts` after 0.4.0 replaced it with the built-in
+  `fallback`)
 - `wiki/adapters.md`: replace the h3 body-limit snippet with h3's native `assertBodySize` pattern (bounded stream, never buffered) and add a **Static Assets** section for the extracted `serveStatic` middleware; `wiki/best-practices.md` h3 body limit now recommends `assertBodySize` and warns against iterating `event.req` (which breaks the RPC `readBody` with "Body is unusable")
 - Update `AGENTS.md` (9 examples, h3 adapter, test files table), `llms.txt`, and `README.md` (five adapters, 10 test files, `nojs-fallback` doc link, `pmpm` → `pnpm` typo) for the new adapter, examples, and context API
 - Example READMEs: add the `wiki/middleware.md` resource link to all 9 example READMEs; rewrite `examples/solid-query/README.md` (was a copy-paste of the react-query README — now describes Solid's `createQuery`/`createMutation`, `renderToStringAsync` SSR, and the disabled-query gotcha); expand the h3 example README's production flow for the extracted `bodyLimit`/`serveStatic` middleware

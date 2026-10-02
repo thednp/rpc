@@ -86,7 +86,7 @@ export default defineConfig({
 });
 ```
 
-Currently `@thednp/rpc` supports `'express'`, `'fastify'`, `'hono'` and `'koa'`. See [Adapters](./adapters.md) for the setup of each, and [Configuration](./configuration.md) for all available options.
+Currently `@thednp/rpc` supports `'express'`, `'fastify'`, `'hono'`, `'koa'`, and `'h3'`. See [Adapters](./adapters.md) for the setup of each, and [Configuration](./configuration.md) for all available options.
 
 
 ### 2. Add the plugin to `vite.config.ts`
@@ -186,5 +186,5 @@ await attachRPC(app);  // production — mounts createRPCMiddleware() with the r
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

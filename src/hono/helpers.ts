@@ -9,8 +9,8 @@ import type {
 } from "hono/utils/http-status";
 import type { BodyResult } from "@thednp/rpc";
 import type { IncomingWithBody } from "./types.d.ts";
+import { parseRawBody, preParsedBody, readWebBody } from "../body.ts";
 import { createMiddleware } from "hono/factory";
-import { httpError, isClientHttpError } from "../server-helpers.ts";
 import { createRPCMiddleware } from "./createMiddleware.ts";
 
 /**
@@ -98,76 +98,86 @@ export const viteMiddleware = (
 };
 
 /**
+ * The keys Hono can cache a request body under, each holding a promise.
+ *
+ * Structural rather than imported: Hono's `BodyCache` is a local alias in
+ * `hono/types` and is not exported, so naming it would couple rpc to an
+ * internal. The union is derived from the Web `Body` mixin, which is the spec
+ * surface it mirrors.
+ */
+type BodyCache = Partial<
+  Record<
+    "text" | "json" | "arrayBuffer" | "blob" | "formData",
+    Promise<unknown>
+  >
+>;
+
+/**
  * Reads and parses the HTTP request body from a Hono context.
- * Supports JSON and text content types, with pre-parsed body detection for server-side environments.
+ *
+ * Two paths, in order. A body some earlier layer has already buffered takes the
+ * pre-parsed path; anything still on the wire takes {@link readWebBody}, which is
+ * the same capped read h3 uses. JSON is not special-cased — see below.
+ *
  * @param c - Hono request context
+ * @param limit - byte cap enforced while the body streams
  * @returns A promise resolving to the parsed body with its content type
  */
 export const readBody = async (
   c: Context,
+  limit?: number,
 ): Promise<BodyResult> => {
-  const contentType = c.req.header("content-type")?.toLowerCase() || "";
-  const isJSON = contentType.includes("json");
-  const isMultipart = contentType.includes("multipart/form-data");
-  const isUrlEncoded = contentType.includes("urlencoded");
-  // `c.env` is only populated by @hono/node-server. On every other runtime
-  // Hono supports — Cloudflare Workers, Bun, Deno, and Hono's own
-  // `app.fetch()` — it is undefined, and reading `.incoming` off it threw a
-  // TypeError that the dispatch reported as a 500 for *every* request,
-  // including well-formed ones. Optional chaining makes the pre-parsed path
-  // simply not apply there, which is correct: those runtimes have no
-  // node IncomingMessage to read a pre-parsed body from.
+  const declared = c.req.header("content-type");
+
+  // Under @hono/node-server the Node body parser has already run and left the
+  // decoded body on `c.env.incoming`. `c.env` is optional — Workers, Bun, Deno,
+  // serverless adapters, and `app.fetch()` all leave it undefined.
   const incoming = (c.env as HttpBindings | undefined)?.incoming as
     | IncomingWithBody
     | undefined;
   if (incoming?.body !== undefined) {
-    const reqBody = incoming.body;
-    return {
-      contentType: isMultipart
-        ? "multipart/form-data"
-        : isJSON
-        ? "application/json"
-        : isUrlEncoded
-        ? "application/x-www-form-urlencoded"
-        : "text/plain",
-      data: isMultipart
-        ? (reqBody as Record<string, unknown>)
-        : isJSON
-        ? reqBody
-        : isUrlEncoded
-        ? (reqBody as Record<string, unknown>)
-        : String(reqBody),
-    } as BodyResult;
-  }
-  if (isJSON) {
-    try {
-      const data = await c.req.json();
-      return {
-        contentType: "application/json",
-        data,
-      };
-    } catch (err) {
-      // Hono has no opinion here (its maintainers declined to own this in
-      // honojs/hono#578), so a malformed body arrived as a bare SyntaxError
-      // and was reported as a 500. Tag it so the dispatch answers 400, which
-      // is what every other supported host does.
-      throw isClientHttpError(err) ? err : httpError(400, "Invalid JSON body");
-    }
+    return preParsedBody(incoming.body, declared);
   }
 
-  const text = await c.req.text();
-  return {
-    contentType: isMultipart
-      ? "multipart/form-data"
-      : isUrlEncoded
-      ? "application/x-www-form-urlencoded"
-      : "text/plain",
-    data: isMultipart
-      ? ({ raw: text } as Record<string, unknown>)
-      : isUrlEncoded
-      ? Object.fromEntries(new URLSearchParams(text))
-      : String(text),
-  } as BodyResult;
+  // Hono's own body cache, populated when a host middleware has already read
+  // the body. Reading `c.req.raw` here would hit a consumed stream, and
+  // `c.req.json()`'s cache lookup accepts a body cached under *any* key, so the
+  // same union is what it would have found. A cap cannot apply to an
+  // already-buffered body, on this path or the one above; the host's own limit
+  // is the only thing that can bound it.
+  //
+  // The cached form depends on which accessor ran, and Hono caches the *raw*
+  // body under a body-form key: `c.req.json()` stores the text under `text` and
+  // parses it itself afterwards. So `json` holds an already-parsed value and
+  // every other key holds raw bytes, and they need different treatment — passing
+  // the text to `preParsedBody` would hand the caller a string and silently lose
+  // the object.
+  const cache = c.req.bodyCache as BodyCache | undefined;
+  for (const key of Object.keys(cache ?? {}) as (keyof BodyCache)[]) {
+    const cached = await (cache as Record<string, Promise<unknown>>)[key];
+    // Dispatch on the cached form, not on the key: `json` is the one key that
+    // holds an already-parsed value, while every other form holds raw bytes that
+    // still have to be parsed against the declared type. A previous version
+    // special-cased `json` before the loop and skipped it inside; both were
+    // unreachable, since the early return meant the loop never saw a `json`
+    // entry. Hono's own `#cachedBody` accepts whichever form happens to be
+    // cached, and so does this.
+    if (typeof cached === "string") return parseRawBody(cached, declared);
+    return preParsedBody(cached, declared);
+  }
+
+  // Everything else, JSON included, goes through the capped read.
+  //
+  // This used to return early for declared-JSON via `c.req.json()`, on the
+  // reasonable-sounding grounds that a 4xx Hono had already classified should
+  // keep its status. But `c.req.json()` reads the stream itself, and no cap
+  // lives on that path — so `bodyLimit` silently did not apply to JSON on Hono
+  // while it applied to every other content type and to the same body on h3.
+  // Measured: a body 4x over the limit returned 200 with the payload parsed,
+  // where h3 returned 413. The cap is the load-bearing part; the status
+  // provenance was cosmetic, and `parseRawBody` answers malformed JSON with
+  // the same 400 either way.
+  return readWebBody(c.req.raw, declared, { limit });
 };
 
 /**

@@ -1,3 +1,4 @@
+import { DEFAULT_BODY_LIMIT } from "./constants.ts";
 import type {
   MiddlewareOptions,
   RpcPluginOptions,
@@ -37,9 +38,21 @@ export const defaultRPCOptions: RpcPluginOptions = {
  * `defaultPrefix` on purpose: leaving it unset lets `resolveRPCPrefix` fall
  * through to the global prefix, which is what makes a published global prefix
  * reach the middleware.
+ *
+ * `origin` is the opposite case, and deliberately so: it defaults to the secure
+ * `"self"` policy rather than to "no check", so an RPC endpoint created with no
+ * options at all is cross-origin protected. `allowHeaderless` defaults to
+ * `false` for the same reason — headerless clients are opt-in.
+ *
+ * Neither default is a bypass. `Object.assign(defaults, options)` copies an
+ * explicit `origin: undefined` over the default, so `isOriginRequestAllowed`
+ * also resolves an absent policy to `"self"` itself. Two independent guards,
+ * because a security default that one merge call can erase is not a default.
  */
 export const defaultMiddlewareOptions: MiddlewareOptions = {
   rpcPrefix: undefined,
   path: undefined,
-  origin: undefined,
+  origin: "self",
+  allowHeaderless: false,
+  bodyLimit: DEFAULT_BODY_LIMIT,
 };

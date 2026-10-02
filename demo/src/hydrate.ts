@@ -5,6 +5,7 @@ import {
   CONTACT_FIELDS,
   parseFormState,
 } from "./lib/contact-form.ts";
+import type { ContactOutput } from "./lib/contact-form.ts";
 
 export const setupReveal = () => {
   const elements = document.querySelectorAll(".reveal");
@@ -143,10 +144,16 @@ export const setupContact = (form: HTMLFormElement) => {
     spinner.classList.remove("hidden");
     button.classList.add("btn-disabled");
 
-    const formData = new FormData(form);
+    // A plain object, not a `FormData`: the function declares urlencoded, so both
+    // clients now send the same encoding and the server can read the fields
+    // directly instead of hand-parsing a multipart body.
+    const raw = new FormData(form);
+    const payload = Object.fromEntries(
+      CONTACT_FIELDS.map((field) => [field, String(raw.get(field) ?? "")]),
+    ) as ContactOutput;
 
     try {
-      const { data } = submitContact(formData);
+      const { data } = submitContact(payload);
       const res = await data;
 
       if (res.status === "ok") {
@@ -170,12 +177,12 @@ export const setupContact = (form: HTMLFormElement) => {
           githubBox.classList.add("hidden");
         }
 
-        const fields = Object.fromEntries(
-          Array.from(formData.entries()).map(([key, value]) => [
-            key,
-            String(value),
-          ]),
-        );
+          // An explicit loop rather than `Object.fromEntries(entries().map(…))`:
+          // that chain widens the tuple to `unknown[]` and loses the record type.
+          const fields: Record<string, string> = {};
+          for (const [key, value] of raw.entries()) {
+            fields[key] = String(value);
+          }
         const issueUrl = buildIssueUrl(fields, ghLogin);
 
         successText.textContent = `Message received — ticket ${res.ticket}. We'll get back to you at ${new Date(
@@ -209,9 +216,9 @@ export const setupContact = (form: HTMLFormElement) => {
 };
 
 /**
- * Recovers a nojs form submission. When the server PRG-redirects back with
- * `?name=..&errors=..` we re-fill the fields and surface the same field-level
- * error messages the RPC path would have returned. Works whether the page was
+ * Recovers a nojs form submission. When the server PRG-redirects back with a
+ * `__flash` parameter, we re-fill the allowlisted fields and surface the
+ * corresponding static field-level messages. Works whether the page was
  * server-rendered with state or hydrated from the URL.
  */
 export const setupContactRecovery = (form: HTMLFormElement) => {

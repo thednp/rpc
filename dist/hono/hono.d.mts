@@ -139,11 +139,16 @@ export declare const viteMiddleware: (vite: ViteDevServer) => ReturnType<typeof 
 }>>;
 /**
  * Reads and parses the HTTP request body from a Hono context.
- * Supports JSON and text content types, with pre-parsed body detection for server-side environments.
+ *
+ * Two paths, in order. A body some earlier layer has already buffered takes the
+ * pre-parsed path; anything still on the wire takes {@link readWebBody}, which is
+ * the same capped read h3 uses. JSON is not special-cased — see below.
+ *
  * @param c - Hono request context
+ * @param limit - byte cap enforced while the body streams
  * @returns A promise resolving to the parsed body with its content type
  */
-export declare const readBody: (c: Context) => Promise<BodyResult>;
+export declare const readBody: (c: Context, limit?: number) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect on a Hono context. Hono's `c.redirect(location,
  * status)` returns a `Response` object that the handler must return (it never

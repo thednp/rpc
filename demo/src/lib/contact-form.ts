@@ -1,9 +1,10 @@
 /**
  * Shared contact-form logic used by the RPC server function, the demo
- * renderer, the client-side hydrate, and the app-layer nojs fallback.
- * Everything here is pure and framework-agnostic so all four callers
+ * renderer, and the client-side hydrate.
+ * Everything here is pure and framework-agnostic so all three callers
  * validate with the exact same schema and build identical issue URLs.
  */
+import { FLASH_PARAM, decodeFormFlash } from "@thednp/rpc/flash";
 import * as v from "valibot";
 
 /** Field names the contact form submits, in display order. */
@@ -50,24 +51,13 @@ export const ContactSchema = v.object({
 });
 
 /**
- * Parses a raw multipart body into plain fields. Text-only parts are kept;
- * file parts are skipped.
+ * The validated shape the server function's handler receives.
+ *
+ * Derived from {@link ContactSchema} rather than written out, so the two cannot
+ * drift: `schema` transforms before the handler is entered, which is what makes
+ * the trimmed values available here without a cast.
  */
-export const parseMultipartFormData = (raw: string): Record<string, string> => {
-  const boundary = raw.match(/^--([^\r\n]+)/)?.[1];
-  if (!boundary) return {};
-  const result: Record<string, string> = {};
-  for (const part of raw.split(`--${boundary}`).slice(1)) {
-    const trimmed = part.replace(/^--/, "").replace(/^\r?\n/, "");
-    const separator = trimmed.indexOf("\r\n\r\n");
-    if (separator === -1) continue;
-    const headers = trimmed.slice(0, separator);
-    const nameMatch = headers.match(/name="([^"]+)"/);
-    if (!nameMatch || headers.includes("filename=")) continue;
-    result[nameMatch[1]] = trimmed.slice(separator + 4).replace(/\r?\n$/, "");
-  }
-  return result;
-};
+export type ContactOutput = v.InferOutput<typeof ContactSchema>;
 
 /** Result of a contact form validation attempt. */
 export type ContactValidation =
@@ -76,8 +66,8 @@ export type ContactValidation =
 
 /**
  * Validates a flat field record against the shared schema.
- * Mirrors the shape produced by `v.flatten` so both the RPC path and the
- * nojs fallback return the same error object.
+ * Mirrors the shape produced by `v.flatten` so direct uses and rendered
+ * recovery state share the same field-level error object.
  */
 export const validateContactForm = (
   fields: Record<string, string>,
@@ -132,7 +122,7 @@ export const buildIssueUrl = (
   return `https://github.com/thednp/rpc/discussions/new?category=general&${params.toString()}`;
 };
 
-/** Parsed form state recovered from a `?name=..&errors=..` query string. */
+/** Parsed form state recovered from a `__flash` query parameter. */
 export type FormState = {
   values: Partial<Record<(typeof CONTACT_FIELDS)[number], string>>;
   errors: string[];
@@ -145,17 +135,28 @@ export type FormState = {
  */
 export const parseFormState = (query: string): FormState => {
   const params = new URLSearchParams(query);
+  // The failure travels in a single `__flash` parameter written by the built-in
+  // fallback, decoded with the client-safe codec so this works in the browser as
+  // well as during SSR.
+  const flash = decodeFormFlash(params.get(FLASH_PARAM));
   const values: FormState["values"] = {};
-  for (const field of CONTACT_FIELDS) {
-    const value = params.get(field);
-    if (value) values[field] = value;
+  if (flash?.values) {
+    // Whitelisted against the known fields even though rpc already allowlisted
+    // them: these values arrived in a URL, so they are still untrusted input, and
+    // this is where a crafted link would be caught.
+    for (const field of CONTACT_FIELDS) {
+      const value = flash.values[field];
+      if (typeof value === "string" && value) values[field] = value;
+    }
   }
-  const rawErrors = params.get("errors")?.split(",").filter(Boolean) ?? [];
-  const errors = rawErrors.filter((field) =>
-    CONTACT_FIELDS.includes(field as never) && CONTACT_ERROR_MESSAGES[field]
-  );
+  const errors = flash?.errors
+    ? Object.keys(flash.errors).filter((field) =>
+      CONTACT_FIELDS.includes(field as never)
+    )
+    : [];
   return { values, errors };
 };
+
 
 /** Escapes a string for safe injection into SSR HTML. */
 export const escapeHtml = (value: string): string =>

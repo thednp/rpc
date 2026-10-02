@@ -8,6 +8,16 @@
 // Use named re-exports to avoid Rolldown's ambiguous star-export error when
 // multiple files share the same prefix — each file's virtual module contains
 // all prefix functions.
-export { add, getServerTime, getUser, sayHi } from "./public.server";
-export { login, logout, me } from "./auth.server";
-export type * from "./types";
+export {
+  add,
+  getServerTime,
+  getUser,
+  profileWithArktype,
+  profileWithEffect,
+  profileWithValibot,
+  profileWithZod,
+  sayHi,
+  selectValidator,
+} from "./public.server.ts";
+export { login, logout, me } from "./auth.server.ts";
+export type * from "./types.d.ts";

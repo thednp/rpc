@@ -2,6 +2,15 @@
 
 A Vite plugin for creating server-safe Remote Procedure Calls (RPC). Server functions are auto-scanned from a dedicated file and transformed into client-side fetch modules — no manual API route setup.
 
+## What 0.4.0 adds
+
+If you are upgrading from 0.3.x, three things changed behaviour and one is new:
+
+- **Cross-origin protection is on by default** (`origin: "self"`), and requests with neither `Origin` nor `Sec-Fetch-Site` are rejected. This is **breaking** for headerless `curl`/native clients — see [Security — Origin Validation](./security.md#origin-validation) and set `allowHeaderless: true` for those. A browser's native `<form>` navigation sends `Origin` and is checked like any other request.
+- **Request bodies are capped** at 10 MiB (`bodyLimit`), on the paths rpc reads itself. Before this the raw-stream path had no cap at all.
+- **Input validation via `schema`**, taking any [Standard Schema](https://standardschema.dev) — zod, valibot, arktype, effect — or rpc's dependency-free builder. A rejected input is a `422` naming the field that failed; production keeps `path`/`hint` and drops the validator's own `message`. See [Server Functions — Input Validation](./server-functions.md#input-validation).
+- **`onDispatch` is new**: one redacted record per dispatch, with the library retaining nothing. See [Observing Dispatches](./middleware.md#observing-dispatches-ondispatch).
+
 ## How to follow this guide
 
 The pages below follow a natural learning sequence — each ends with a **Next** pointer. Every page is self-contained, and the footer links on every page let you jump anywhere anytime.
@@ -21,3 +30,4 @@ The pages below follow a natural learning sequence — each ends with a **Next**
 - [Security](./security.md) — Security hardening
 - [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices
+- [Migration](./migration.md) — Upgrading an existing 0.3.x install, or coming from another RPC framework

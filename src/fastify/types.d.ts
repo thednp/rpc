@@ -71,7 +71,7 @@ export interface FastifyMiddlewareHooks {
  * instances, requests, and replies without a direct dependency on fastify
  * types.
  */
-import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
+import type { RequestDetails, ResponseDetails } from "../adapter-types.d.ts";
 
 /**
  * Normalized request/response shapes, shared with every adapter so a wrapper

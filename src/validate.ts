@@ -1,13 +1,11 @@
 import type { Credentials } from "./types.d.ts";
-import { INVALID_IDENTIFIER, INVALID_PATH_SEGMENT } from "./constants.ts";
-
-const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/;
-const CREDENTIALS_VALUES: readonly Credentials[] = [
-  "same-origin",
-  "include",
-  "omit",
-];
+import {
+  CREDENTIALS_VALUES,
+  INVALID_IDENTIFIER,
+  INVALID_PATH_SEGMENT,
+  SAFE_IDENTIFIER,
+  SAFE_PATH_SEGMENT,
+} from "./constants.ts";
 
 /**
  * Validates that a string is a safe JavaScript identifier.

@@ -1,12 +1,12 @@
-import { createServerFunction } from "@thednp/rpc/server";
+import { createServerFunction, getRequestContext } from "@thednp/rpc/server";
 import pkg from "../../package.json" with { type: "json" };
 import rootPkg from "../../../package.json" with { type: "json" };
 import cfg from "../../rpc.config.ts";
 
 import {
-  CONTACT_FIELDS,
-  parseMultipartFormData,
-  validateContactForm,
+  buildIssueUrl,
+  ContactSchema,
+  type ContactOutput,
 } from "../lib/contact-form";
 
 // Serverless requires explicit handling
@@ -116,33 +116,37 @@ const fetchGitHubUserByEmail = async (
   }
 };
 
+/**
+ * Issues a redirect when this call is inside a request, and does nothing when it
+ * is not.
+ *
+ * `getRequestContext()` throws outside a dispatch by design — per-request data
+ * does not exist in a direct call — and `submitContact` is called directly by SSR
+ * and by tests, so the absence of a context is normal here rather than an error.
+ */
+const redirectTo = (location: string) => {
+  try {
+    getRequestContext().redirect(location);
+  } catch {
+    // No request context: the caller wanted the result, not a redirect.
+  }
+};
+
 export const submitContact = createServerFunction(
   "submit-contact",
-  async (signal, payload: FormData): Promise<ContactResult> => {
+  // The validated output, not the raw body: `schema` transforms before the handler
+  // is entered, so `payload` is already trimmed and typed. That is the point of
+  // validating at the boundary rather than inside the function.
+  async (signal, payload: ContactOutput): Promise<ContactResult> => {
     await new Promise((res) => setTimeout(res, 600));
-    const candidate = payload as FormData & {
-      raw?: string;
-      name?: string;
-    };
-    // Multipart (JS client) carries { raw }; urlencoded (curl/nojs direct
-    // posts) carries the fields as a plain object. Normalize to flat fields.
-    const fieldsSource = candidate.raw
-      ? parseMultipartFormData(candidate.raw)
-      : (payload as unknown as Record<string, unknown>);
-    const parsed = Object.fromEntries(
-      CONTACT_FIELDS.map((field) => [
-        field,
-        String(fieldsSource[field] ?? ""),
-      ]),
-    );
-    const valid = validateContactForm(parsed);
     signal?.throwIfAborted();
-    if (!valid.ok) {
-      return { status: "error", errors: valid.errors } as ContactResult;
-    }
-    signal?.throwIfAborted();
+    const githubUser = await fetchGitHubUserByEmail(payload.email, signal);
 
-    const githubUser = await fetchGitHubUserByEmail(valid.output.email, signal);
+    // The success redirect is the *handler's*, not the fallback's: the target is
+    // off-origin, and `fallback.to` is deliberately restricted to root-relative
+    // paths so an author cannot turn it into an open redirect. This is also the
+    // documented precedence — a handler redirect wins over the fallback.
+    redirectTo(buildIssueUrl({ ...payload, ghLogin: githubUser ? `@${githubUser.login}` : "" }) + "#contact");
 
     return {
       status: "ok",
@@ -151,5 +155,20 @@ export const submitContact = createServerFunction(
       githubUser,
     } as ContactResult;
   },
-  { contentType: "multipart/form-data" },
+  {
+    // urlencoded for *both* clients now, which is what makes the no-JS
+    // fallback's discriminator non-obvious: the generated stub and a native
+    // `<form>` send the same encoding, so only `Accept` / `Sec-Fetch-*` can tell
+    // a navigation from an RPC call.
+    contentType: "application/x-www-form-urlencoded",
+    schema: ContactSchema,
+    fallback: {
+      // Where a *failed* submission lands: back on the demo page, which reads the
+      // flash out of `__flash`. Root-relative on purpose — see the handler above.
+      to: "/",
+      // Replay only what is safe in a URL: a title and a message body are not,
+      // so they are dropped and the user retypes those two.
+      replay: ["name", "email", "topic"],
+    },
+  },
 );

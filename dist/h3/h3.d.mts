@@ -148,7 +148,7 @@ export declare const viteMiddleware: (vite: ViteDevServer) => Middleware;
  * @param event - h3 event object
  * @returns A promise resolving to the parsed body with its content type
  */
-export declare const readBody: (event: H3Event$1) => Promise<BodyResult>;
+export declare const readBody: (event: H3Event$1, limit?: number) => Promise<BodyResult>;
 /**
  * Issues an HTTP redirect. h3's `redirect()` returns an `HTTPResponse`
  * object that the handler must return (it never writes directly). Defaults

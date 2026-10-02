@@ -1,24 +1,28 @@
 // src/koa/helpers.ts
-import type { Buffer } from "node:buffer";
 import type { ViteDevServer } from "vite";
-import { createRPCMiddleware } from "./createMiddleware.ts";
-import { httpError } from "../server-helpers.ts";
-import type { BodyResult } from "@thednp/rpc";
+import type { BodyResult, MiddlewareOptions } from "@thednp/rpc";
 import type { Koa, KoaContext } from "./types.d.ts";
+import { preParsedBody, readStream } from "../body.ts";
+import { createRPCMiddleware } from "./createMiddleware.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to a Koa app.
  * Dynamically imports loadRPCConfig and registers the middleware.
  * @param app - Koa application instance
  */
-export async function attachRPC(app: Koa) {
+export async function attachRPC(
+  app: Koa,
+  overrides?: MiddlewareOptions<"koa">,
+) {
   // The main plugin entry statically imports Vite, so loadRPCConfig is
   // imported lazily: function bundles that never call attachRPC (e.g.
   // serverless functions) keep Vite out of the bundle (or externalized).
   const { loadRPCConfig } = await import("@thednp/rpc");
 
   const options = await loadRPCConfig();
-  app.use(createRPCMiddleware(options));
+  // Explicit arguments win over the config file, so a host can adjust one
+  // option without discarding everything `rpc.config.ts` declared.
+  app.use(createRPCMiddleware({ ...options, ...overrides }));
 }
 
 /**
@@ -67,119 +71,18 @@ export function attachVite(app: Koa, vite: ViteDevServer): void {
  * @param ctx - Koa context
  * @returns A promise resolving to the parsed body with its content type
  */
-/**
- * Parses a body leniently: JSON when it parses, otherwise the raw string.
- * Used for bodies that did not declare JSON — notably a request with no
- * `Content-Type` header, which must still arrive parsed if it carries JSON.
- * @param body - The raw body text
- * @returns The parsed JSON value, or the original string
- */
-const parseJsonOrRawText = (body: string): unknown => {
-  try {
-    return JSON.parse(body);
-  } catch {
-    return body;
-  }
-};
-
 export const readBody = (
   ctx: KoaContext,
+  limit?: number,
 ): Promise<BodyResult> => {
-  const contentType = ctx.request.headers["content-type"]?.toLowerCase() || "";
+  const declared = ctx.request.headers["content-type"];
 
-  return new Promise((resolve, reject) => {
-    // If an koa-body already consumed the stream
-    // via app.use(koaBody()), use ctx.request.body directly
-    const isJSON = contentType.includes("json");
-    const isMultipart = contentType.includes("multipart/form-data");
-    const isUrlEncoded = contentType.includes("urlencoded");
-    const reqBody = ctx.request.body;
-    if (reqBody !== undefined) {
-      resolve({
-        contentType: isMultipart
-          ? "multipart/form-data"
-          : isJSON
-          ? "application/json"
-          : isUrlEncoded
-          ? "application/x-www-form-urlencoded"
-          : "text/plain",
-        data: isMultipart
-          ? (reqBody as Record<string, unknown>)
-          : isJSON
-          ? reqBody
-          : isUrlEncoded
-          ? (reqBody as Record<string, unknown>)
-          : String(reqBody),
-      } as BodyResult);
-      return;
-    }
+  // koa-bodyparser (or any equivalent) has already decoded the body.
+  if (ctx.request.body !== undefined) {
+    return Promise.resolve(preParsedBody(ctx.request.body, declared));
+  }
 
-    // OR read the body normally
-    let body = "";
-
-    const toggleListeners = (add?: boolean) => {
-      const method = add ? "on" : "off";
-      ctx.req[method]("data", onData);
-      ctx.req[method]("end", onEnd);
-      ctx.req[method]("error", onError);
-    };
-
-    const onData = (chunk: Buffer) => {
-      // chunks.push(chunk);
-      body += chunk.toString();
-    };
-
-    const onEnd = () => {
-      toggleListeners();
-      const isJSON = contentType.includes("json");
-      const isMultipart = contentType.includes("multipart/form-data");
-      const isUrlEncoded = contentType.includes("urlencoded");
-      try {
-        // Only a *declared* JSON body is parsed strictly; everything else keeps
-        // the lenient sniff. Previously all three fell through to a single
-        // `JSON.parse(body)`, so a malformed JSON body and a legitimate text
-        // body produced the same exception and were indistinguishable — the
-        // catch "recovered" both into a text/plain string, which silently
-        // handed a JSON-declared function a string and answered 200.
-        //
-        // The lenient branch is deliberate and must stay: a request with no
-        // `Content-Type` at all (curl, and the nojs form fallback) that
-        // happens to carry JSON still has to arrive parsed.
-        const data = isMultipart
-          ? { raw: body }
-          : isUrlEncoded
-          ? Object.fromEntries(new URLSearchParams(body))
-          : isJSON
-          ? JSON.parse(body)
-          : parseJsonOrRawText(body);
-        resolve({
-          contentType: isMultipart
-            ? "multipart/form-data"
-            : isJSON
-            ? "application/json"
-            : isUrlEncoded
-            ? "application/x-www-form-urlencoded"
-            : "text/plain",
-          data: isMultipart ? (data as Record<string, unknown>) : data,
-        } as BodyResult);
-      } catch (_er) {
-        // A body that does not parse under a declared JSON Content-Type is a
-        // client error. It used to resolve as `text/plain` with the raw string,
-        // which silently handed a JSON-declared function a string and answered
-        // 200 — failing open on malformed input. Every host framework rpc
-        // supports answers 400 here (Express `entity.parse.failed`, Fastify
-        // `FST_ERR_CTP_INVALID_JSON_BODY`, koa-bodyparser, h3's own readBody).
-        reject(httpError(400, "Invalid JSON body"));
-      }
-    };
-
-    const onError = (err: Error) => {
-      toggleListeners();
-      reject(err);
-    };
-
-    toggleListeners(true);
-  });
+  return readStream(ctx.req, ctx.request.headers["content-type"], { limit });
 };
 
 /**

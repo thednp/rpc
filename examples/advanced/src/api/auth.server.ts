@@ -4,7 +4,7 @@ import {
   createSession,
   destroySession,
   getSession,
-} from "./middleware";
+} from "./middleware.ts";
 
 // demo users — in production verify against DB + hash
 const USERS: Record<string, { password: string; role: "admin" | "user" }> = {
@@ -18,10 +18,16 @@ export const login = createServerFunction(
     auditLog();
     const entry = USERS[username];
     if (!entry || entry.password !== password) {
-      return { ok: false as const, error: "Invalid credentials" };
+      return await Promise.resolve({
+        ok: false,
+        error: "Invalid credentials",
+      });
     }
     const sess = createSession(username, entry.role);
-    return { ok: true as const, user: { username, role: sess.role } };
+    return await Promise.resolve({
+      ok: true,
+      user: { username, role: sess.role },
+    });
   },
   { rpcPrefix: "public:rpc" },
 );
@@ -31,7 +37,7 @@ export const logout = createServerFunction(
   async () => {
     auditLog();
     destroySession();
-    return { ok: true as const };
+    return await Promise.resolve({ ok: true });
   },
   { rpcPrefix: "public:rpc" },
 );
@@ -40,8 +46,10 @@ export const me = createServerFunction(
   "me",
   async () => {
     const sess = getSession();
-    if (!sess) return { user: null as unknown as null };
-    return { user: { username: sess.username, role: sess.role } };
+    if (!sess) return await Promise.resolve({ user: null as unknown as null });
+    return await Promise.resolve({
+      user: { username: sess.username, role: sess.role },
+    });
   },
   { rpcPrefix: "public:rpc" },
 );

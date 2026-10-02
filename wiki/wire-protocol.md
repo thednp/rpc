@@ -185,7 +185,7 @@ if (!res.ok) throw new Error(json.error);  // transport-level failure
 const result = unwrapEnvelope<string>(json);
 ```
 
-`unwrapEnvelope` also throws on a top-level `error` body (the shape returned for `400`/`403`/`404`/`405`/`415`/`500`), but resolves normally for `{ data: { error } }` — a `200` carrying a validation outcome as its result.
+`unwrapEnvelope` also throws on a top-level `error` body (the failure shape for client and server errors, including `400`/`403`/`404`/`405`/`409`/`413`/`415`/`422`/`500`), but resolves normally for `{ data: { error } }` — a `200` carrying a validation outcome as its result.
 
 See [Client Usage — Native HTTP Clients](./client-usage.md#native-http-clients--unwrapenvelopet) for the full pattern.
 
@@ -203,17 +203,33 @@ The distinction that matters is *declared* versus *undeclared*:
 | Status | Meaning                                    | Body                              |
 |---------|---------------------------------------------|------------------------------------|
 | `200`   | Success (with `{ data }`), **or** a function that returned `{ error: ... }` as its result. | `{ data: ... }` / `{ data: { error: ... } }` |
-| `403`   | The optional `origin` allowlist rejected the request (see [Security — Origin Validation](./security.md#origin-validation)). **Checked before the function lookup**, so it also answers for unknown function names. Only reachable when `origin` is configured. | `{ error: "Forbidden" }` |
+| `403`   | The `origin` allowlist rejected the request (see [Security — Origin Validation](./security.md#origin-validation)). **Checked before the function lookup**, so it also answers for unknown function names. On by default (`origin: "self"`). | `{ error: "Forbidden" }` |
 | `404`   | Function not registered.                    | `{ error: "Function not found" }` |
 | `405`   | Method doesn't match (`POST` vs `GET`).     | `{ error: "Method Not Allowed" }` |
 | `415`   | Request `Content-Type` doesn't match the function's declared `contentType` (json/text functions). | `{ error: "Unsupported Media Type" }` |
-| `400`   | The request is malformed: a declared-JSON body that does not parse, or a GET `?args=` that is either not valid JSON or not an array (GET functions only). | `{ error: "Bad Request" }` |
-| `413`   | Request body exceeded the host's configured size limit. Only reachable when a body-limit middleware is registered (e.g. `express.json({ limit })`, `hono/body-limit`, h3's `bodyLimit`). | `{ error: "Payload Too Large" }` |
+| `400`   | The request is malformed — a declared-JSON body that does not parse, or a GET `?args=` that is not valid JSON or not an array. Since 0.4.0 this is **only** a malformed request; a rejected `schema` is a `422`. | `{ error: "Bad Request" }` |
+| `422`   | The function's `schema` rejected the input, validated in the middleware before the handler runs. Unchanged in production — a bad input is a client mistake, not a server fault. | `{ error: "Unprocessable Content", code: "VALIDATION", data: { issues: [{ path, hint? }] }, hint? }` — each issue carries `message` in development only |
+| `303`   | A native `<form>` submission for a function that set `fallback`. See [No-JS Form Fallback](#no-js-form-fallback) below. |
+| `413`   | Request body exceeded rpc's own streaming size limit (`bodyLimit`, 10 MiB by default). It does not require a separately registered host parser; Fastify is effectively host-limited because its parser answers first. | `{ error: "Payload Too Large" }` |
 | `500`   | Handler threw.                              | `{ error: "Internal Server Error" }` — always, even in development, for unexpected exceptions; in development `RPCError` payloads include `code`/`data` |
 
-### Validation errors are data, not status codes
+### Two ways to report a bad input
 
-When you validate input inside a function and return `{ error: ... }`, it's a **200 with `{ data: { error: ... } }`** — the validation outcome travels as data so it can carry structured details (e.g. valibot's field-level errors):
+These are different wire contracts, and the status code is what tells them apart.
+
+**A `schema` rejection is a `422`** — validated in the middleware before the handler runs, so a bad input never reaches your code. The body names the failing paths in **both** environments; what production drops is the validator library's `message`, because some libraries interpolate the value that failed into it (valibot does, zod and arktype do not):
+
+```bash
+# schema: z.object({ a: z.number() }) on add-numbers
+curl -s -X POST http://localhost:5173/__rpc/add-numbers \
+  -H 'Content-Type: application/json' -d '["{\"a\":\"x\",\"b\":3}"]'
+# 422 (dev) {"error":"Validation failed","code":"VALIDATION",
+#            "data":{"issues":[{"path":"a","message":"…"}]},"hint":"…"}
+# 422 (prod) {"error":"Unprocessable Content","code":"VALIDATION",
+#            "data":{"issues":[{"path":"a","hint":"…"}]},"hint":"…"}
+```
+
+**Validation-as-data is a `200`** — when you validate inside the function and return `{ error: ... }`, the outcome travels as data so it can carry structured details (e.g. valibot's field-level errors):
 
 ```bash
 # addNumbers with invalid payload → 200, error inside data
@@ -223,7 +239,95 @@ curl -s -X POST http://localhost:5173/__rpc/add-numbers \
 # {"data":{"error":{"a":["Invalid type: Expected number but received \"x\""]}}}
 ```
 
-The client's `handleResponse` returns this as the resolved `data` — you inspect `result.error` in your code. Only **transport failures** (403/404/405/415/500, network errors) reject the `data` promise.
+The client's `handleResponse` returns this as the resolved `data` — you inspect `result.error` in your code. A `schema` rejection is *not* in that category: it is a transport failure, so the `data` promise rejects with an `RPCResponseError` carrying `status`, `body`, `issues`, and `hint` in both development and production (production drops only the validator library's `message`). Only **transport failures** (for example `400`/`403`/`404`/`405`/`409`/`413`/`415`/`422`/`500`, or a network error) reject the `data` promise.
+
+## No-JS Form Fallback
+
+A function that sets `fallback` answers a **native `<form>` submission** with a
+Post/Redirect/Get `303` instead of a JSON body, so a browser without JavaScript
+lands back on a page that can render the failure.
+
+```ts
+createServerFunction("contact", handler, {
+  contentType: "application/x-www-form-urlencoded",
+  schema: schema({ email: field.string() }),
+  fallback: "/contact",                  // or { to, replay }
+});
+```
+
+```bash
+# a native form posts urlencoded and asks for HTML
+curl -si -X POST http://localhost:5173/__rpc/contact \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'Accept: text/html' -H 'Origin: http://localhost:5173' \
+  --data 'email=not-an-email'
+# HTTP/1.1 303 See Other
+# Location: /contact?__flash=%7B%22status%22%3A%22error%22%2C%22errors%22…
+
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:5173/__rpc/contact \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'Accept: application/json' -H 'Origin: http://localhost:5173' \
+  --data 'email=not-an-email'
+# 422 — the same submission from the generated stub is unchanged
+```
+
+### Which requests are navigations
+
+The discriminator is **the request being a document navigation, not the content
+type**. Both clients send a form encoding — a native `<form>` posts
+`application/x-www-form-urlencoded` and the generated stub posts
+`multipart/form-data` — so content type alone cannot tell them apart and would
+hand every browser-side caller a `303` where it expects a rejection.
+
+`POST` plus a form content type, and then:
+
+- if either `Sec-Fetch-Dest` or `Sec-Fetch-Mode` is present, **they decide** —
+  a navigation is `document`/`navigate`, and an absent header within a present
+  pair is not disagreement;
+- otherwise `Accept` decides, and must include `text/html`.
+
+### The `__flash` parameter
+
+The flash rides in a single `__flash` query parameter on the `Location`, capped
+at **4 KiB** — the browser re-requests that URL, so it becomes a request line,
+and nginx's default `large_client_header_buffers 4 8k` would otherwise answer a
+`414`. Past the cap the flash is **dropped, not truncated**, so the redirect still
+happens and the form re-renders empty.
+
+```json
+{ "status": "error",
+  "errors": { "email": ["expected a string"] },
+  "message": "input did not match the function's schema" }
+```
+
+A **success** carries no `__flash` at all. Decoded with
+`decodeFormFlash(searchParams.get("__flash"))` from the client-safe
+`@thednp/rpc/flash` entry, which returns `null` for absent, oversized,
+malformed, or structurally invalid values rather than throwing.
+
+### What the flash may contain
+
+Values are **replayed only when named**, via `fallback.replay`. The default is
+to replay **nothing**, because a URL reaches browser history, the `Referer` of
+the next navigation, and every access log in between, and rpc cannot know which
+of your fields are secrets.
+
+```ts
+fallback: { to: "/contact", replay: ["email", "message"] }
+```
+
+`replay` accepts primitives only. A nested object would serialise to
+`[object Object]`, so it is dropped rather than mangled.
+
+### Statuses this feature does not change
+
+- A **JSON-declared** function receiving a form body still answers `415`. The
+  fallback activates only for functions that set it, which in practice means
+  form-declared ones.
+- An **unexpected throw** stays `500` with no `Location`. Only `RPCError` and its
+  typed subclasses are flashed; a real fault must never be laundered into a
+  friendly redirect.
+- A `fetch` from the generated stub is untouched, on every path.
 
 ## Cancellation
 
@@ -281,5 +385,5 @@ To build the `?args=` value: `encodeURIComponent(JSON.stringify(["en-US"]))` →
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

@@ -1,12 +1,12 @@
 // src/h3/helpers.ts
 import type { H3Event, Middleware } from "h3";
-import { HTTPResponse, redirect as h3Redirect } from "h3";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ViteDevServer } from "vite";
 import type { BodyResult } from "@thednp/rpc";
 import type { H3App } from "./types.d.ts";
+import { readWebBody } from "../body.ts";
+import { HTTPResponse, redirect as h3Redirect } from "h3";
 import { createRPCMiddleware } from "./createMiddleware.ts";
-import { httpError } from "../server-helpers.ts";
 
 /**
  * Convenience function to load RPC config and attach the RPC middleware to an h3 app.
@@ -117,42 +117,22 @@ export const viteMiddleware = (vite: ViteDevServer): Middleware => {
  * @param event - h3 event object
  * @returns A promise resolving to the parsed body with its content type
  */
-export const readBody = async (event: H3Event): Promise<BodyResult> => {
-  const contentType = event.req.headers.get("content-type")?.toLowerCase() ||
-    "";
-  const isJSON = contentType.includes("json");
-  const isMultipart = contentType.includes("multipart/form-data");
-  const isUrlEncoded = contentType.includes("urlencoded");
-  // Note: `text()` stays outside the try below on purpose — h3's body limit
-  // throws its own 413 from here, and relabelling that as a 400 would
-  // misreport an oversize body as a malformed one.
-  const text = await event.req.text();
-  if (isJSON) {
-    let data: unknown;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      // h3's own `readBody` throws a 400 here; rpc parses the body itself and
-      // used to let the SyntaxError escape as a 500. Match the host.
-      throw httpError(400, "Invalid JSON body");
-    }
-    return {
-      contentType: "application/json",
-      data,
-    } as BodyResult;
-  }
-  return {
-    contentType: isMultipart
-      ? "multipart/form-data"
-      : isUrlEncoded
-      ? "application/x-www-form-urlencoded"
-      : "text/plain",
-    data: isMultipart
-      ? ({ raw: text } as Record<string, unknown>)
-      : isUrlEncoded
-      ? Object.fromEntries(new URLSearchParams(text))
-      : String(text),
-  } as BodyResult;
+export const readBody = (
+  event: H3Event,
+  limit?: number,
+): Promise<BodyResult> => {
+  // h3 reads the body through a Web `Request`, so there is no Node stream to
+  // measure. `readWebBody` caps the bytes as they arrive from the same
+  // `ReadableStream` h3 would have read; a `Content-Length` pre-check alone is
+  // near-worthless here, because a Request built in JavaScript carries no
+  // `Content-Length` at all.
+  return readWebBody(
+    event.req,
+    event.req.headers.get("content-type") ?? undefined,
+    {
+      limit,
+    },
+  );
 };
 
 /**

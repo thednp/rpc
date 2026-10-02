@@ -1,15 +1,28 @@
 /**
- * @module User-facing message strings.
+ * @module Shared constants: user-facing message strings, validation patterns,
+ * limits, and other values referenced from more than one module.
  *
- * Two shapes live here: plain message constants (the exact text an RPC
- * response body carries) and message *factories* for the cases that need a
- * value interpolated. Both are part of the wire contract for the bodies below,
- * so the casing is deliberate — e.g. a client matching on
- * `METHOD_NOT_ALLOWED` must see `"Method Not Allowed"`, not `"Method not
- * allowed"`. These strings are also what keeps error responses generic: they
- * never include the requested function name, so a response cannot be used to
- * enumerate what exists.
+ * The message strings come in two shapes: plain constants (the exact text an RPC
+ * response body carries) and message *factories* for the cases that need a value
+ * interpolated. Both are part of the wire contract, so the casing is deliberate —
+ * e.g. a client matching on `METHOD_NOT_ALLOWED` must see `"Method Not
+ * Allowed"`, not `"Method not allowed"`. These strings are also what keeps error
+ * responses generic: they never include the requested function name, so a
+ * response cannot be used to enumerate what exists.
+ *
+ * Everything below the messages is a value that two or more modules must agree
+ * on. They live here rather than beside their first use because a duplicated
+ * constant is a silent-drift bug waiting to happen — `VALIDATION_HINT` was
+ * previously copy-pasted into all five adapters, and the history of this codebase
+ * is a series of hand-synced copies that fell out of step. A value that is only
+ * ever read in one module should stay in that module; it is here because it is
+ * shared.
+ *
+ * This module imports nothing at runtime, so anything may import it without
+ * risking an initialisation cycle.
  */
+import type { Credentials } from "./types.d.ts";
+
 /** Thrown-name for an operation stopped by its own `cancel()`. */
 export const OPERATION_ABORTED = "Operation aborted";
 
@@ -37,11 +50,32 @@ export const REQUEST_FORBIDDEN = "Forbidden";
 /** Body of a 415, returned when the request's `Content-Type` does not satisfy the function's declared `contentType`. */
 export const UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
 
-/** Body of a 413, returned when the request body exceeds the host's configured size limit. */
+/** Body of a 413, returned when the request body exceeds rpc's own streaming size limit. */
 export const PAYLOAD_TOO_LARGE = "Payload Too Large";
 
 /** Body of a 400, returned when a GET `?args=` value parses but is not an array. */
 export const BAD_REQUEST = "Bad Request";
+
+/**
+ * Body of a 422, returned when a schema rejects the input.
+ *
+ * A distinct status from `400` on purpose. `400` means the request could not be
+ * understood — a malformed body, a `?args=` that is not an array — and a
+ * validation failure is not that: the body parsed fine and the *fields* are
+ * wrong. Sharing one status leaves a client unable to tell a broken request from
+ * a wrong one without reading prose, and `422` is the widely-understood code for
+ * exactly this ("syntax fine, semantics not").
+ */
+export const UNPROCESSABLE_CONTENT = "Unprocessable Content";
+
+/**
+ * Reason phrases for the statuses a typed `RPCError` subclass can carry. A
+ * thrown `NotFoundError` must not be reported as `Bad Request` just because
+ * that was the table's only 4xx entry.
+ */
+export const NOT_FOUND = "Not Found";
+
+export const CONFLICT = "Conflict";
 
 /** Body of a 500. Always generic — never the underlying error, so internals cannot leak. */
 export const INTERNAL_SERVER_ERROR = "Internal Server Error";
@@ -78,3 +112,79 @@ export const FAILED_LOAD_CONFIG = `  ⚠︎ Failed to load RPC config:`;
 /** Error template for duplicate server function names across files. @param name - The duplicate registered name */
 export const DUPLICATE_FUNCTION_NAME = (name: string) =>
   `Duplicate server function "${name}" detected. Each server function must have a unique name. Remove or rename the duplicate.`;
+
+// ── Input validation ─────────────────────────────────────────────────
+
+/**
+ * A function-wide pointer appended to every validation failure.
+ *
+ * Dev-only, like the per-field hints, so production bodies stay a fixed shape.
+ * This was previously copy-pasted into all five adapters; one definition means
+ * one place to change the doc link.
+ */
+export const VALIDATION_HINT =
+  "input did not match the function's schema; see wiki/server-functions.md#input-validation";
+
+/** Identifiers safe to interpolate into generated code without escaping. */
+export const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** Path segments safe to interpolate, allowing the `@` and `/` a prefix uses. */
+export const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_$@:][A-Za-z0-9_$@:/-]*$/;
+
+/** The `credentials` values the client stubs accept. */
+export const CREDENTIALS_VALUES: readonly Credentials[] = [
+  "same-origin",
+  "include",
+  "omit",
+];
+
+// ── Request body limits ──────────────────────────────────────────────
+
+/**
+ * Default cap on the request body a single RPC call may carry: 10 MiB.
+ *
+ * It lives in this leaf module so that neither `body.ts` nor `options.ts` has to
+ * import the other. The previous home was `options.ts`, chosen to dodge an
+ * initialisation cycle (`body.ts → server-helpers.ts → options.ts → body.ts`)
+ * that threw under raw ESM; a shared leaf removes the cycle instead of routing
+ * around it.
+ */
+export const DEFAULT_BODY_LIMIT = 10 * 1024 * 1024;
+
+/**
+ * How many bytes past the cap to keep draining before giving up on the
+ * connection. Sized to cover an ordinary "oops, too big" submission without
+ * letting the discard itself become an unbounded slowloris.
+ */
+export const DRAIN_FACTOR = 32;
+
+// ── Server file scanning ─────────────────────────────────────────────
+
+/** The exact basenames the `exact` scan mode recognises. */
+export const EXACT_NAMES = [
+  "server.ts",
+  "server.js",
+  "server.mjs",
+  "server.mts",
+];
+
+// ── URL parsing ──────────────────────────────────────────────────────
+
+/**
+ * The fixed base a raw request URL is resolved against.
+ *
+ * A request-target like `/\` makes the WHATWG parser throw, and the adapters
+ * build the URL before their dispatch `try` block, so the base has to be
+ * something that always parses and never matches a real prefix.
+ */
+export const SAFE_URL_BASE = "http://localhost";
+
+// ── Glob matching ────────────────────────────────────────────────────
+
+/** Matches the `*.server.{ts,js,mjs,mts}` basename the `glob` scan mode uses. */
+export const GLOB_REGEX = /^.+\.server\.(ts|js|mjs|mts)$/;
+
+// ── Schema vendor identity ───────────────────────────────────────────
+
+/** The `vendor` string a schema built by this library reports. */
+export const VENDOR = "thednp";

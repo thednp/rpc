@@ -6,19 +6,16 @@
 import serverless from "serverless-http";
 import { createRPCMiddleware } from "@thednp/rpc/express";
 import { bodyLimit } from "../../body-limit.ts";
-import { createFormFallback } from "../../src/lib/form-fallback.ts";
 import "../../src/api/server.ts";
 
 // Serverless requires explicit handling
 import cfg from "../../rpc.config.ts";
 
 const rpc = createRPCMiddleware({ rpcPrefix: cfg.rpcPrefix });
-const formFallback = createFormFallback({
-  rpcPrefix: cfg.rpcPrefix,
-  functionName: "submit-contact",
-});
-
-const stack = [bodyLimit, formFallback, rpc];
+// As in ../server.ts: the no-JS fallback comes from the rpc dispatch itself,
+// via the `fallback` option on `submit-contact`, not from an app-layer
+// middleware in the stack.
+const stack = [bodyLimit, rpc];
 
 const app = (req: any, res: any, next: any) => {
   const marker = "/.netlify/functions/rpc/";

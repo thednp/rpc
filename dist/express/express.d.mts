@@ -126,7 +126,15 @@ export declare function attachRPC(app: Express$1): Promise<void>;
  * @param vite - Running Vite dev server
  */
 export declare function attachVite(app: Express$1, vite: ViteDevServer): void;
-export declare const readBody: (req: Request | IncomingMessage) => Promise<BodyResult>;
+/**
+ * Reads and parses the HTTP request body from an Express or Node IncomingMessage.
+ * If a body parser middleware (e.g. express.json()) already consumed the stream,
+ * uses the pre-parsed body from `req.body`.
+ * @param req - Express or Node.js IncomingMessage
+ * @param limit - Streamed byte cap; `0` disables it
+ * @returns A promise resolving to the parsed body with its content type
+ */
+export declare const readBody: (req: Request | IncomingMessage, limit?: number) => Promise<BodyResult>;
 /**
  * Type guard that checks whether a request is an Express Request (has `originalUrl`).
  * @param req - A Node IncomingMessage or Express Request

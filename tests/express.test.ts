@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { field, schema } from "../src/schema.ts";
+import { decodeFormFlash, FLASH_PARAM } from "../src/form-fallback.ts";
+import type { StandardSchemaV1 } from "../src/types.d.ts";
 import EventEmitter from "node:events";
 import type { ViteDevServer } from "vite";
 // import type { ServerFnEntry } from "../src";
@@ -25,6 +29,9 @@ import {
   createRPCMiddleware,
 } from "../src/express/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
+import { clientErrorStatus } from "../src/server-helpers.ts";
+import type { JsonValue } from "../src/types.d.ts";
+import type { DispatchContext } from "../src/types.d.ts";
 import { setGlobalPrefix } from "../src/server.ts";
 import rpcPlugin, { loadRPCConfig } from "../src/index.ts";
 import { defineConfig } from "../src/config.ts";
@@ -443,6 +450,224 @@ describe("Express createMiddleware extended", () => {
     await mw(req, res, next);
     expect(handler).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Express no-JS form fallback (dispatch)", () => {
+  const formHeaders = (accept: string) => ({
+    "content-type": "application/x-www-form-urlencoded",
+    accept,
+  });
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seedServerMap();
+  });
+
+  // The load-bearing claim: a rejected *navigation* is a redirect, not a 422.
+  // This is the case the feature exists for, and it only holds because the
+  // fallback branch sits ahead of the client-error branch.
+  it("redirects a rejected native form instead of answering 422", async () => {
+    createServerFunction(
+      "contact",
+      vi.fn().mockResolvedValue("sent"),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        schema: schema({ age: field.number() }),
+        fallback: "/contact",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: formHeaders("text/html,application/xhtml+xml"),
+    });
+    const res = makeRes();
+    simulateBody(req, "age=not-a-number");
+    await mw(req, res, makeNext());
+
+    expect(res.redirect).toHaveBeenCalledWith(
+      303,
+      expect.stringContaining("/contact"),
+    );
+    const location = res.redirect.mock.calls[0][1] as string;
+    expect(location).toBeDefined();
+    const url = new URL(location, "https://app.example.com");
+    expect(url.pathname).toBe("/contact");
+    const flash = decodeFormFlash(url.searchParams.get(FLASH_PARAM)!);
+    expect(flash!.errors?.age).toBeDefined();
+    // …and it must not ALSO have written a 422 body.
+    expect(res.status).not.toHaveBeenCalledWith(422);
+  });
+
+  // The other load-bearing claim: the generated stub uses form encodings too, so
+  // the discriminator has to be the navigation, not the content type.
+  it("leaves a fetch from the client stub on the JSON path", async () => {
+    createServerFunction(
+      "contact",
+      vi.fn().mockResolvedValue("sent"),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        schema: schema({ age: field.number() }),
+        fallback: "/contact",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: formHeaders("application/json"),
+    });
+    const res = makeRes();
+    simulateBody(req, "age=not-a-number");
+    await mw(req, res, makeNext());
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.redirect).not.toHaveBeenCalled();
+  });
+
+  it("redirects a successful navigation to the author's target", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      fallback: "/thanks",
+    });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: formHeaders("text/html"),
+    });
+    const res = makeRes();
+    simulateBody(req, "email=a%40b.c");
+    await mw(req, res, makeNext());
+
+    expect(res.redirect).toHaveBeenCalledWith(
+      303,
+      expect.stringContaining("/thanks"),
+    );
+    const location = res.redirect.mock.calls[0][1] as string;
+    expect(new URL(location, "https://app.example.com").pathname).toBe(
+      "/thanks",
+    );
+    // A success carries no failure to report.
+    expect(
+      decodeFormFlash(
+        new URL(location, "https://app.example.com").searchParams.get(
+          FLASH_PARAM,
+        )!,
+      )?.errors,
+    )
+      .toBeUndefined();
+  });
+
+  // A real fault must not be laundered into a friendly redirect.
+  it("keeps an unexpected throw a 500 even on a navigation", async () => {
+    createServerFunction(
+      "contact",
+      vi.fn().mockRejectedValue(new Error("boom")),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/contact",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: formHeaders("text/html"),
+    });
+    const res = makeRes();
+    simulateBody(req, "email=a%40b.c");
+    await mw(req, res, makeNext());
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.redirect).not.toHaveBeenCalled();
+  });
+
+  it("replays only the fields the author named", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number(), note: field.string() }),
+      fallback: { to: "/contact", replay: ["note"] },
+    });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: formHeaders("text/html"),
+    });
+    const res = makeRes();
+    simulateBody(req, "age=nope&note=hello");
+    await mw(req, res, makeNext());
+
+    const location = res.redirect.mock.calls[0][1] as string;
+    const flash = decodeFormFlash(
+      new URL(location, "https://app.example.com").searchParams.get(
+        FLASH_PARAM,
+      )!,
+    );
+    expect(flash!.values).toEqual({ note: "hello" });
+    expect(JSON.stringify(flash)).not.toContain("nope");
+  });
+
+  // A handler may redirect itself through the request context. That is a more
+  // specific answer than the author's fallback target, so the success path must
+  // not overwrite it — otherwise the handler's own redirect silently becomes
+  // the fallback.
+  it("leaves a handler-issued redirect alone", async () => {
+    createServerFunction(
+      "contact",
+      vi.fn().mockImplementation(async () => {
+        serverRedirect("/handler-chosen");
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/fallback-target",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, "email=a%40b.c");
+    await mw(req, res, makeNext());
+
+    const location = res.redirect.mock.calls[0]?.[1] as string;
+    expect(location).toContain("/handler-chosen");
+    expect(location).not.toContain("/fallback-target");
+  });
+
+  it("does not redirect when the function sets no fallback", async () => {
+    createServerFunction("contact", vi.fn().mockResolvedValue("sent"), {
+      method: "POST",
+      contentType: "application/x-www-form-urlencoded",
+      schema: schema({ age: field.number() }),
+    });
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/contact",
+      method: "POST",
+      headers: formHeaders("text/html"),
+    });
+    const res = makeRes();
+    simulateBody(req, "age=nope");
+    await mw(req, res, makeNext());
+
+    expect(res.status).toHaveBeenCalledWith(422);
   });
 });
 
@@ -1022,6 +1247,7 @@ describe("Express createRPCMiddleware handler", () => {
       originalUrl: "/__rpc/fn",
       method: "POST",
       headers: {
+        origin: undefined,
         "sec-fetch-site": "cross-site",
         "content-type": "application/json",
       },
@@ -1039,6 +1265,7 @@ describe("Express createRPCMiddleware handler", () => {
       originalUrl: "/__rpc/fn",
       method: "POST",
       headers: {
+        origin: undefined,
         "sec-fetch-site": "same-origin",
         "content-type": "application/json",
       },
@@ -1047,6 +1274,43 @@ describe("Express createRPCMiddleware handler", () => {
     simulateBody(req, JSON.stringify(["x"]));
     await mw(req, res, makeNext());
     expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "x");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("default policy rejects a cross-origin request with no options at all", async () => {
+    // Proves the secure default is wired through this adapter, not merely
+    // implemented in the shared helper. Creating the middleware with no options
+    // must already be protected.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: { origin: "https://evil.com", "sec-fetch-site": "cross-site" },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it("default policy admits the server's own host, comparing host only", async () => {
+    // `http://` against the fixture's `Host` proves the scheme is not part of
+    // the comparison, so a TLS-terminating proxy needs no configuration.
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("fn", fn);
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/fn",
+      method: "POST",
+      headers: { origin: "http://app.example.com" },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify(["x"]));
+    await mw(req, res, makeNext());
+    expect(fn).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -1386,5 +1650,505 @@ describe("global-prefix dispatch", () => {
     );
 
     expect(next).toHaveBeenCalled();
+  });
+
+  it("validates the input against the function schema before dispatch", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("validated", fn, {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+      hint: "a single function-wide hint",
+    });
+    const mw = createRPCMiddleware({ allowHeaderless: true });
+    const ok = makeReq({
+      originalUrl: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const okRes = makeRes();
+    simulateBody(ok, JSON.stringify({ email: "a@b.c" }));
+    await mw(ok, okRes, makeNext());
+    // The handler receives the *validated* value, so the type flows through.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      email: "a@b.c",
+    });
+    expect(okRes.status).toHaveBeenCalledWith(200);
+
+    const bad = makeReq({
+      originalUrl: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const badRes = makeRes();
+    simulateBody(bad, JSON.stringify({ email: 5 }));
+    await mw(bad, badRes, makeNext());
+    expect(badRes.status).toHaveBeenCalledWith(422);
+    expect(fn).toHaveBeenCalledTimes(1);
+    // The function-wide hint leads, and rpc's documentation pointer is kept —
+    // so one `hint` costs neither per-field repetition nor the wiki link.
+    expect(JSON.parse(badRes.chunks.join("")).hint).toMatch(
+      /^a single function-wide hint — .*wiki\/server-functions\.md#input-validation$/,
+    );
+
+    // Without a function-wide hint, the pointer stands alone.
+    const plain = vi.fn();
+    createServerFunction("validated", plain, {
+      contentType: "application/json",
+      schema: schema({ age: field.number() }),
+    });
+    const plainReq = makeReq({
+      originalUrl: "/__rpc/validated",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const plainRes = makeRes();
+    simulateBody(plainReq, JSON.stringify({ email: 5 }));
+    await mw(plainReq, plainRes, makeNext());
+    expect(JSON.parse(plainRes.chunks.join("")).hint).toBe(
+      "input did not match the function's schema; see wiki/server-functions.md#input-validation",
+    );
+  });
+
+  it("answers a JSON array body with 400 because it is an argument list, not one array argument", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    createServerFunction("array-payload", fn, {
+      contentType: "application/json",
+      schema: schema({ email: field.string() }),
+    });
+    const mw = createRPCMiddleware({ allowHeaderless: true });
+    const req = makeReq({
+      originalUrl: "/__rpc/array-payload",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    // The outer array means two arguments: the schema therefore sees `1`,
+    // while a direct `fn([1, 2])` passes one array argument. The wire shape of
+    // the latter is `[[1, 2]]`, which is asserted below for every adapter.
+    simulateBody(req, JSON.stringify([[1, 2]]));
+    await mw(req, res, makeNext());
+    expect(fn).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(JSON.parse(res.chunks.join(""))).toEqual({ error: "Bad Request" });
+  });
+});
+
+/* ─── onDispatch ────────────────────────────────────────────────────────────
+ * The hook shipped on express first and the other four adapters did not, so this
+ * is the only place it is covered end to end. The behaviours below were each
+ * found by running the page, not by reading the code — two of them (the missing
+ * records for the pre-`try` returns, and the cross-bundle `isRPCError`) were
+ * invisible in review and only showed up when a real request went through.
+ */
+
+describe("express onDispatch", () => {
+  const seen: DispatchContext[] = [];
+  const mw = (options: Record<string, unknown> = {}) =>
+    createRPCMiddleware({
+      rpcPrefix: "__rpc",
+      allowHeaderless: true,
+      onDispatch: (ctx: DispatchContext) => {
+        seen.push(ctx);
+      },
+      ...options,
+    });
+
+  beforeEach(() => {
+    seen.length = 0;
+  });
+
+  const call = async (
+    url: string,
+    init: { method?: string; headers?: Record<string, string>; body?: string } =
+      {},
+  ) => {
+    const req = makeReq({
+      originalUrl: url,
+      method: init.method ?? "POST",
+      // No `host` override: the fixture supplies a *matched* pair
+      // (host app.example.com + origin https://app.example.com), and changing
+      // one without the other is a 403 before the dispatch even starts.
+      headers: { "content-type": "application/json", ...init.headers },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    if (init.body !== undefined) simulateBody(req, init.body);
+    else (req as unknown as { end: () => void }).end();
+    await mw()(req, res, next);
+    return { res, body: res.chunks.join("") };
+  };
+
+  beforeEach(() => {
+    createServerFunction("ok-fn", vi.fn(async () => "done") as never);
+    createServerFunction(
+      "boom-fn",
+      vi.fn(async () => {
+        throw new Error("kaboom");
+      }) as never,
+    );
+    createServerFunction("get-fn", vi.fn(async () => "tick") as never, {
+      method: "GET",
+    });
+    createServerFunction("validated", vi.fn(async () => "never") as never, {
+      schema: schema({ a: field.number() }),
+    });
+  });
+
+  it("is not constructed at all without a hook, so the error body is unchanged", async () => {
+    const req = makeReq({
+      originalUrl: "/__rpc/nope",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    await createRPCMiddleware({ allowHeaderless: true })(req, res, makeNext());
+    // No `id` key: the correlation id is opt-in, and adding a field to every
+    // production error body for nobody's benefit is not a trade worth making.
+    expect(JSON.parse(res.chunks.join(""))).toEqual({
+      error: "Function not found",
+    });
+  });
+
+  it("records a successful dispatch", async () => {
+    await call("/__rpc/ok-fn", { body: "[]" });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      prefix: "__rpc",
+      functionName: "ok-fn",
+      originTier: "origin",
+      method: "POST",
+      declaredMethod: "POST",
+      status: 200,
+      outcome: "ok",
+    });
+  });
+
+  it("records the function-not-found return, which happens before the try block", async () => {
+    // This one was silently skipped by a `finally` alone: the 404 and 403
+    // returns are before the `try`, and they are the two a record matters most
+    // for. The first version of this feature missed both and the page showed a
+    // stale record from the previous request.
+    await call("/__rpc/nope", { body: "[]" });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      functionName: "nope",
+      status: 404,
+      outcome: "client-error",
+    });
+  });
+
+  it("lists the sibling names, which is what turns 404 into a question", async () => {
+    await call("/__rpc/typo", { body: "[]" });
+    expect(seen[0].registeredNames).toContain("ok-fn");
+  });
+
+  it("records the origin rejection, which also happens before the try", async () => {
+    const req = makeReq({
+      originalUrl: "/__rpc/ok-fn",
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://evil.test",
+      },
+    });
+    const res = makeRes();
+    await mw()(req, res, makeNext());
+    expect(res.statusCode).toBe(403);
+    expect(seen[0]).toMatchObject({
+      status: 403,
+      originTier: "origin",
+      functionName: "",
+    });
+  });
+
+  it("records a method mismatch with the declared method", async () => {
+    await call("/__rpc/get-fn", { body: "[]" });
+    expect(seen[0]).toMatchObject({
+      status: 405,
+      declaredMethod: "GET",
+    });
+  });
+
+  it("records a content-type mismatch with both sides of it", async () => {
+    const req = makeReq({
+      originalUrl: "/__rpc/ok-fn",
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+    });
+    const res = makeRes();
+    await mw({ allowHeaderless: true })(req, res, makeNext());
+    expect(seen[0]).toMatchObject({
+      status: 415,
+      declaredContentType: "application/json",
+      actualContentType: "text/plain",
+      contentTypeMatched: false,
+    });
+  });
+
+  it("falls back to the default contentType for a function with no options", async () => {
+    // `serverFunction.options?.contentType` — the optional chain, not just the
+    // `??`. A hand-registered entry with no `options` at all reaches it.
+    getFunctionsForPrefix("__rpc").set("bare", {
+      handler: vi.fn(async () => "bare") as never,
+    } as never);
+    const req = makeReq({
+      originalUrl: "/__rpc/bare",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, "[]");
+    await mw()(req, res, makeNext());
+    expect(seen[0]).toMatchObject({
+      declaredContentType: "application/json",
+      status: 200,
+    });
+  });
+
+  it("records a request that somehow has no method, without dropping the record", async () => {
+    const req = makeReq({
+      originalUrl: "/__rpc/ok-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    delete (req as { method?: string }).method;
+    const res = makeRes();
+    simulateBody(req, "[]");
+    await mw()(req, res, makeNext());
+    expect(seen[0]).toMatchObject({ method: "", status: 405 });
+  });
+
+  it("records a declared contentType, not just the default", async () => {
+    createServerFunction("text-fn", vi.fn(async () => "hi") as never, {
+      contentType: "text/plain",
+    });
+    const req = makeReq({
+      originalUrl: "/__rpc/text-fn",
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+    });
+    const res = makeRes();
+    simulateBody(req, "[]");
+    await mw()(req, res, makeNext());
+    expect(seen[0]).toMatchObject({
+      declaredContentType: "text/plain",
+      actualContentType: "text/plain",
+      contentTypeMatched: true,
+      status: 200,
+    });
+  });
+
+  it("records a validation rejection and classifies it as an RPCError", async () => {
+    await call("/__rpc/validated", { body: '[{"a":"x"}]' });
+    expect(seen[0]).toMatchObject({
+      status: 422,
+      outcome: "client-error",
+      argShape: "[{a:string}]",
+    });
+    // Was `false` before the registered-symbol brand: tsdown gives each entry
+    // its own copy of the class, so a ValidationError raised inside
+    // dist/server is not `instanceof` the RPCError inside dist/express.
+    expect(seen[0].error).toMatchObject({
+      name: "ValidationError",
+      isRPCError: true,
+      code: "VALIDATION",
+    });
+  });
+
+  it("records an unexpected throw as a server error", async () => {
+    await call("/__rpc/boom-fn", { body: "[]" });
+    expect(seen[0]).toMatchObject({ status: 500, outcome: "server-error" });
+    expect(seen[0].error?.isRPCError).toBe(false);
+  });
+
+  it("never puts an argument value in the record", async () => {
+    await call("/__rpc/validated", {
+      body: '[{"a":1},{"password":"correct-horse"}]',
+    });
+    expect(JSON.stringify(seen[0])).not.toContain("correct-horse");
+    expect(seen[0].argShape).toContain("number");
+  });
+
+  it("puts the correlation id on a failure body, and the record agrees with it", async () => {
+    const { body } = await call("/__rpc/nope", { body: "[]" });
+    const sent = JSON.parse(body);
+    expect(sent.id).toMatch(/^[0-9a-f]{16}$/);
+    expect(seen[0].id).toBe(sent.id);
+  });
+
+  it("does not put an id on a success body", async () => {
+    const { body } = await call("/__rpc/ok-fn", { body: "[]" });
+    expect(JSON.parse(body)).toEqual({ data: "done" });
+  });
+
+  it("does not take down the request when the hook throws", async () => {
+    const exploding = createRPCMiddleware({
+      rpcPrefix: "__rpc",
+      allowHeaderless: true,
+      onDispatch: () => {
+        throw new Error("log exploded");
+      },
+    });
+    const req = makeReq({
+      originalUrl: "/__rpc/ok-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, "[]");
+    await exploding(req, res, makeNext());
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+/* ─── the schema on both call paths ─────────────────────────────────────────
+ * A `schema` is enforced by the adapter in dispatch *and* by the function
+ * itself, because the function is also called directly — by SSR, by
+ * server-to-server code and by tests. The two bugs this prevents were measured:
+ * a direct call ran the handler on unchecked input, and the schema's transforms
+ * never ran on that path at all.
+ */
+
+describe("schema on the direct call path", () => {
+  /**
+   * A coercing schema, hand-rolled, so the test does not need a validator
+   * library to prove that the schema's **Output** — not its Input — is what
+   * reaches the handler.
+   */
+  const coercing: StandardSchemaV1<string, number> = {
+    "~standard": {
+      version: 1,
+      vendor: "test-coercing",
+      validate: (value) => {
+        const n = Number(value);
+        return Number.isNaN(n)
+          ? { issues: [{ message: "not a number", path: [] }] }
+          : { value: n };
+      },
+    },
+  };
+
+  it("rejects a bad input instead of entering the handler", async () => {
+    const handler = vi.fn(async (_s: AbortSignal, input: { a: number }) =>
+      input.a
+    );
+    const add = createServerFunction("direct-add", handler as never, {
+      schema: schema({ a: field.number() }),
+    });
+    await expect(add({ a: "x" } as never).data).rejects.toThrow(
+      /Validation failed/,
+    );
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("applies the schema's transform, so the handler sees the Output not the Input", async () => {
+    // This is the sharper half: over HTTP this returned 42; called directly it
+    // returned "240", because only the schema's output ever replaced the raw
+    // argument and nothing replaced it on this path.
+    const add = createServerFunction(
+      "direct-coerce",
+      async (_s, input) => input + 1,
+      {
+        schema: coercing,
+      },
+    );
+    expect(await add("41").data).toBe(42);
+  });
+
+  it("agrees with the HTTP path on the same input", async () => {
+    const add = createServerFunction(
+      "direct-parity",
+      async (_s, input) => input,
+      {
+        schema: schema({ a: field.number() }),
+      },
+    );
+    const req = makeReq({
+      originalUrl: "/__rpc/direct-parity",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, '[{"a":"x"}]');
+    await createRPCMiddleware({ allowHeaderless: true })(req, res, makeNext());
+    // The status agrees with the direct path below, which is the point of the
+    // test: behaviour must not depend on how the function was invoked.
+    expect(res.statusCode).toBe(422);
+
+    await expect(add({ a: "x" } as never).data).rejects.toThrow(
+      /Validation failed/,
+    );
+    // …and the direct path throws the same 422-bearing error, so a caller
+    // branching on the status behaves identically either way.
+    await expect(add({ a: "x" } as never).data).rejects.toSatisfy(
+      (e: unknown) => clientErrorStatus(e) === 422,
+    );
+  });
+
+  it("leaves a function with no schema untouched", async () => {
+    const fn = createServerFunction(
+      "direct-plain",
+      async (_s: AbortSignal, input: string) => input,
+    );
+    expect(await fn("anything").data).toBe("anything");
+    // A function with no schema must not grow a schema-shaped signature.
+    expect(fn.length).toBe(0);
+  });
+});
+
+describe("schema arity warning", () => {
+  const S = () => schema({ a: field.number() });
+
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("warns when a schema is attached to a handler taking more than one argument", () => {
+    // The schema covers `args[0]` and only that, so on a two-argument handler
+    // the second parameter is unchecked while the author believes it is not.
+    // Silence is the dangerous outcome, so it is worth a warning.
+    // The first parameter is annotated to the schema's Output, because a
+    // handler annotated with a type the schema does not produce is a type error
+    // for a reason that has nothing to do with arity. The second is the
+    // unvalidated one this warning is about.
+    createServerFunction(
+      "arity-warns",
+      async (_s: AbortSignal, _input: { a: number }, _extra: JsonValue) => "x",
+      { schema: S() },
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("only validates the first");
+    expect(warn.mock.calls[0][0]).toContain("arity-warns");
+  });
+
+  it("says nothing for the ordinary single-argument case", () => {
+    createServerFunction("arity-quiet", async (_s, _input) => "x", {
+      schema: S(),
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("says nothing when there is no schema at all", () => {
+    createServerFunction(
+      "arity-no-schema",
+      async (_s: AbortSignal, _a: string, _b: string) => "x",
+    );
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when a default parameter hides the second one", () => {
+    // `fn.length` under-reports with a default or rest parameter, so this is a
+    // false *negative* — the safe direction. A false positive would train people
+    // to ignore the warning, which is worse than missing one.
+    createServerFunction(
+      "arity-default",
+      async (_s: AbortSignal, _input: { a: number }, _b: JsonValue = 1) => "x",
+      { schema: S() },
+    );
+    expect(warn).not.toHaveBeenCalled();
   });
 });

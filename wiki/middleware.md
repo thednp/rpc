@@ -314,6 +314,70 @@ export const compose = (...middlewares: (() => void)[]) => () => {
 
 Chain order matters: run **auth** before **rate limiting** so the rate limiter can key on `locals.user?.id` instead of falling back to IP.
 
+## Observing Dispatches (`onDispatch`)
+
+`onDispatch` is a middleware option, and it is the other half of the request context: universal middleware sees a function **from the inside**, and `onDispatch` sees every dispatch **from the outside** — after the response is settled, whatever the outcome.
+
+```ts
+import { createRPCMiddleware } from '@thednp/rpc/express';
+
+const seen: DispatchContext[] = [];
+
+app.use(createRPCMiddleware({
+  onDispatch: (ctx) => {
+    seen.push(ctx);
+    if (ctx.outcome === 'server-error') report(ctx);
+  },
+}));
+```
+
+**The library retains nothing.** There is no buffer, no ring and no TTL — what you pass it to is the storage. That is deliberate: a library-owned buffer means rpc holding request data in memory for every consumer, whether or not they asked for it. A host with a logging pipeline needs nothing from us, and a host that does not want request data in memory does not get it.
+
+Each record answers the questions you actually have when something fails:
+
+| field | |
+| --- | --- |
+| `id` | correlation id, **also on the failure body** so a caller can quote it |
+| `prefix` / `functionName` / `registeredNames` | which function was dispatched, and its siblings — this is what turns "Function not found" into "did you mean" |
+| `originTier` | which tier of the cross-origin rule decided the request: `origin`, `sec-fetch-site`, `headerless`, or `blocked` |
+| `method` / `declaredMethod` | the request method against the function's declared one |
+| `declaredContentType` / `actualContentType` / `contentTypeMatched` | a `415` explained |
+| `argShape` | the **shape** of the arguments, never their values |
+| `status` / `outcome` | `200`/`ok`, `4xx`/`client-error`, `5xx`/`server-error` |
+| `error` | name, `code`, whether it was an `RPCError`, and the stack in development |
+| `durationMs` | how long it took |
+
+### Args are described, not captured
+
+`argShape` is the safety property, not a convenience. Args routinely carry passwords, API keys and personal data, so a record says `{a:number,password:string}` and never `"hunter2"`. It is bounded in depth and key count and cycle-safe, so a pathological input cannot make it allocate without limit.
+
+### Two things to know
+
+- **The correlation id appears on failure bodies only, and only when a hook is registered.** With nobody collecting, a new field in every production error body would be a change to the wire contract for no benefit — so with no hook the error body is byte-for-byte what it was.
+- **A hook that throws is ignored.** A logging facility that takes down the request it is describing is strictly worse than one that loses a record.
+
+A bounded in-memory store, if you want one, is a few lines on top — and it is *yours*, so the bound and the redaction policy are decisions you can see:
+
+```ts
+// A Map preserves insertion order, so the first key is always the oldest and
+// eviction is one delete.
+const records = new Map<string, DispatchContext>();
+
+app.use(createRPCMiddleware({
+  onDispatch: (ctx) => {
+    records.delete(ctx.id);
+    records.set(ctx.id, ctx);
+    while (records.size > 200) {
+      const oldest = records.keys().next();
+      if (oldest.done) break;
+      records.delete(oldest.value);
+    }
+  },
+}));
+```
+
+There is deliberately **no** such helper in the library. An earlier draft shipped one — a ring with a TTL — and it was cut, because a library-owned buffer is precisely the risk the hook exists to avoid. See [Security](./security.md) for why request data is worth being careful with.
+
 ## What NOT to Build
 
 - **Body parsing / body limits** — the RPC middleware already reads the body before your function runs. Enforce limits with your framework's body parsers (`express.json({ limit })`, Fastify `bodyLimit`, `assertBodySize` in h3, Hono `body-limit`). See [Best Practices — Body Limits](./best-practices.md#body-limits).
@@ -337,5 +401,5 @@ Chain order matters: run **auth** before **rate limiting** so the rate limiter c
 - [Wire Protocol](./wire-protocol.md) — The HTTP contract behind the generated clients (curl debugging)
 - [Adapters](./adapters.md) — Framework adapters
 - [Security](./security.md) — Security hardening
-- [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, and tRPC
+- [Comparison](./comparison.md) — How the cross-origin/CSRF boundary compares to Next.js Server Actions, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices

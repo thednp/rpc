@@ -40,7 +40,7 @@ export type KoaMiddlewareFn = <A extends AdapterName = "koa">(
  * Framework types re-exported from `koa` so consumers can annotate apps,
  * contexts, and middleware without a direct dependency on koa types.
  */
-import type { RequestDetails, ResponseDetails } from "../adapter-types.ts";
+import type { RequestDetails, ResponseDetails } from "../adapter-types.d.ts";
 
 /**
  * Normalized request/response shapes, shared with every adapter so a wrapper

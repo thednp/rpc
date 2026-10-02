@@ -41,7 +41,15 @@ if (!isProduction) {
   const options = await loadRPCConfig();
 
   // Register RPC plugin
-  await app.register(import("@thednp/rpc/fastify/plugin"), options);
+  // Since 0.4.0 the cross-origin check is on by default (`origin: "self"`), so a
+  // request with no `Origin` and no `Sec-Fetch-Site` is refused. These example
+  // servers are meant to be poked with `curl` and the no-JS form fallback,
+  // which send neither header — hence `allowHeaderless: true`. A real deployment
+  // should leave it off and name its public origins instead.
+  await app.register(import("@thednp/rpc/fastify/plugin"), {
+    allowHeaderless: true,
+    ...options,
+  });
 
   // Register other middleware
   // @fastify/compress attaches its onSend hook to routes registered after it
