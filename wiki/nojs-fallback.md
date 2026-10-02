@@ -161,6 +161,12 @@ so an author cannot turn it into an open redirect. The demo's success path
 redirects to a GitHub discussion this way, and `fallback.to` only ever points at
 `/`.
 
+A handler redirect is **unconditional** — it also answers `303` to a stub's
+`fetch`, which then follows the `Location` (and on an off-origin target, fails
+with a CORS error). If the same function should PRG for navigations but return
+`{ data }` to JS callers, gate it with `isNativeFormNavigation`; see
+[Redirects](./server-functions.md#redirects-redirect).
+
 ## What it does not change
 
 - A **JSON-declared** function receiving a form body still answers `415`. The

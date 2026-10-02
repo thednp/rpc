@@ -659,6 +659,47 @@ The Express variant prefers a native `.redirect()` when the response has one and
 
 All variants default to **`303 See Other`** — the semantically correct code for "the POST succeeded, now GET this page". Fastify's native API takes the URL first (`reply.redirect(url, status)`), Koa requires setting `ctx.status` *after* `ctx.redirect()` (Koa ignores a status set before it, see [koajs/koa#857](https://github.com/koajs/koa/issues/857)), and Hono's must be **returned** from the handler (`return redirect(c, url)`).
 
+### A redirect applies to *every* caller, not just form navigations
+
+`redirect()` is unconditional: the adapter answers `303` to whichever client made the request, including the generated stub's `fetch`. That is what you want for a plain no-JS `<form>` (PRG as designed), but a JS caller behaves differently — its `fetch` **follows** the `303`:
+
+- **Same-origin target** — the caller receives the *target's* response (usually HTML) instead of your function's `{ data }`, which is never what the caller that awaited `data` expected.
+- **Off-origin target** — the browser follows to a third-party host that sends no `Access-Control-Allow-Origin` for you, and the caller fails with a CORS error in the console. The redirect was issued correctly; the failure is on the *second*, cross-origin request.
+
+If a function should PRG for native navigations but still answer `{ data }` to `fetch`, gate the redirect with `isNativeFormNavigation` — the same discriminator the [no-JS fallback](./nojs-fallback.md) uses internally, fed from the normalized request metadata:
+
+```ts
+import {
+  createServerFunction,
+  getRequestContext,
+  getRequestMeta,
+  isNativeFormNavigation,
+  redirect,
+} from "@thednp/rpc/server";
+
+export const submit = createServerFunction("submit", async (signal, form) => {
+  await save(form);
+
+  const meta = getRequestMeta(getRequestContext());
+  const header = (name: string) => {
+    const value = meta.headers[name];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const navigation = isNativeFormNavigation({
+    method: meta.method,
+    contentType: header("content-type"),
+    accept: header("accept"),
+    secFetchDest: header("sec-fetch-dest"),
+    secFetchMode: header("sec-fetch-mode"),
+  });
+
+  if (navigation) redirect("/thanks");
+  // a stub fetch falls through and receives the normal { data } response
+});
+```
+
+Note this is a **caller** concern, not a security one: the location is authored by you, not taken from the request, and the request-influenced redirect paths (`fallback.to` and the replay params) are already gated and passed through `sanitizeRedirect` — see [No-JS Fallback](./nojs-fallback.md). Only gate the handler's own redirect when both caller types share the function; if the function is only ever reached by a native form, plain `redirect()` is correct and simpler.
+
 ## Request Context (`provideRequestContext`, `getRequestContext`)
 
 Every RPC dispatch establishes a **per-request context** that is available to any code running inside the async tree of that server function. This eliminates the need to thread `req`/`res` (or framework `Context` objects) through every nested call.
