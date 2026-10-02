@@ -133,23 +133,27 @@ export const arktypeProfile = schema.from(type({
 
 /**
  * effect does not put `~standard` on a `Schema` — the spec adapter is
- * `Schema.standardSchemaV1`, which is the documented way to hand a Schema to
- * anything that speaks the standard. Wrapping here rather than at the call site
- * keeps the four registrations identical in shape.
+ * `Schema.toStandardSchemaV1` (named `standardSchemaV1` before effect 4.0.0
+ * went stable), which is the documented way to hand a Schema to anything that
+ * speaks the standard. Wrapping here rather than at the call site keeps the
+ * four registrations identical in shape.
  */
-export const effectProfile = Schema.standardSchemaV1(
+export const effectProfile = Schema.toStandardSchemaV1(
   Schema.Struct({
-    name: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(40)),
+    name: Schema.String.pipe(
+      Schema.check(Schema.isMinLength(1), Schema.isMaxLength(40)),
+    ),
     // `NumberFromString` is effect's coercion combinator, and the union is what
     // makes it accept a real number too — the same `string | number` contract
-    // the other two express with a pipe.
-    age: Schema.Union(Schema.Finite, Schema.NumberFromString).pipe(
-      Schema.int(),
-      Schema.greaterThanOrEqualTo(0),
+    // the other two express with a pipe. effect 4's checks are `is*` filters
+    // applied via `Schema.check` rather than the old pipeable `Schema.int()` /
+    // `Schema.greaterThanOrEqualTo()` helpers.
+    age: Schema.Union([Schema.Finite, Schema.NumberFromString]).pipe(
+      Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
     ),
     tags: Schema.Array(Schema.String),
     address: Schema.Struct({
-      city: Schema.String.pipe(Schema.minLength(1)),
+      city: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
       zip: Schema.optional(Schema.String),
     }),
   }),

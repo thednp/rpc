@@ -1,4 +1,9 @@
-import { createServerFunction, getRequestContext } from "@thednp/rpc/server";
+import {
+  createServerFunction,
+  getRequestContext,
+  getRequestMeta,
+  isNativeFormNavigation,
+} from "@thednp/rpc/server";
 import pkg from "../../package.json" with { type: "json" };
 import rootPkg from "../../../package.json" with { type: "json" };
 import cfg from "../../rpc.config.ts";
@@ -89,7 +94,7 @@ const fetchGitHubUserByEmail = async (
   try {
     const headers = {
       Accept: "application/vnd.github+json",
-      "User-Agent": "@thednp/rpc-demo",
+      "User-Agent": "@thednp/rpc",
     };
     const searchUrl = `https://api.github.com/search/users?q=${encodeURIComponent(email)}+in:email&per_page=1`;
     const searchRes = await fetch(searchUrl, { headers, signal });
@@ -117,19 +122,41 @@ const fetchGitHubUserByEmail = async (
 };
 
 /**
- * Issues a redirect when this call is inside a request, and does nothing when it
- * is not.
+ * Issues a redirect when this call is a *native form navigation*, and does
+ * nothing otherwise.
  *
- * `getRequestContext()` throws outside a dispatch by design — per-request data
- * does not exist in a direct call — and `submitContact` is called directly by SSR
- * and by tests, so the absence of a context is normal here rather than an error.
+ * Two cases fall through to no redirect:
+ * - `getRequestContext()` throws outside a dispatch — per-request data does not
+ *   exist in a direct call, and `submitContact` is called directly by SSR and by
+ *   tests. The absence of a context is normal here rather than an error.
+ * - The call came from the generated stub (`Sec-Fetch-Mode: cors`). A `303` there
+ *   would make the browser's `fetch` *follow* the redirect off-origin to GitHub,
+ *   which has no `Access-Control-Allow-Origin` for us — the console CORS error on
+ *   the deployed demo. The JSON `{ data }` result is what the stub wants anyway:
+ *   the page opens the issue URL itself. Only the no-JS `<form>` wants the
+ *   `303`, so only the navigation gets one.
  */
 const redirectTo = (location: string) => {
+  let event;
   try {
-    getRequestContext().redirect(location);
+    event = getRequestContext();
   } catch {
     // No request context: the caller wanted the result, not a redirect.
+    return;
   }
+  const meta = getRequestMeta(event);
+  const header = (name: string) => {
+    const value = meta.headers[name];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const navigation = isNativeFormNavigation({
+    method: meta.method,
+    contentType: header("content-type"),
+    accept: header("accept"),
+    secFetchDest: header("sec-fetch-dest"),
+    secFetchMode: header("sec-fetch-mode"),
+  });
+  if (navigation) event.redirect(location);
 };
 
 export const submitContact = createServerFunction(
@@ -145,7 +172,8 @@ export const submitContact = createServerFunction(
     // The success redirect is the *handler's*, not the fallback's: the target is
     // off-origin, and `fallback.to` is deliberately restricted to root-relative
     // paths so an author cannot turn it into an open redirect. This is also the
-    // documented precedence — a handler redirect wins over the fallback.
+    // documented precedence — a handler redirect wins over the fallback. And the
+    // redirect only happens for native navigations; `redirectTo` decides that.
     redirectTo(buildIssueUrl({ ...payload, ghLogin: githubUser ? `@${githubUser.login}` : "" }) + "#contact");
 
     return {

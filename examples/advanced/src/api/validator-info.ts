@@ -36,7 +36,7 @@ export const VALIDATOR_NOTES: Record<ValidatorName, string> = {
   arktype:
     "Type-first and the tersest of the four, but coercion takes a function pipe and needs a second pipe to restore the integer rule — the only one of the four that does not fold it into one expression.",
   effect:
-    "Effect Schema via `Schema.standardSchemaV1`. Coerces a string age. Richest issue messages.",
+    "Effect Schema via `Schema.toStandardSchemaV1`. Coerces a string age. Richest issue messages.",
 };
 
 /**
