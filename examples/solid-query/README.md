@@ -24,7 +24,7 @@ Server-Side Rendering (SSR) application using Express, Solid, and `@tanstack/sol
 ## Data Fetching
 
 - `createQuery` wraps `sayHi` / `getServerTime`, mapping the RPC `{ data, cancel }` shape to query/mutation functions
-- The greeting query is prefetched on the server via `renderToStringAsync` (not a disabled `createQuery`, which would hang SSR — see [Client Usage](https://github.com/thednp/rpc/blob/master/wiki/client-usage.md)), so the server-rendered HTML shows the actual greeting
+- The greeting query is prefetched on the server via `renderToStringAsync`, so the server-rendered HTML shows the actual greeting; the time query is a disabled `createQuery` that fetches on submit via `refetch()`, mirroring the `react-query` example (a disabled query used to hang SSR on `@tanstack/solid-query` ≤ 5.101.x — upstream removed the mechanism in 5.102.0, see [Client Usage](https://github.com/thednp/rpc/blob/master/wiki/client-usage.md))
 - `createMutation` handles the `add` form, preserving valibot error rendering and cancellation
 
 ## Resources

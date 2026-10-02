@@ -221,43 +221,39 @@ Other frameworks have a `@tanstack/<framework>-query` made by [Tanstack](https:/
 
 The example apps in this repository keep query libraries optional — the plain SSR examples (`express`, `fastify`, `hono`, `koa`, `ssr`, `spa`) call RPC functions directly and update the DOM when the promise resolves, with no query-framework hydration involved. The `react-query` and `solid-query` examples demonstrate how to integrate `@tanstack/*-query` on top of that.
 
-If you integrate a query library into an SSR setup, be aware of a **disabled-query hang** that only surfaces on the server:
+If you integrate a query library into an SSR setup, be aware of a **disabled-query hang** that only affected `@tanstack/solid-query` below 5.102.0:
 
-- `@tanstack/solid-query` forces `defaultOptions.experimental_prefetchInRender = true` when `isServer`, which adds a live `promise` field (a `PendingThenable`) to the observer result.
-- For a query with `enabled: false`, that thenable is **never settled** (there is no data and no error to finalize it).
-- Solid's serializer (seroval) sees the nested pending promise inside the serialized observer result and awaits it forever, so `renderToStringAsync` hangs until its `timeoutMs` fires.
+- solid-query forced `defaultOptions.experimental_prefetchInRender = true` when `isServer` (since 5.90.7), which added a live `promise` field (a `PendingThenable`) to the observer result.
+- For a query with `enabled: false`, that thenable was **never settled** (there is no data and no error to finalize it).
+- Solid's serializer (seroval) saw the nested pending promise inside the serialized observer result and awaited it forever, so `renderToStringAsync` hung until its `timeoutMs` fired.
 
-**Reproduction:** any `createQuery(() => ({ ..., enabled: false }))` rendered inside `renderToStringAsync` on the server.
+**Reproduction on the old line:** any `createQuery(() => ({ ..., enabled: false }))` rendered inside `renderToStringAsync` on the server (upstream issue [TanStack/query#10907](https://github.com/TanStack/query/issues/10907)).
 
-**Workaround:** don't let a disabled query participate in server rendering. Instead of creating the disabled query and calling `refetch()` on a user action, call `queryClient.fetchQuery()` directly from the event handler and keep the result in a plain signal:
+**Fixed upstream in 5.102.0** ([TanStack/query#11221](https://github.com/TanStack/query/pull/11221)): render-time prefetching and the result `promise` were removed outright, so a disabled `createQuery` renders its idle state on the server like any other query. The `solid-query` example therefore uses the same pattern as the `react-query` one — a disabled query plus `refetch()` on submit:
 
 ```ts
 import { createSignal } from "solid-js";
-import { useQueryClient } from "@tanstack/solid-query";
+import { createQuery } from "@tanstack/solid-query";
 import { getServerTime } from "./api";
 
 function TimeForm() {
   const [locale, setLocale] = createSignal("en-US");
-  const [time, setTime] = createSignal<string | null>(null);
-  const [fetching, setFetching] = createSignal(false);
-  const queryClient = useQueryClient();
+
+  const query = createQuery(() => ({
+    queryKey: ["getServerTime", locale()],
+    queryFn: () => getServerTime(locale()).data,
+    enabled: false,
+  }));
 
   const onSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    setFetching(true);
-    queryClient
-      .fetchQuery({
-        queryKey: ["getServerTime", locale()],
-        queryFn: () => getServerTime(locale()).data,
-      })
-      .then((res) => setTime(res.time))
-      .finally(() => setFetching(false));
+    query.refetch();
   };
   // ...
 }
 ```
 
-Because the query is only created on demand (client-side), nothing async is serialized during SSR and `renderToStringAsync` completes normally. The fully working pattern lives in the `solid-query` example app.
+If you are pinned below 5.102.0, the old workaround still applies: don't let a disabled query participate in server rendering — call `queryClient.fetchQuery()` from the event handler and keep the result in a plain signal, so nothing async is serialized during SSR.
 
 > **Next:** [Wire Protocol](./wire-protocol.md) — what these client modules actually send over the network.
 

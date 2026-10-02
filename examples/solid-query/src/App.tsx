@@ -1,9 +1,5 @@
 import { createMemo, createSignal } from "solid-js";
-import {
-  createMutation,
-  createQuery,
-  useQueryClient,
-} from "@tanstack/solid-query";
+import { createMutation, createQuery } from "@tanstack/solid-query";
 import { add, getServerTime, sayHi } from "./api";
 import { getError, isValiError, type ValiError } from "./util/helpers";
 
@@ -128,9 +124,15 @@ function AddForm() {
 
 function TimeForm() {
   const [locale, setLocale] = createSignal("en-US");
-  const [time, setTime] = createSignal<string | null>(null);
-  const [fetching, setFetching] = createSignal(false);
-  const queryClient = useQueryClient();
+
+  const query = createQuery(() => ({
+    queryKey: ["getServerTime", locale()],
+    queryFn: () => {
+      const { data } = getServerTime(locale());
+      return data;
+    },
+    enabled: false,
+  }));
 
   const link = () =>
     `/${RPC_PREFIX}/get-server-time?args=${
@@ -139,14 +141,7 @@ function TimeForm() {
 
   const onSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    setFetching(true);
-    queryClient
-      .fetchQuery({
-        queryKey: ["getServerTime", locale()],
-        queryFn: () => getServerTime(locale()).data,
-      })
-      .then((res) => setTime(res.time))
-      .finally(() => setFetching(false));
+    query.refetch();
   };
 
   return (
@@ -168,10 +163,14 @@ function TimeForm() {
       <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
         <label for="time-output">&gt;</label>
         <output id="time-output">
-          {fetching() ? "Fetching…" : time() ? `Time: ${time()}` : "Time: —"}
+          {query.isFetching
+            ? "Fetching…"
+            : query.data
+            ? `Time: ${query.data.time}`
+            : "Time: —"}
         </output>
-        <button type="submit" disabled={fetching()}>
-          {fetching() ? "Fetching…" : "Get time"}
+        <button type="submit" disabled={query.isFetching}>
+          {query.isFetching ? "Fetching…" : "Get time"}
         </button>
         <a id="time-link" href={link()} target="_blank">
           Open in new tab

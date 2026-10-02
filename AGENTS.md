@@ -69,7 +69,7 @@ Each example follows the same structure:
 
 > Note: the `react-query` example is SSR with React 19 + `@tanstack/react-query` (Express adapter). It prefetches queries in `entry-server.tsx`, dehydrates them into `window.__REACT_QUERY_STATE__`, and hydrates on the client via `HydrationBoundary`.
 >
-> Note: the `solid-query` example is SSR with Solid + `@tanstack/solid-query` (Express adapter). The greeting is prefetched and serialized with `renderToStringAsync`; the GET form does **not** use a disabled `createQuery` (which would hang SSR — see `wiki/client-usage.md`), it calls `queryClient.fetchQuery()` on submit instead.
+> Note: the `solid-query` example is SSR with Solid + `@tanstack/solid-query` (Express adapter). The greeting is prefetched and serialized with `renderToStringAsync`; the GET form mirrors the `react-query` example (disabled `createQuery` + `refetch()` on submit). That pattern used to hang SSR on `@tanstack/solid-query` ≤ 5.101.x — a never-settling `promise` in the observer result under the forced `experimental_prefetchInRender` (see `wiki/client-usage.md`) — and the example carried a `queryClient.fetchQuery()` workaround for it; upstream removed the mechanism in 5.102.0 (TanStack/query#11221), the example requires `^5.104.0`, so the workaround is gone. Do not reintroduce it.
 
 ## Key Directories
 
