@@ -5,6 +5,7 @@ import {
   CONTACT_FIELDS,
   parseFormState,
 } from "./lib/contact-form.ts";
+import { fieldErrors, RPCResponseError } from "@thednp/rpc/helpers";
 import type { ContactOutput } from "./lib/contact-form.ts";
 
 export const setupReveal = () => {
@@ -128,6 +129,22 @@ const showToast = (text: string, colorClass: string, duration = 4000) => {
 
 export const setupContact = (form: HTMLFormElement) => {
   const fields = [...CONTACT_FIELDS];
+  const markInvalidFields = (failedFields: readonly string[]): boolean => {
+    const invalid = fields.filter((field) => failedFields.includes(field));
+    for (const field of invalid) {
+      const el = form.querySelector<HTMLElement>(`[data-error="${field}"]`);
+      if (el) el.textContent = CONTACT_ERROR_MESSAGES[field];
+    }
+    const firstInvalidField = invalid[0];
+    if (firstInvalidField) {
+      form.querySelector<HTMLElement>(`[name="${firstInvalidField}"]`)?.focus();
+    }
+    if (invalid.length > 0) {
+      showToast("Check the highlighted fields.", "alert-warning");
+      return true;
+    }
+    return false;
+  };
   const successBox = document.getElementById("contact-success")!;
   const successText = successBox.querySelector("span")!;
   const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
@@ -194,19 +211,21 @@ export const setupContact = (form: HTMLFormElement) => {
         form.reset();
         showToast("Message sent!", "alert-success");
       } else {
-        fields.forEach((field) => {
-          const el = form.querySelector<HTMLElement>(`[data-error="${field}"]`);
-          const msg = res.errors?.[field]?.[0];
-          if (el && msg) el.textContent = msg;
-        });
-        const firstInvalidField = fields.find((field) => res.errors?.[field]?.[0]);
-        if (firstInvalidField) {
-          form.querySelector<HTMLElement>(`[name="${firstInvalidField}"]`)?.focus();
+        const failedFields = fields.filter((field) => res.errors?.[field]?.[0]);
+        if (!markInvalidFields(failedFields)) {
+          showToast("The server returned an unexpected response.", "alert-error");
         }
-        showToast("Check the highlighted fields.", "alert-warning");
       }
-    } catch (_er) {
-      // console.log("[DEBUG]", _er); // DEBUG only
+    } catch (error) {
+      // A 422 is not a server outage: it means the schema rejected the input
+      // before the handler ran. The generated client rejects, so recover the
+      // failed field names and mark them exactly as the no-JS path does.
+      if (
+        error instanceof RPCResponseError && error.status === 422 &&
+        markInvalidFields(Object.keys(fieldErrors(error)))
+      ) {
+        return;
+      }
       showToast("Couldn't reach the server.", "alert-error");
     } finally {
       spinner.classList.add("hidden");

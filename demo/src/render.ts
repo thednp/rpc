@@ -473,14 +473,13 @@ export const renderPage = (state?: FormState): string => `
 <section id="contact" class="py-20 bg-base-200/60 border-y border-base-300/60 scroll-mt-16">
   <div class="max-w-full lg:max-w-6xl mx-auto px-4 sm:px-8">
     <div class="reveal text-center max-w-2xl mx-auto mb-12">
-      <span class="mb-4">
-        Multipart <span class="font-bold">demo</span>
-      </span>
+        <span class="mb-4">
+          Contact <span class="font-bold">demo</span>
+        </span>
       <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-balance">Questions? Ideas? Bugs?</h2>
       <p class="mt-4 text-base-content/80 text-pretty">
         This form is a live <code class="font-mono code-hl-inline" translate="no">@thednp/rpc</code> call: the server
-        function is declared with <code class="font-mono code-hl-inline" translate="no">contentType: "multipart/form-data"</code>
-        (or <code class="font-mono code-hl-inline" translate="no">application/x-www-form-urlencoded</code> with JavaScript disabled)
+        function is declared with <code class="font-mono code-hl-inline" translate="no">contentType: "application/x-www-form-urlencoded"</code>
         and every field is validated server-side with valibot.
       </p>
     </div>
@@ -608,7 +607,7 @@ export const renderPage = (state?: FormState): string => `
       MIT licensed, available on npm and jsr.
     </p>
     <p class="text-xs text-base-content/80">
-      © 2026 thednp · This page's forms and clocks are live RPC calls.
+      thednp © 2026
     </p>
   </aside>
 
