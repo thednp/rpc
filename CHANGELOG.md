@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.1] - 2026-10-02
+
+### Added: staged response headers
+
+`RequestEvent.header(name, value)` — write a response header from inside a server function or handler wrapper that rides whatever the dispatch concludes with: the default `{ data }` JSON response, an author `send`/`redirect`, the no-JS fallback's `303`, or a dispatch error
+response. Set semantics (one value per name; later calls replace).
+Bound per adapter as an immediate host-bag write; on Express and Fastify a call after the response is committed is ignored. This is the primitive session middleware needs to stage `Set-Cookie` on a native form navigation.
+
+### Fixed
+
+- **Demo contact form no longer fails with a CORS error on submit.** The handler's success redirect (`303` to a GitHub discussion URL) applied to *every* caller, so the generated stub's `fetch` followed it off-origin to `github.com` — which sends no `Access-Control-Allow-Origin` for us — and the browser blocked the response. The redirect is now gated on `isNativeFormNavigation`: stub callers receive the `{ data }` JSON result (the page opens the issue URL itself) and only native `<form>` navigations take the `303`. The general rule is documented in `wiki/server-functions.md`: `redirect()` is unconditional, so a function serving both caller types gates it itself.
+- **Demo marks rejected fields on a `422` like the no-JS path does.** The hydration script only handled the `{ data: { errors } }` shape, so a bare `422` rejection fell through to "Couldn't reach the server" — a validation outcome misreported as an outage. It now recovers the failed field names via `fieldErrors`/`RPCResponseError` and marks them exactly as the
+flash-carrying redirect does.
+- **solid-query example drops the `fetchQuery` workaround.** The GET form used `queryClient.fetchQuery()` plus plain signals because a disabled `createQuery` hung SSR: under the forced `experimental_prefetchInRender` the observer result carried a never-settling `promise` that seroval awaited forever ([TanStack/query#10907](https://github.com/TanStack/query/issues/10907)). Upstream removed the mechanism in 5.102.0 ([TanStack/query#11221](https://github.com/TanStack/query/pull/11221)), and the example requires `^5.104.0`, so the form now mirrors the `react-query` example (disabled `createQuery` + `refetch()` on submit). `wiki/client-usage.md` documents the version boundary for anyone pinned below 5.102.0.
+- **Advanced example migrated to effect 4.0.0 stable.** The validators were written against the `4.0.0-rc` API (`Schema.minLength`, `Schema.Union(a, b)`), which the stable release removed; they now use `Schema.toStandardSchemaV1`, `Schema.check(...)`, and `Schema.Union([...])`. Runtime behaviour unchanged.
+- **Advanced example gains a fifth validator: rpc's own builder.** A new `profile-builder` declares the profile with the dependency-free `schema()`/`field` combinators and runs beside the four vendor schemas under identical options — proving the hint layer and the `422` body are schema-agnostic. The boundary differences are the demo: no coercion (`age: "36"` is rejected where the vendors convert it) and strict keys (an unknown key is a `422` here, ignored everywhere else), each measured live and pinned in `verify.mjs`.
+
 ## [0.4.0] - 2026-10-02
 
 The release that made the cross-origin boundary real, then filled in the two things the 0.3.x hardening left as promises. One item here is a **breaking change with a required migration**; read that first.

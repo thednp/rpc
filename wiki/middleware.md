@@ -132,6 +132,22 @@ The matched RPC function name for the request (e.g. `"get-profile"`). Handy for 
 
 Context-level helper (import from `@thednp/rpc/server`) equivalent to `getRequestContext().send(status, body, headers)`. See [Short-Circuiting](#short-circuiting-with-sendresponse).
 
+### `event.header(name, value)`
+
+Stages a response header from anywhere inside the dispatch — a server function, a handler wrapper, middleware reading the context. The write lands in the host's response immediately, so it rides whatever the dispatch concludes with: the default `{ data }` JSON send, your own `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. Set semantics: one value per name, a later call replaces. (On Express and Fastify a call made after the response is already committed is ignored — never call it after your own `send`/`redirect`.)
+
+```ts
+import { createServerFunction, getRequestContext } from "@thednp/rpc/server";
+
+export const login = createServerFunction("login", async (signal, credentials) => {
+  const session = await createSession(credentials);
+  // Rides the fallback's 303 on a native form navigation, and the `{ data }`
+  // JSON send on a stub fetch — the portable way to set a cookie.
+  getRequestContext().header("Set-Cookie", `sid=${session.id}; HttpOnly; Path=/`);
+  return { user: session.user };
+});
+```
+
 ## Wrapping Official Framework Middleware
 
 ### Express — session → `locals`

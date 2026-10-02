@@ -13,6 +13,7 @@ export {
   getServerTime,
   getUser,
   profileWithArktype,
+  profileWithBuilder,
   profileWithEffect,
   profileWithValibot,
   profileWithZod,

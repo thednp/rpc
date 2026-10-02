@@ -724,6 +724,8 @@ interface RequestEvent {
   send: (status: number, body: unknown, headers?: Record<string, string>) => void;
   /** Set by `send` once issued; middleware checks this after `await`ing the handler */
   sent?: { status: number; body: unknown; headers?: Record<string, string> };
+  /** Staged response header — written into the host's response immediately, so it rides the `{ data }` JSON send, a `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. Set semantics: one value per name */
+  header: (name: string, value: string) => void;
   /** Matched RPC function name (e.g. "greet") — useful for per-function rate limiting */
   functionName?: string;
   /** Per-request app data shared across the async tree of the dispatch */
@@ -805,6 +807,7 @@ async function fetchUserPosts(userId: string) {
 3. The `locals` object is empty at the start of each request — use it to pass data through the async tree (e.g. user identity, request IDs, feature flags).
 4. The `redirect` function on `RequestEvent` is bound to the adapter's native redirect; calling it sets `redirected` so the middleware skips the JSON `{ data }` response.
 5. The `send` function on `RequestEvent` writes a raw status/body/headers response (e.g. `401`, `429`), sets `sent`, and makes the middleware skip the JSON `{ data }` response — perfect for short-circuiting from shared middleware.
+6. The `header` function on `RequestEvent` stages a response header into the host's response immediately, so it rides whatever the dispatch concludes with — the `{ data }` send, a `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. See [Middleware](./middleware.md#eventheadername-value).
 
 > The `redirect` helper from `@thednp/rpc/server` (and each adapter) is just a thin wrapper around `getRequestContext().redirect(location, status)`. The `sendResponse` helper is the same wrapper around `getRequestContext().send(status, body, headers?)`.
 

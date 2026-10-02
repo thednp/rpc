@@ -7,6 +7,7 @@ import {
   logout,
   me,
   profileWithArktype,
+  profileWithBuilder,
   profileWithEffect,
   profileWithValibot,
   profileWithZod,
@@ -247,15 +248,15 @@ export const setupMultiPrefix = (target: HTMLElement) => {
   });
 };
 
-/* ─── Four validators, one option ──────────────────────────────────────────── */
+/* ─── Five validators, one option ──────────────────────────────────────────── */
 
 /**
  * Calls the stub for the chosen validator.
  *
- * A `switch` rather than indexing a record of stubs on purpose: the four stubs
- * have four different **Input** types, and calling a union of function types
+ * A `switch` rather than indexing a record of stubs on purpose: the five stubs
+ * have five different **Input** types, and calling a union of function types
  * makes TypeScript check the argument against the *intersection* of them — which
- * is arktype's `age: number`, and would reject the string the other three accept.
+ * is arktype's `age: number`, and would reject the string the others accept.
  * The interesting question is per-library, so it is asked per-library.
  */
 const runProfile = async (via: ValidatorName, profile: ProfileInput) => {
@@ -268,6 +269,10 @@ const runProfile = async (via: ValidatorName, profile: ProfileInput) => {
       return await profileWithArktype(profile).data;
     case "effect":
       return await profileWithEffect(profile).data;
+    case "builder":
+      // No cast either: the builder takes the wire type as-is (`JsonValue`),
+      // so the form's `ProfileInput` is assignable straight in.
+      return await profileWithBuilder(profile).data;
     default:
       return await profileWithValibot(profile).data;
   }
@@ -328,7 +333,7 @@ export const setupValidators = (section: HTMLElement) => {
     } catch (err) {
       if (!(err instanceof RPCResponseError)) throw err;
       out.textContent = `rejected by ${via} — ${err.status}`;
-      // `fieldErrors` reads the normalised issues, so this works for all four
+      // `fieldErrors` reads the normalised issues, so this works for all five
       // libraries without knowing which one produced them.
       for (const path of Object.keys(fieldErrors(err))) {
         const li = document.createElement("li");

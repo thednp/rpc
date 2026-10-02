@@ -1616,3 +1616,100 @@ describe("Fastify no-JS form fallback (dispatch)", () => {
     expect(reply.status).toHaveBeenCalledWith(422);
   });
 });
+
+describe("Fastify staged response headers (RequestEvent.header)", () => {
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seedServerMap();
+  });
+
+  // The staged write happens before/alongside the redirect, never instead of
+  // it: the header rides the fallback's 303 rather than replacing it.
+  it("writes a staged header into the response bag and still redirects a successful native form", async () => {
+    createServerFunction(
+      "cookie-form",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", "sid=1");
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const request = makeFastifyReq({
+      url: "/__rpc/cookie-form",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+      rawBody: "email=a%40b.c",
+    });
+    // The urlencoded body has to arrive on the Node stream, the way Fastify's
+    // own parser would have delivered it, so the adapter reads it through
+    // `readBody`.
+    simulateRawBody(request, "email=a%40b.c");
+    const reply = makeFastifyReply();
+    await mw(request as never, reply as never, makeFastifyDone());
+
+    expect(reply.header).toHaveBeenCalledWith("Set-Cookie", "sid=1");
+    expect(reply.redirect).toHaveBeenCalledWith(
+      expect.stringContaining("/thanks"),
+      303,
+    );
+    expect(reply.header.mock.invocationCallOrder[0]).toBeLessThan(
+      reply.redirect.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("carries a staged header on the default JSON response", async () => {
+    createServerFunction(
+      "cookie-json",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        return "hello fastify";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const request = makeFastifyReq({
+      url: "/__rpc/cookie-json",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    await mw(request as never, reply as never, makeFastifyDone());
+
+    expect(reply.header).toHaveBeenCalledWith("X-Staged", "yes");
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(reply.send).toHaveBeenCalledWith({ data: "hello fastify" });
+  });
+
+  // The guard drops the late write — after `send` the reply is committed and
+  // a further `reply.header()` would be silently dropped anyway.
+  it("ignores a staged header once the response has been committed", async () => {
+    createServerFunction(
+      "late-header",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(200, { ok: true });
+        getRequestContext().header("X-Late", "1");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const request = makeFastifyReq({
+      url: "/__rpc/late-header",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([]),
+    });
+    const reply = makeFastifyReply();
+    await mw(request as never, reply as never, makeFastifyDone());
+
+    expect(reply.header).not.toHaveBeenCalledWith("X-Late", "1");
+    expect(reply.send).toHaveBeenCalledWith({ ok: true });
+  });
+});

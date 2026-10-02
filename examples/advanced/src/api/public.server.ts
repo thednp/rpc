@@ -6,6 +6,7 @@ import type { ValidatorName } from "./types.d.ts";
 import { type } from "arktype";
 import {
   arktypeProfile,
+  builderProfile,
   effectProfile,
   SELECTOR_SCHEMA,
   valibotProfile,
@@ -142,13 +143,14 @@ export const getUser = createServerFunction(
   },
 );
 
-/* ─── Four validators, one option ────────────────────────────────────────────
+/* ─── Five validators, one option ────────────────────────────────────────────
  *
- * Four functions with identical bodies and identical options, differing only in
+ * Five functions with identical bodies and identical options, differing only in
  * the schema each declares. The point is what does *not* differ: rpc receives
- * four `StandardSchemaV1` values and has no idea which library produced any of
- * them. Each is registered under its own name so the network panel says which
- * validator ran — which is the whole reason to wire this into a page.
+ * five `StandardSchemaV1` values and has no idea which library produced any of
+ * them — the fifth was produced by no library at all. Each is registered under
+ * its own name so the network panel says which validator ran — which is the
+ * whole reason to wire this into a page.
  */
 
 const summarise = (p: {
@@ -171,7 +173,7 @@ const VALIDATOR_HINT =
   "name 1-40 chars, age a non-negative integer, tags an array of strings";
 
 /**
- * Per-field hints, shared by all four profiles.
+ * Per-field hints, shared by all five profiles.
  *
  * These exist to be **sent**, and that is the point: a `hint` is authored here
  * in `ServerFunctionOptions`, so disclosing it in production was deliberate —
@@ -179,6 +181,10 @@ const VALIDATOR_HINT =
  * the failing value into (valibot does, zod and arktype do not). A production
  * rejection therefore still arrives with `path` and `hint` for each bad field and
  * no `message` at all, which is what the "Production" panel on this page shows.
+ *
+ * Shared unchanged by the builder profile on purpose: the hint layer is
+ * schema-agnostic, so identical options mean identical `422` bodies whichever
+ * schema produced them.
  */
 const VALIDATOR_HINTS = {
   name: "1 to 40 characters",
@@ -247,6 +253,21 @@ export const profileWithEffect = createServerFunction(
   },
 );
 
+export const profileWithBuilder = createServerFunction(
+  "profile-builder",
+  async (signal, profile) => {
+    await new Promise((res) => setTimeout(res, 120));
+    signal?.throwIfAborted();
+    return { via: "builder" as const, ...summarise(profile) };
+  },
+  {
+    rpcPrefix: "public:rpc",
+    schema: builderProfile,
+    hint: VALIDATOR_HINT,
+    hints: VALIDATOR_HINTS,
+  },
+);
+
 /**
  * The radio's RPC: tells the server which validator the client has selected.
  *
@@ -270,6 +291,6 @@ export const selectValidator = createServerFunction(
   {
     rpcPrefix: "public:rpc",
     schema: schema.from(SELECTOR_SCHEMA),
-    hint: "one of valibot, zod, arktype, effect",
+    hint: "one of valibot, zod, arktype, effect, builder",
   },
 );

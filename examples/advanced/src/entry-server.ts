@@ -18,11 +18,12 @@ export async function render(_url: string) {
       </p>
 
       <section id="validators">
-        <h2>Four validators, one <code>schema</code> option</h2>
+        <h2>Five validators, one <code>schema</code> option</h2>
         <p>
-          The same input contract written four times — valibot, zod, arktype and
-          effect — and registered through the identical <code>schema</code> option.
-          rpc receives four <code>StandardSchemaV1</code> values and has no idea
+          The same input contract written five times — valibot, zod, arktype,
+          effect, and rpc's own dependency-free builder — and registered through
+          the identical <code>schema</code> option.
+          rpc receives five <code>StandardSchemaV1</code> values and has no idea
           which library produced any of them. Changing the radio sends an RPC to
           the server, then calls the matching function; each is its own wire path,
           so the network panel names the validator that ran.
@@ -58,7 +59,10 @@ export async function render(_url: string) {
         </form>
         <p class="note">
           Try <code>Age = 36</code> (number) vs <code>36</code> (string), and a
-          too-long name, to see where the four disagree.
+          too-long name, to see where the five disagree — and an extra field,
+          to see the one way the builder is strictest. The builder takes the
+          form literally: Age arrives as text, which the vendors convert and
+          the builder rejects.
         </p>
       </section>
 

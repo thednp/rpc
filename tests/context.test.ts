@@ -17,6 +17,7 @@ describe("provideRequestContext", () => {
       response: { id: "res1" },
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: { user: "alice" },
     };
     provideRequestContext(init, () => {
@@ -32,6 +33,7 @@ describe("provideRequestContext", () => {
         response: {},
         redirect: () => undefined,
         send: noopSend,
+        header: () => undefined,
         locals: {},
       },
       () => {
@@ -47,6 +49,7 @@ describe("provideRequestContext", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     };
     provideRequestContext(outer, () => {
@@ -55,6 +58,7 @@ describe("provideRequestContext", () => {
         response: {},
         redirect: () => undefined,
         send: noopSend,
+        header: () => undefined,
         locals: {},
       };
       provideRequestContext(inner, () => {
@@ -70,6 +74,7 @@ describe("provideRequestContext", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     };
     await provideRequestContext(init, async () => {
@@ -96,6 +101,7 @@ describe("redirect", () => {
         response: {},
         redirect: ctxRedirect,
         send: noopSend,
+        header: () => undefined,
         locals: {},
       },
       () => {
@@ -123,6 +129,7 @@ describe("sendResponse", () => {
         response: {},
         redirect: () => undefined,
         send: ctxSend,
+        header: () => undefined,
         locals: {},
       },
       () => {
@@ -162,6 +169,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.method).toBe("POST");
@@ -188,6 +196,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.method).toBe("GET");
@@ -209,6 +218,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.ip).toBe("203.0.113.7");
@@ -221,6 +231,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.method).toBe("GET");
@@ -238,6 +249,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.pathname).toBe("/__rpc/greet");
@@ -257,6 +269,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.method).toBe("GET");
@@ -281,6 +294,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.host).toBe("direct.example.com");
@@ -296,6 +310,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.host).toBe("first.example.com");
@@ -311,6 +326,7 @@ describe("getRequestMeta", () => {
       response: {},
       redirect: () => undefined,
       send: noopSend,
+      header: () => undefined,
       locals: {},
     });
     expect(meta.protocol).toBe("https");
@@ -327,6 +343,7 @@ describe("functionName on RequestEvent", () => {
         response: {},
         redirect: () => undefined,
         send: noopSend,
+        header: () => undefined,
         functionName: "greet",
         locals: {},
       },

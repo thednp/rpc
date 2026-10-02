@@ -282,6 +282,12 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
               send: (status, body, headers) => {
                 requestEvent.sent = { status, body, headers };
               },
+              // Hono's `c.redirect`/`c.json`/`c.body` return a `Response` built
+              // after the dispatch; `c.header()` state is merged into it by
+              // `#newResponse`.
+              header: (name, value) => {
+                c.header(name, value);
+              },
             };
             // Input validation, before the handler is entered. The schema describes
             // this function's input — its first argument after the AbortSignal — and

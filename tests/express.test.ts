@@ -671,6 +671,102 @@ describe("Express no-JS form fallback (dispatch)", () => {
   });
 });
 
+describe("Express staged response headers (RequestEvent.header)", () => {
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seedServerMap();
+  });
+
+  // The staged write happens before/alongside the redirect, never instead of
+  // it: the header rides the fallback's 303 rather than replacing it.
+  it("writes a staged header into the response bag and still redirects a successful native form", async () => {
+    createServerFunction(
+      "cookie-form",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", "sid=1");
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/cookie-form",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, "email=a%40b.c");
+    await mw(req, res, makeNext());
+
+    expect(res.header).toHaveBeenCalledWith("Set-Cookie", "sid=1");
+    expect(res.redirect).toHaveBeenCalledWith(
+      303,
+      expect.stringContaining("/thanks"),
+    );
+    expect(res.header.mock.invocationCallOrder[0]).toBeLessThan(
+      res.redirect.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("carries a staged header on the default JSON response", async () => {
+    createServerFunction(
+      "cookie-json",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        return "hello";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/cookie-json",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, makeNext());
+
+    expect(res.header).toHaveBeenCalledWith("X-Staged", "yes");
+    expect(res.status).toHaveBeenCalledWith(200);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ data: "hello" });
+  });
+
+  // The guard drops the late write instead of throwing ERR_HTTP_HEADERS_SENT —
+  // and the committed send is what the client got.
+  it("ignores a staged header once the response has been committed", async () => {
+    createServerFunction(
+      "late-header",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().send(200, { ok: true });
+        getRequestContext().header("X-Late", "1");
+        return "ignored";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/late-header",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    simulateBody(req, JSON.stringify([]));
+    await mw(req, res, makeNext());
+
+    expect(res.header).not.toHaveBeenCalledWith("X-Late", "1");
+    expect(res.status).toHaveBeenCalledWith(200);
+    const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
+    expect(sentData).toEqual({ ok: true });
+  });
+});
+
 describe("Express createRPCMiddleware handler", () => {
   beforeEach(() => {
     serverFunctionsMap.clear();

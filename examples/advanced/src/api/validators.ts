@@ -1,7 +1,7 @@
 /**
- * The same input contract, written four times — once per Standard Schema
- * library — so the page can send identical input through each and compare what
- * comes back.
+ * The same input contract, written five times — once per Standard Schema
+ * library, plus rpc's own dependency-free builder — so the page can send
+ * identical input through each and compare what comes back.
  *
  * This file is the point of the demo. rpc's `schema` option takes any Standard
  * Schema, so none of this reaches rpc as more than `StandardSchemaV1<in, out>`:
@@ -11,7 +11,13 @@
  * Where they genuinely differ, the difference is left visible rather than papered
  * over — see the note on {@link VALIDATOR_NOTES}.
  */
-import { schema, type StandardSchemaV1 } from "@thednp/rpc/server";
+import {
+  array,
+  field,
+  optional,
+  schema,
+  type StandardSchemaV1,
+} from "@thednp/rpc/server";
 import type { ValidatorName } from "./types.d.ts";
 import { VALIDATORS } from "./validator-info.ts";
 import { type } from "arktype";
@@ -159,4 +165,23 @@ export const effectProfile = Schema.toStandardSchemaV1(
   }),
 );
 
-"All four ignore an unknown key. rpc's own `schema()` builder is the strict one — it rejects — so the library, not the option, decides this.";
+"All four vendor libraries ignore an unknown key. rpc's own `schema()` builder is the strict one — it rejects — so the library, not the option, decides this.";
+
+/* ─── rpc's own builder ────────────────────────────────────────────────── */
+
+/**
+ * The fifth profile, and the only one with no vendor: `schema()`/`field`
+ * from `@thednp/rpc/server` itself. Structure and primitive types only — no
+ * coercion, no ranges — so it draws the contract's boundary lines in
+ * different places (see `VALIDATOR_NOTES`), while hints, the `422` body,
+ * and the inferred handler types work exactly as they do for the vendors.
+ */
+export const builderProfile = schema({
+  name: field.string(),
+  age: field.number(),
+  tags: array(field.string()),
+  address: schema({
+    city: field.string(),
+    zip: optional(field.string()),
+  }),
+});

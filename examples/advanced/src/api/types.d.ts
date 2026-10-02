@@ -35,12 +35,18 @@ export interface ServerTime extends JsonObject {
  * runtime values — a `.d.ts` cannot export one, and a value import here would
  * create a cycle with the module that defines the list.
  */
-export type ValidatorName = "valibot" | "zod" | "arktype" | "effect";
+export type ValidatorName =
+  | "valibot"
+  | "zod"
+  | "arktype"
+  | "effect"
+  | "builder";
 
 /**
  * What a **handler** receives, after the schema has run: `age` is a `number`
- * because three of the four schemas coerce, and the one that does not rejects
- * rather than passing a string through.
+ * because the four vendor schemas coerce. The builder does not — it rejects
+ * a string age rather than passing one through — which is why the same input
+ * is a `200` on four radios and a `422` on the fifth.
  */
 export type Profile = {
   name: string;

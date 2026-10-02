@@ -1304,6 +1304,19 @@ export interface RequestEvent {
     headers?: Record<string, string>;
   };
   /**
+   * Writes a response header into the host's response as soon as it is
+   * called, so it rides whatever this dispatch concludes with: the default
+   * `{ data }` JSON response, an author `send`/`redirect` short-circuit, the
+   * no-JS fallback's `303`, or a dispatch error response. Assigns (replaces)
+   * the value for `name` — call once per header name. Safe at any point
+   * during the dispatch; on Express and Fastify a call made after the
+   * response is already committed is ignored. Never call it after your own
+   * `send`/`redirect`.
+   * @param name - Header name (e.g. `"Set-Cookie"`)
+   * @param value - Single header value
+   */
+  header: (name: string, value: string) => void;
+  /**
    * The matched RPC function name for the current request, when available.
    * Useful for per-function rate limiting or auditing inside middleware.
    */

@@ -1004,7 +1004,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 		rpcPrefix: prefix,
 		handler: async (req, res, _next) => {
 			const { url: path, searchParams } = getRequestDetails(req);
-			const { sendResponse: rawSend } = getResponseDetails(res);
+			const { sendResponse: rawSend, setHeader } = getResponseDetails(res);
 			const startedAt = Date.now();
 			const callId = dispatch ? newDispatchId() : void 0;
 			const seen = {
@@ -1134,6 +1134,10 @@ const createRPCMiddleware = (initialOptions = {}) => {
 						const details = getResponseDetails(res);
 						if (headers) for (const [name, value] of Object.entries(headers)) details.setHeader(name, value);
 						details.sendResponse(status, body);
+					},
+					header: (name, value) => {
+						if (res.headersSent) return;
+						setHeader(name, value);
 					}
 				};
 				const { data, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));

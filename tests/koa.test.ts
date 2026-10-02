@@ -1507,3 +1507,65 @@ describe("Koa no-JS form fallback (dispatch)", () => {
     expect(ctx.status).toBe(422);
   });
 });
+
+describe("Koa staged response headers (RequestEvent.header)", () => {
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+    seedServerMap();
+  });
+
+  // The staged write happens before/alongside the redirect, never instead of
+  // it: the header rides the fallback's 303 rather than replacing it. Koa
+  // flushes after the middleware chain, so there is no commit guard to test.
+  it("writes a staged header into the response bag and still redirects a successful native form", async () => {
+    createServerFunction(
+      "cookie-form",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", "sid=1");
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/cookie-form",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    simulateKoaBody(ctx, "email=a%40b.c");
+    await mw(ctx as never, makeKoaNext());
+
+    expect(ctx.set).toHaveBeenCalledWith("Set-Cookie", "sid=1");
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/thanks",
+    );
+    expect(ctx.set.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.redirect.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("carries a staged header on the default JSON response", async () => {
+    createServerFunction(
+      "cookie-json",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        return "hello koa";
+      }),
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({ url: "/__rpc/cookie-json", method: "POST" });
+    simulateKoaBody(ctx, JSON.stringify([]));
+    await mw(ctx as never, makeKoaNext());
+
+    expect(ctx.set).toHaveBeenCalledWith("X-Staged", "yes");
+    expect(ctx.status).toBe(200);
+    expect(ctx.body).toEqual({ data: "hello koa" });
+  });
+});

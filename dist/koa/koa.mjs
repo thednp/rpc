@@ -1075,6 +1075,9 @@ const createRPCMiddleware = (initialOptions = {}) => {
 							if (headers) for (const [name, value] of Object.entries(headers)) ctx.set(name, value);
 							ctx.status = status;
 							ctx.body = body;
+						},
+						header: (name, value) => {
+							ctx.set(name, value);
 						}
 					};
 					const schema = serverFunction.options?.schema;

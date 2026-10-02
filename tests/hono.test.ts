@@ -24,6 +24,7 @@ import {
   createRPCMiddleware,
 } from "../src/hono/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
+import { ValidationError } from "../src/server-helpers.ts";
 import {
   makeHonoContext,
   makeHonoNext,
@@ -1724,5 +1725,102 @@ describe("Hono no-JS form fallback (dispatch)", () => {
     const ctx = formCtx("bad");
     await mw(ctx as never, makeHonoNext());
     expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toBe(null);
+  });
+});
+
+describe("Hono staged response headers (RequestEvent.header)", () => {
+  const HOST = "http://localhost";
+
+  // A real app through `app.fetch()`: these assert actual response headers,
+  // which is the load-bearing proof that Hono's `#newResponse` merge carries
+  // a staged `c.header()` into the redirect `Response`.
+  const postForm = (fn: string, body: string, accept = "text/html") =>
+    new Request(`${HOST}/__rpc/${fn}`, {
+      method: "POST",
+      headers: {
+        origin: HOST,
+        "content-type": "application/x-www-form-urlencoded",
+        accept,
+      },
+      body,
+    });
+
+  const postJSON = (fn: string, body: unknown) =>
+    new Request(`${HOST}/__rpc/${fn}`, {
+      method: "POST",
+      headers: { origin: HOST, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+  });
+
+  it("carries a staged header on a native form's 303 redirect", async () => {
+    createServerFunction(
+      "cookie-form",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", "sid=1");
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST }));
+
+    const res = await app.fetch(postForm("cookie-form", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location");
+    expect(location).toContain("/thanks");
+    expect(res.headers.get("set-cookie")).toBe("sid=1");
+  });
+
+  it("carries a staged header on the default JSON response", async () => {
+    createServerFunction(
+      "cookie-json",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        return "hello hono";
+      }),
+    );
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST }));
+
+    const res = await app.fetch(postJSON("cookie-json", []));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: "hello hono" });
+    expect(res.headers.get("x-staged")).toBe("yes");
+  });
+
+  // The handler stages before it throws, so the flash redirect must carry
+  // the staged header too — not just the success path. Only a client-facing
+  // throw flashes (a generic `Error` stays a 500 by design), so the
+  // failure-flash path needs a `ValidationError`.
+  it("carries a staged header on a failure flash redirect", async () => {
+    createServerFunction(
+      "cookie-boom",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        throw new ValidationError([{ path: "email", message: "Bad email." }]);
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/contact",
+      },
+    );
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST }));
+
+    const res = await app.fetch(postForm("cookie-boom", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location");
+    expect(location).toContain("/contact");
+    expect(location).toContain(FLASH_PARAM);
+    expect(res.headers.get("x-staged")).toBe("yes");
   });
 });

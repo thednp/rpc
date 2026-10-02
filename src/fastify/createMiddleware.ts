@@ -311,6 +311,12 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
                 }
                 reply.status(status).send(body);
               },
+              header: (name, value) => {
+                // `sent` covers hijacked and already-ended replies; a header
+                // staged after the flush would be dropped silently anyway.
+                if (reply.sent) return;
+                reply.header(name, value);
+              },
             };
             // Input validation, before the handler is entered. The schema describes
             // this function's input — its first argument after the AbortSignal — and

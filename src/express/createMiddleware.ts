@@ -176,7 +176,7 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
       _next: NextFunction | Connect.NextFunction,
     ) => {
       const { url: path, searchParams } = getRequestDetails(req);
-      const { sendResponse: rawSend } = getResponseDetails(res);
+      const { sendResponse: rawSend, setHeader } = getResponseDetails(res);
 
       // Everything observed during the dispatch, for the `onDispatch` record.
       // Declared before `sendResponse` is wrapped so the wrapper can record the
@@ -395,6 +395,12 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
               }
             }
             details.sendResponse(status, body);
+          },
+          header: (name, value) => {
+            // After `send` the response is committed; Node would throw
+            // ERR_HTTP_HEADERS_SENT on a late header.
+            if (res.headersSent) return;
+            setHeader(name, value);
           },
         };
 

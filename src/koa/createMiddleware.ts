@@ -291,6 +291,12 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
                 ctx.status = status;
                 ctx.body = body;
               },
+              header: (name, value) => {
+                // Koa flushes after the middleware chain, so the bag write
+                // always lands before the response — no commit guard exists
+                // to check here.
+                ctx.set(name, value);
+              },
             };
             // Input validation, before the handler is entered. The schema describes
             // this function's input — its first argument after the AbortSignal — and

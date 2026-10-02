@@ -268,6 +268,12 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
               send: (status, body, headers) => {
                 requestEvent.sent = { status, body, headers };
               },
+              // h3 reads `event.res.headers` after the dispatch and merges it
+              // into the outgoing POJO / `HTTPResponse` (redirect included) in
+              // `prepareResponse`.
+              header: (name, value) => {
+                event.res.headers.set(name, value);
+              },
             };
             // Input validation, before the handler is entered. The schema describes
             // this function's input — its first argument after the AbortSignal — and

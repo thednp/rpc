@@ -1102,6 +1102,10 @@ const createRPCMiddleware = (initialOptions = {}) => {
 							};
 							if (headers) for (const [name, value] of Object.entries(headers)) reply.header(name, value);
 							reply.status(status).send(body);
+						},
+						header: (name, value) => {
+							if (reply.sent) return;
+							reply.header(name, value);
 						}
 					};
 					const schema = serverFunction.options?.schema;

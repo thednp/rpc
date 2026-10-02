@@ -1,5 +1,5 @@
 /**
- * Client-safe data for the four-validator demo.
+ * Client-safe data for the five-validator demo.
  *
  * This module exists because of a bundling rule that is easy to get wrong and
  * expensive to debug: **the schemas cannot be imported from client code.**
@@ -17,15 +17,21 @@
  */
 import type { ValidatorName } from "./types.d.ts";
 
-/** The four validators the page can switch between. */
-export const VALIDATORS = ["valibot", "zod", "arktype", "effect"] as const;
+/** The five validators the page can switch between. */
+export const VALIDATORS = [
+  "valibot",
+  "zod",
+  "arktype",
+  "effect",
+  "builder",
+] as const;
 
 /**
  * What each library does differently, shown under the result so a difference
  * reads as a finding rather than a bug report.
  *
  * Every claim here is measured, not paraphrased from documentation — these were
- * established by sending identical input through all four and recording what
+ * established by sending identical input through all five and recording what
  * came back.
  */
 export const VALIDATOR_NOTES: Record<ValidatorName, string> = {
@@ -37,12 +43,15 @@ export const VALIDATOR_NOTES: Record<ValidatorName, string> = {
     "Type-first and the tersest of the four, but coercion takes a function pipe and needs a second pipe to restore the integer rule — the only one of the four that does not fold it into one expression.",
   effect:
     "Effect Schema via `Schema.toStandardSchemaV1`. Coerces a string age. Richest issue messages.",
+  builder:
+    "Zero dependencies — `schema()`/`field` from `@thednp/rpc/server` itself. No coercion and no ranges: the form sends Age as text, which the vendors convert and the builder rejects. The strict one: an unknown key is a 422 here and ignored everywhere else. Hints work identically.",
 };
 
 /**
- * Unknown-key behaviour, measured on identical input: all four vendor libraries
- * accept an unexpected field. rpc's own `schema()` builder is the strict one, so
- * the choice belongs to the library rather than to the `schema` option.
+ * Unknown-key behaviour, measured on identical input: the four vendor
+ * libraries accept an unexpected field. rpc's own `schema()` builder is the
+ * strict one, so the choice belongs to the library rather than to the `schema`
+ * option.
  */
 export const UNKNOWN_KEY_NOTE =
-  "All four ignore an unknown key. rpc's own `schema()` builder is the strict one — it rejects — so the library, not the option, decides this.";
+  "The four vendor libraries ignore an unknown key. rpc's own `schema()` builder is the strict one — it rejects — so the library, not the option, decides this.";

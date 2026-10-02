@@ -24,6 +24,7 @@ import {
   createRPCMiddleware,
 } from "../src/h3/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
+import { ValidationError } from "../src/server-helpers.ts";
 import { makeH3Event, makeH3Next, seedServerMap } from "./fixtures/h3.ts";
 import type { DispatchContext } from "../src/types.d.ts";
 
@@ -1547,5 +1548,92 @@ describe("h3 no-JS form fallback (dispatch)", () => {
     const ctx = formCtx("bad");
     await mw(ctx as never, makeH3Next());
     expect(ctx.res.status).toBe(422);
+  });
+});
+
+describe("h3 staged response headers (RequestEvent.header)", () => {
+  // A real app through `app.fetch()`: these assert actual response headers.
+  // Test 1 is the critical one — it proves `prepareResponse` merges
+  // `kEventResHeaders` into `redirect()`'s `HTTPResponse`.
+  const postForm = (fn: string, body: string, accept = "text/html") =>
+    appRequest(`${APP_HOST}/__rpc/${fn}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept,
+      },
+      body,
+    });
+
+  beforeEach(() => {
+    serverFunctionsMap.clear();
+  });
+
+  it("carries a staged header on a native form's 303 redirect", async () => {
+    createServerFunction(
+      "cookie-form",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", "sid=1");
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware({ origin: APP_HOST }));
+
+    const res = await app.fetch(postForm("cookie-form", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location");
+    expect(location).toContain("/thanks");
+    expect(res.headers.get("set-cookie")).toBe("sid=1");
+  });
+
+  it("carries a staged header on the default JSON response", async () => {
+    createServerFunction(
+      "cookie-json",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        return "hello h3";
+      }),
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware({ origin: APP_HOST }));
+
+    const res = await app.fetch(postJSON("/__rpc/cookie-json", []));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: "hello h3" });
+    expect(res.headers.get("x-staged")).toBe("yes");
+  });
+
+  // The handler stages before it throws, so the flash redirect must carry
+  // the staged header too — not just the success path. Only a client-facing
+  // throw flashes (a generic `Error` stays a 500 by design), so the
+  // failure-flash path needs a `ValidationError`.
+  it("carries a staged header on a failure flash redirect", async () => {
+    createServerFunction(
+      "cookie-boom",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Staged", "yes");
+        throw new ValidationError([{ path: "email", message: "Bad email." }]);
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/contact",
+      },
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware({ origin: APP_HOST }));
+
+    const res = await app.fetch(postForm("cookie-boom", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location");
+    expect(location).toContain("/contact");
+    expect(location).toContain(FLASH_PARAM);
+    expect(res.headers.get("x-staged")).toBe("yes");
   });
 });
