@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@tanstack/solid-query": "^5.104.0",
-    "@thednp/rpc": "^0.4.1",
+    "@thednp/rpc": "^0.4.2",
     "compression": "^1.8.2",
     "express": "^5.2.1",
     "sirv": "^3.0.2",
