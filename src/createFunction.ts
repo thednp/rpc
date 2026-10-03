@@ -4,8 +4,8 @@ import type {
   ClientFunctionWithOptions,
   InferInput,
   InferOutput,
-  JsonArray,
   JsonValue,
+  NoArgClientFunction,
   ServerFunctionInit,
   ServerFunctionOptions,
   StandardSchemaV1,
@@ -68,13 +68,12 @@ export interface CreateServerFunctionOptions
  */
 export function createServerFunction<
   TSchema extends StandardSchemaV1<unknown, unknown>,
-  TResult extends JsonValue = JsonValue,
+  TResult extends JsonValue | void = JsonValue,
 >(
   name: string,
   handler: (
     signal: AbortSignal,
     input: InferOutput<TSchema>,
-    ...rest: JsonValue[]
   ) => Promise<TResult>,
   fnOptions: CreateServerFunctionOptions & { schema: TSchema },
 ): ClientFunction<
@@ -84,7 +83,7 @@ export function createServerFunction<
   // (`v.pipe(v.string(), v.transform(Number), v.number())`) therefore accepts
   // strings from the browser and hands the handler numbers. The `& JsonValue` is
   // the wire boundary, not a widening: only JSON-serialisable values can cross.
-  [InferInput<TSchema> & JsonValue, ...JsonValue[]],
+  InferInput<TSchema> & JsonValue,
   TResult
 >;
 
@@ -97,47 +96,28 @@ export function createServerFunction<
  * untyped input.
  */
 export function createServerFunction<
-  TArgs extends JsonArray = JsonArray,
-  TResult extends JsonValue = JsonValue,
+  TInput extends FormData | JsonValue = JsonValue,
+  TResult extends JsonValue | void = JsonValue,
 >(
   name: string,
-  handler: ServerFunctionInit<TArgs, TResult>,
+  handler: ServerFunctionInit<TInput, TResult>,
   fnOptions?: CreateServerFunctionOptions & { schema?: undefined },
-): ClientFunction<TArgs, TResult>;
+): ClientFunction<TInput, TResult> & NoArgClientFunction<TResult>;
 
 export function createServerFunction<
-  TArgs extends JsonArray = JsonArray,
-  TResult extends JsonValue = JsonValue,
+  TInput extends FormData | JsonValue = JsonValue,
+  TResult extends JsonValue | void = JsonValue,
 >(
   name: string,
-  handler: ServerFunctionInit<TArgs, TResult>,
+  handler: ServerFunctionInit<TInput, TResult>,
   fnOptions: CreateServerFunctionOptions = {},
-): ClientFunction<TArgs, TResult> {
+): ClientFunctionWithOptions<TInput, TResult> {
   const options = Object.assign({}, defaultServerFnOptions, fnOptions);
   // const rpcPrefix = fnOptions.rpcPrefix || getGlobalPrefix() || defaultPrefix;
   const rpcPrefix = resolveRPCPrefix(fnOptions.rpcPrefix);
 
-  // A `schema` describes the **first** argument — the one after the signal — and
-  // only that one. On a handler taking more than that, the author almost always
-  // believes every parameter is covered, which is the worst possible shape: the
-  // feature looks like it is working while silently checking half the input.
-  //
-  // `fn.length` is the handler's declared arity, so a default or rest parameter
-  // makes it under-report and nothing is said — a false *negative*, which is the
-  // safe direction. The reverse is not true: a declared arity above 1 with a
-  // schema on it is almost never deliberate.
-  if (fnOptions.schema && handler.length > 2) {
-    console.warn(
-      `[rpc] "${name}" takes ${
-        handler.length - 1
-      } argument(s) but its schema only validates the first. ` +
-        "Pass a single object argument, or validate the rest in the handler — " +
-        "see wiki/server-functions.md#limits-worth-knowing",
-    );
-  }
-
-  const wrappedFunction: ClientFunctionWithOptions<TArgs, TResult> = (
-    ...args: TArgs
+  const wrappedFunction: ClientFunctionWithOptions<TInput, TResult> = (
+    input: TInput,
   ) => {
     const controller = new AbortController();
     const cancel = (reason: string) => controller.abort(reason);
@@ -160,7 +140,7 @@ export function createServerFunction<
       // only the schema's output ever replaced the raw argument.
       const schema = options.schema;
       if (schema) {
-        const checked = await runValidation(schema, args[0], {
+        const checked = await runValidation(schema, input, {
           hints: options.hints,
           // A per-function hint leads, then rpc's own pointer to the docs —
           // the same composition the adapters use, so both paths report alike.
@@ -173,14 +153,11 @@ export function createServerFunction<
         // handler with, so the two paths cannot diverge in what reaches it.
         return await handler(
           controller.signal,
-          ...([
-            checked.value,
-            ...args.slice(1),
-          ] as TArgs),
+          checked.value as TInput,
         );
       }
 
-      return await handler(controller.signal, ...args);
+      return await handler(controller.signal, input);
     };
 
     return {

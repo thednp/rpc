@@ -299,7 +299,9 @@ describe("getClientStub", () => {
       new Response(JSON.stringify({ data: "ok" }), { status: 200 }),
     );
     const fn = getClientStub("admin:rpc", "stats", { method: "GET" });
-    await fn("a", 1).data;
+    // One input: several values travel as one array, nested inside the
+    // wire's own array.
+    await fn(["a", 1]).data;
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/admin:rpc/stats?args="),
       expect.objectContaining({ method: "GET" }),
@@ -340,7 +342,9 @@ describe("getClientStub", () => {
     );
     const fd = new FormData();
     fd.append("file", new Blob(["hi"]));
-    const fn = getClientStub("__rpc", "upload", {
+    // `FormData` is not JSON, so a multipart stub declares it explicitly —
+    // the default input type only covers JSON values.
+    const fn = getClientStub<FormData>("__rpc", "upload", {
       contentType: "multipart/form-data",
     });
     await fn(fd).data;
@@ -348,6 +352,26 @@ describe("getClientStub", () => {
       expect.any(String),
       expect.objectContaining({ headers: {} }),
     );
+  });
+
+  it("should accept an interface as the stub result type", async () => {
+    // Interfaces have no implicit index signature and can never satisfy
+    // `JsonValue` — the stub's `R` is open for exactly this reason, mirroring
+    // the advanced example's `getClientStub<string, UserFull>`. This compiles
+    // only while `R` stays unconstrained, so `check:tests` (tsc over this
+    // file) is the assertion; the runtime half proves the data flows through.
+    interface Profile {
+      id: string;
+      name: string;
+    }
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: { id: "1", name: "jane" } }), {
+        status: 200,
+      }),
+    );
+    const fn = getClientStub<string, Profile>("__rpc", "get-user");
+    const body = await fn("1").data;
+    expect(body?.name).toBe("jane");
   });
 });
 

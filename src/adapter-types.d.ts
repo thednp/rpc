@@ -13,8 +13,8 @@ import type { JsonValue } from "./types.d.ts";
 export type ResponseDetails = {
   /** Whether the response was already sent */
   isResponseSent: boolean;
-  /** Sets a response header */
-  setHeader: (name: string, value: string) => void;
+  /** Sets a response header; an array sends one header line per element */
+  setHeader: (name: string, value: string | readonly string[]) => void;
   /** Current response status code */
   statusCode: number;
   /** Sets the response status code */

@@ -134,7 +134,7 @@ This blocks the simplest CSRF vector: an attacker page embedding `<img src="/__r
 
 ### `?args=` Must Be a JSON Array
 
-For `GET` functions the `?args=` value is parsed and checked with `Array.isArray` before dispatch; anything else is rejected with `400 Bad Request`. Without the guard, `?args={"a":1}` would spread an object into `handler(...args)` and throw a `TypeError`, and `?args="abc"` would spread a string into individual characters — both surfacing as confusing `500`s and burning server CPU on attacker-controlled input.
+For `GET` functions the `?args=` value is parsed and checked with `Array.isArray` before dispatch; anything else is rejected with `400 Bad Request`. Without the guard, `?args={"a":1}` would arrive at the handler as a misshapen single input instead of a clean `400` — and `?args="abc"` likewise, both surfacing as confusing downstream failures and burning server CPU on attacker-controlled input.
 
 ## Content-Type Enforcement
 

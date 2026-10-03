@@ -35,7 +35,7 @@ cancel('user cancelled'); // triggers AbortController on the client side
 
 ## Type Safety
 
-Client code keeps **full type inference** — the `TArgs`/`TResult` types from `createServerFunction` flow through to the generated stubs:
+Client code keeps **full type inference** — the `TInput`/`TResult` types from `createServerFunction` flow through to the generated stubs:
 
 ```ts
 import { addNumbers } from './api';
@@ -52,7 +52,7 @@ if (result && 'error' in result) {
 }
 ```
 
-This works because TypeScript resolves `./api` to the real typed server module (via the `src/api/index.ts` re-export), while the Vite plugin swaps in the fetch stubs **only at bundle time**. Your editor and `tsc` see the actual handler signatures; the browser runs the `fetch`-based stubs. The shapes are identical by design: both are `(...args: TArgs) => { data: Promise<TResult>, cancel }`.
+This works because TypeScript resolves `./api` to the real typed server module (via the `src/api/index.ts` re-export), while the Vite plugin swaps in the fetch stubs **only at bundle time**. Your editor and `tsc` see the actual handler signatures; the browser runs the `fetch`-based stubs. The shapes are identical by design: both are `(input: TInput) => { data: Promise<TResult>, cancel }` — and both are `() => { data, cancel }` for functions taking no input.
 
 > Keep the `src/api/index.ts` re-export as the single import source — importing server modules directly in client code would bypass the plugin's client-module swap.
 

@@ -270,9 +270,20 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
               },
               // h3 reads `event.res.headers` after the dispatch and merges it
               // into the outgoing POJO / `HTTPResponse` (redirect included) in
-              // `prepareResponse`.
+              // `prepareResponse`. `Headers.set` replaces, so a multi-line
+              // value accumulates with `append`; an empty array sets nothing.
+              // `typeof` narrows cleanly where `Array.isArray` does not (see
+              // the express adapter).
               header: (name, value) => {
-                event.res.headers.set(name, value);
+                if (typeof value === "string") {
+                  event.res.headers.set(name, value);
+                  return;
+                }
+                if (value.length === 0) return;
+                event.res.headers.set(name, value[0]);
+                for (const v of value.slice(1)) {
+                  event.res.headers.append(name, v);
+                }
               },
             };
             // Input validation, before the handler is entered. The schema describes
@@ -291,7 +302,7 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
                   : VALIDATION_HINT,
               });
               if (!checked.ok) throw checked.error;
-              args = [checked.value as JsonValue, ...args.slice(1)];
+              args = [checked.value as JsonValue];
             }
 
             // Raw arguments, recorded before validation and before the handler:
@@ -300,7 +311,11 @@ export const createRPCMiddleware: H3MiddlewareFn = (initialOptions = {}) => {
             if (emit) seen.args = args;
             const fnResult = provideRequestContext(
               requestEvent,
-              () => serverFunction.handler(...args),
+              // Single input: the wire is still an array, and its first
+              // element is the call's input. Always passed explicitly
+              // (possibly `undefined`) so dispatch and direct calls
+              // observe the same shape.
+              () => serverFunction.handler(args[0]),
             );
             const onClose = () => fnResult.cancel(CLIENT_DISCONNECTED);
             // The node runtime gives us the raw incoming stream for close events;

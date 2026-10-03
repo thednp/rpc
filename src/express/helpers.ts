@@ -151,11 +151,14 @@ export const getResponseDetails = (
 ): ResponseDetails => {
   const isResponseSent = response.headersSent || response.writableEnded;
 
-  const setHeader = (name: string, value: string) => {
+  const setHeader = (name: string, value: string | readonly string[]) => {
+    // A readonly array cannot flow into the mutable slots below, and
+    // spreading a string would split it into characters — branch first.
+    const outgoing = typeof value === "string" ? value : [...value];
     if (isExpressResponse(response)) {
-      response.header(name, value);
+      response.header(name, outgoing);
     } else {
-      response.setHeader(name, value);
+      response.setHeader(name, outgoing);
     }
   };
 

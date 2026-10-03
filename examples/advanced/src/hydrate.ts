@@ -30,8 +30,8 @@ import {
 // Manual stub for privileged prefix — not in public bundle (public:rpc only).
 // In a real multi-page app this `await import` would live only in the /admin
 // entry so the admin literal never appears in the public chunk.
-// Explicit generics give full inference: args tuple + return type.
-const adminGetUser = getClientStub<[string], UserFull>("admin:rpc", "get-user");
+// Explicit generics give full inference: input type + return type.
+const adminGetUser = getClientStub<string, UserFull>("admin:rpc", "get-user");
 
 export const setupGreeting = async (target: HTMLHeadingElement) => {
   const { data } = sayHi("Jane");
@@ -140,7 +140,7 @@ export const setupAuth = (target: HTMLElement) => {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     out.textContent = "Logging in…";
-    const { data } = login(userEl.value, passEl.value);
+    const { data } = login({ username: userEl.value, password: passEl.value });
     const res = await data;
     out.textContent = `login: ${JSON.stringify(res)}`;
   });

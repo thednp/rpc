@@ -2,7 +2,13 @@
 
 A Vite plugin for creating server-safe Remote Procedure Calls (RPC). Server functions are auto-scanned from a dedicated file and transformed into client-side fetch modules — no manual API route setup.
 
-## What 0.4.0 adds
+## What 0.4.x adds
+
+If you are upgrading from 0.4.x, one thing changed shape:
+
+- **One input per function** (0.4.2): handlers are `(signal, input)`, never
+  positional — `login(user, pass)` becomes `login({ username: user, password: pass })`.
+  The wire is unchanged. See [Migration — From 0.4.x](./migration.md#from-04x).
 
 If you are upgrading from 0.3.x, three things changed behaviour and one is new:
 
@@ -30,4 +36,4 @@ The pages below follow a natural learning sequence — each ends with a **Next**
 - [Security](./security.md) — Security hardening
 - [Comparison](./comparison.md) — How the cross-origin boundary compares to Next.js, TanStack Start, SvelteKit, and tRPC
 - [Best Practices](./best-practices.md) — Tips and best practices
-- [Migration](./migration.md) — Upgrading an existing 0.3.x install, or coming from another RPC framework
+- [Migration](./migration.md) — Upgrading an existing install (0.4.x single-input change, 0.3.x defaults), or coming from another RPC framework

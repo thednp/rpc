@@ -14,8 +14,8 @@
     "verify": "node --experimental-strip-types verify.mjs"
   },
   "dependencies": {
-    "@thednp/rpc": "^0.4.0",
-    "arktype": "^2.2.6",
+    "@thednp/rpc": "^0.4.1",
+    "arktype": "^2.2.7",
     "compression": "^1.8.2",
     "effect": "^4.0.0",
     "express": "^5.2.1",

@@ -1039,7 +1039,13 @@ const createRPCMiddleware = (initialOptions = {}) => {
 							};
 						},
 						header: (name, value) => {
-							event.res.headers.set(name, value);
+							if (typeof value === "string") {
+								event.res.headers.set(name, value);
+								return;
+							}
+							if (value.length === 0) return;
+							event.res.headers.set(name, value[0]);
+							for (const v of value.slice(1)) event.res.headers.append(name, v);
 						}
 					};
 					const schema = serverFunction.options?.schema;
@@ -1049,10 +1055,10 @@ const createRPCMiddleware = (initialOptions = {}) => {
 							hint: serverFunction.options?.hint ? `${serverFunction.options.hint} — ${VALIDATION_HINT}` : VALIDATION_HINT
 						});
 						if (!checked.ok) throw checked.error;
-						args = [checked.value, ...args.slice(1)];
+						args = [checked.value];
 					}
 					if (emit) seen.args = args;
-					const fnResult = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
+					const fnResult = provideRequestContext(requestEvent, () => serverFunction.handler(args[0]));
 					const onClose = () => fnResult.cancel(CLIENT_DISCONNECTED);
 					const nodeReq = event.runtime?.node?.req;
 					if (nodeReq) nodeReq.on("close", onClose);

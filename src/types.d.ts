@@ -422,21 +422,21 @@ export type ServerFnArgs = [...JsonArray];
 
 /**
  * Server-side handler signature: receives the `AbortSignal` first,
- * followed by any serializable arguments.
+ * followed by a single serializable input.
  */
 export type ServerFunction<
-  TArgs extends JsonArray = JsonArray,
+  TInput extends FormData | JsonValue = JsonValue,
   TResult = JsonValue,
-> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+> = (signal: AbortSignal, input: TInput) => Promise<TResult>;
 
 /**
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
 export type ServerFunctionInit<
-  TArgs extends FormData | JsonArray = JsonArray,
-  TResult = JsonValue,
-> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+  TInput extends FormData | JsonValue = JsonValue,
+  TResult extends JsonValue | void = JsonValue,
+> = (signal: AbortSignal, input: TInput) => Promise<TResult>;
 
 /**
  * Client-side stub signature generated for each server function.
@@ -444,9 +444,9 @@ export type ServerFunctionInit<
  * that aborts the underlying fetch request.
  */
 export type ClientFunction<
-  TArgs extends JsonArray = JsonArray,
+  TInput extends FormData | JsonValue = JsonValue,
   TResult = JsonValue,
-> = (...args: TArgs) => {
+> = (input: TInput) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
   /** Aborts the in-flight request with the given reason */
@@ -454,13 +454,31 @@ export type ClientFunction<
 };
 
 /**
+ * Client-side stub for a function taking no input. Callable with zero
+ * arguments — the pre-0.4.2 `(...args: [])` inference, spelled out, so
+ * zero-argument functions stay callable as `fn()`.
+ */
+export type NoArgClientFunction<TResult = JsonValue> = {
+  (): {
+    /** Promise resolving to the server response data */
+    data: Promise<TResult>;
+    /** Aborts the in-flight request with the given reason */
+    cancel: (reason: string) => void;
+  };
+  /** Registered export name of the server function */
+  name: string;
+  /** Per-function content type and credentials options */
+  options?: ServerFunctionOptions;
+};
+
+/**
  * A client function augmented with its registered export name and
  * per-function options (content type, credentials).
  */
 export type ClientFunctionWithOptions<
-  T extends JsonArray = JsonArray,
-  A extends JsonValue = JsonValue,
-> = ClientFunction<T, A> & {
+  TInput extends FormData | JsonValue = JsonValue,
+  TResult = JsonValue,
+> = ClientFunction<TInput, TResult> & {
   /** Registered export name of the server function */
   name: string;
   /** Per-function content type and credentials options */
@@ -866,8 +884,11 @@ export interface StubOptions {
 /**
  * Return shape of `innerModule`: a promise of the response data plus
  * a `cancel` function to abort the underlying fetch request.
+ *
+ * `T` is unconstrained like the rest of the client result chain — see
+ * `handleResponse`. The server side still constrains what it produces.
  */
-export type InnerModReturn<T extends JsonValue> = {
+export type InnerModReturn<T> = {
   /** Promise resolving to the server response data */
   data: Promise<T | void>;
   /** Aborts the in-flight request with the given reason */

@@ -920,8 +920,9 @@ const getRequestDetails = (request) => {
 const getResponseDetails = (response) => {
 	const isResponseSent = response.headersSent || response.writableEnded;
 	const setHeader = (name, value) => {
-		if (isExpressResponse(response)) response.header(name, value);
-		else response.setHeader(name, value);
+		const outgoing = typeof value === "string" ? value : [...value];
+		if (isExpressResponse(response)) response.header(name, outgoing);
+		else response.setHeader(name, outgoing);
 	};
 	const setStatusCode = (code) => {
 		if (isExpressResponse(response)) response.status(code);
@@ -1107,7 +1108,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 						hint: serverFunction.options?.hint ? `${serverFunction.options.hint} — ${VALIDATION_HINT}` : VALIDATION_HINT
 					});
 					if (!checked.ok) throw checked.error;
-					args = [checked.value, ...args.slice(1)];
+					args = [checked.value];
 				}
 				const requestEvent = {
 					request: req,
@@ -1137,10 +1138,11 @@ const createRPCMiddleware = (initialOptions = {}) => {
 					},
 					header: (name, value) => {
 						if (res.headersSent) return;
+						if (typeof value !== "string" && value.length === 0) return;
 						setHeader(name, value);
 					}
 				};
-				const { data, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(...args));
+				const { data, cancel } = provideRequestContext(requestEvent, () => serverFunction.handler(args[0]));
 				const onClose = () => cancel(CLIENT_DISCONNECTED);
 				req.on("close", onClose);
 				const result = await data;

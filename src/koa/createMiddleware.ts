@@ -294,8 +294,11 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
               header: (name, value) => {
                 // Koa flushes after the middleware chain, so the bag write
                 // always lands before the response — no commit guard exists
-                // to check here.
-                ctx.set(name, value);
+                // to check here. `typeof` narrows cleanly where
+                // `Array.isArray` does not (see the express adapter); an
+                // empty array sets nothing.
+                if (typeof value !== "string" && value.length === 0) return;
+                ctx.set(name, typeof value === "string" ? value : [...value]);
               },
             };
             // Input validation, before the handler is entered. The schema describes
@@ -314,7 +317,7 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
                   : VALIDATION_HINT,
               });
               if (!checked.ok) throw checked.error;
-              args = [checked.value as JsonValue, ...args.slice(1)];
+              args = [checked.value as JsonValue];
             }
 
             const { data: resultData, cancel } = provideRequestContext(
@@ -324,7 +327,11 @@ export const createRPCMiddleware: KoaMiddlewareFn = (initialOptions = {}) => {
               // that answers "what did the client send".
               () => {
                 if (emit) seen.args = args;
-                return serverFunction.handler(...args);
+                // Single input: the wire is still an array, and its first
+                // element is the call's input. Always passed explicitly
+                // (possibly `undefined`) so dispatch and direct calls
+                // observe the same shape.
+                return serverFunction.handler(args[0]);
               },
             );
             const onClose = () => cancel(CLIENT_DISCONNECTED);

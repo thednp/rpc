@@ -688,7 +688,7 @@ section("G. examples/advanced — all five validators, through the real example"
 // ── H. auth and roles ────────────────────────────────────────────────────
 section("H. Auth, roles, and multi-prefix");
 {
-  const login = await post("/public:rpc/login", ["admin", "admin-secret"], {
+  const login = await post("/public:rpc/login", [{ username: "admin", password: "admin-secret" }], {
     origin: HOST,
   });
   const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
@@ -697,13 +697,13 @@ section("H. Auth, roles, and multi-prefix");
     (await b(login))?.data?.ok === true,
     JSON.stringify(
       await b(
-        post("/public:rpc/login", ["admin", "admin-secret"], { origin: HOST }),
+        post("/public:rpc/login", [{ username: "admin", password: "admin-secret" }], { origin: HOST }),
       ),
     ).slice(0, 80),
   );
   check("login returns a session cookie", cookie.startsWith("sid="), cookie);
   const badLogin = await b(
-    await post("/public:rpc/login", ["admin", "wrong"], { origin: HOST }),
+    await post("/public:rpc/login", [{ username: "admin", password: "wrong" }], { origin: HOST }),
   );
   check(
     "a bad password is a 200 carrying ok:false, not a 401",
@@ -728,7 +728,7 @@ section("H. Auth, roles, and multi-prefix");
     admin.status === 200,
     `got ${admin.status}`,
   );
-  const userLogin = await post("/public:rpc/login", ["user", "user-secret"], {
+  const userLogin = await post("/public:rpc/login", [{ username: "user", password: "user-secret" }], {
     origin: HOST,
   });
   const userCookie = (userLogin.headers.get("set-cookie") ?? "").split(";")[0];

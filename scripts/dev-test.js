@@ -36,6 +36,7 @@ import path from "node:path";
 
 const cwd = process.cwd();
 const ROOT_PORT = 5173;
+const ORIGIN = `http://localhost:${ROOT_PORT}`;
 const RPC_MAX_TIMEOUT = 10000; // 20000
 const RPC_TIMEOUT = 2000;
 const RPC_KILL_TIMEOUT = 1000; // 5000
@@ -174,6 +175,21 @@ async function killPort(port) {
   }
 }
 
+// A stale server on the port (the fuser/pkill cleanup above missed it, or
+// neither tool is installed) makes every check test a stranger: the RPC call
+// hits the wrong app and the failure names our code instead of the occupant.
+// Refuse instead of producing garbage — a connection refusal means free.
+async function assertPortFree(port) {
+  try {
+    await fetch(`http://localhost:${port}/`);
+  } catch {
+    return;
+  }
+  throw new Error(
+    `Port ${port} is occupied — stop whatever serves there before verifying`,
+  );
+}
+
 async function waitForPort(port, timeoutMs = RPC_MAX_TIMEOUT) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -195,7 +211,7 @@ async function waitForPort(port, timeoutMs = RPC_MAX_TIMEOUT) {
   throw new Error(`Port ${port} did not respond within ${timeoutMs}ms`);
 }
 
-async function verifyRPC(prefix) {
+async function verifyRPC(example, prefix) {
   const endpoint = `http://localhost:${ROOT_PORT}/${prefix}/add-numbers`;
   const controller = new AbortController();
   const timeoutId = setTimeout(
@@ -203,11 +219,25 @@ async function verifyRPC(prefix) {
     RPC_TIMEOUT,
   );
 
+  // Since 0.4.0 the origin check defaults to `"self"`, so a headerless probe
+  // is rejected with 403 before any RPC logic runs. Sending our own origin
+  // exercises the secure default end-to-end (a self match) instead of
+  // bypassing it — and `add-numbers` on a foreign occupant would 404, which
+  // is what the occupancy guard below is for.
+  // `add-numbers` takes different shapes per example: the schema'd functions
+  // (express, advanced) validate an object, the rest parse a JSON string
+  // inside the handler. One body cannot fit both — and the wrong one is a
+  // legitimate 422, not a pass.
+  const objectInput = example === "express" || example === "advanced";
+  const body = objectInput
+    ? JSON.stringify([{ a: 2, b: 3 }])
+    : JSON.stringify(['{"a":2,"b":3}']);
+
   try {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(['{"a":2,"b":3}']),
+      headers: { "Content-Type": "application/json", Origin: ORIGIN },
+      body,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -242,7 +272,14 @@ async function verifyGET(prefix) {
   const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT);
 
   try {
-    const res = await fetch(endpoint, { signal: controller.signal });
+    // A browser's same-origin GET fetch carries no `Origin` — only
+    // `Sec-Fetch-Site: same-origin` — so this exercises the check's second
+    // tier, where the precise signal is gone and only `same-origin`/`none`
+    // pass. The RPC probe above covers the first tier.
+    const res = await fetch(endpoint, {
+      headers: { "Sec-Fetch-Site": "same-origin" },
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
 
     if (!res.ok) {
@@ -392,6 +429,7 @@ await killPort(ROOT_PORT);
 
       try {
         await killPort(ROOT_PORT);
+        await assertPortFree(ROOT_PORT);
 
         console.log(`[${example}] Starting ${mode} server...`);
         const testProc = spawn("pnpm", ["run", mode], {
@@ -418,8 +456,8 @@ await killPort(ROOT_PORT);
           );
         }
 
-        console.log(`[${example}] Verifying RPC endpoint /${prefix}/add ...`);
-        await verifyRPC(prefix);
+        console.log(`[${example}] Verifying RPC endpoint /${prefix}/add-numbers ...`);
+        await verifyRPC(example, prefix);
         console.log(`[${example}] Verifying GET endpoint /${prefix}/get-server-time ...`);
         await verifyGET(prefix);
         console.log(`[${example}] Verifying HTML output ...`);

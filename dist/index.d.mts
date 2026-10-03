@@ -489,30 +489,47 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
 type ServerFnArgs = [...JsonArray];
 /**
  * Server-side handler signature: receives the `AbortSignal` first,
- * followed by any serializable arguments.
+ * followed by a single serializable input.
  */
-type ServerFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunction<TInput extends FormData | JsonValue = JsonValue, TResult = JsonValue> = (signal: AbortSignal, input: TInput) => Promise<TResult>;
 /**
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
-type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunctionInit<TInput extends FormData | JsonValue = JsonValue, TResult extends JsonValue | void = JsonValue> = (signal: AbortSignal, input: TInput) => Promise<TResult>;
 /**
  * Client-side stub signature generated for each server function.
  * Returns a promise-backed `data` handle plus a `cancel` function
  * that aborts the underlying fetch request.
  */
-type ClientFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (...args: TArgs) => {
+type ClientFunction<TInput extends FormData | JsonValue = JsonValue, TResult = JsonValue> = (input: TInput) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
   /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };
 /**
+ * Client-side stub for a function taking no input. Callable with zero
+ * arguments — the pre-0.4.2 `(...args: [])` inference, spelled out, so
+ * zero-argument functions stay callable as `fn()`.
+ */
+type NoArgClientFunction<TResult = JsonValue> = {
+  (): {
+    /** Promise resolving to the server response data */
+    data: Promise<TResult>;
+    /** Aborts the in-flight request with the given reason */
+    cancel: (reason: string) => void;
+  };
+  /** Registered export name of the server function */
+  name: string;
+  /** Per-function content type and credentials options */
+  options?: ServerFunctionOptions;
+};
+/**
  * A client function augmented with its registered export name and
  * per-function options (content type, credentials).
  */
-type ClientFunctionWithOptions<T extends JsonArray = JsonArray, A extends JsonValue = JsonValue> = ClientFunction<T, A> & {
+type ClientFunctionWithOptions<TInput extends FormData | JsonValue = JsonValue, TResult = JsonValue> = ClientFunction<TInput, TResult> & {
   /** Registered export name of the server function */
   name: string;
   /** Per-function content type and credentials options */
@@ -891,8 +908,11 @@ interface StubOptions {
 /**
  * Return shape of `innerModule`: a promise of the response data plus
  * a `cancel` function to abort the underlying fetch request.
+ *
+ * `T` is unconstrained like the rest of the client result chain — see
+ * `handleResponse`. The server side still constrains what it produces.
  */
-type InnerModReturn<T extends JsonValue> = {
+type InnerModReturn<T> = {
   /** Promise resolving to the server response data */
   data: Promise<T | void>;
   /** Aborts the in-flight request with the given reason */
@@ -922,5 +942,5 @@ declare const loadRPCConfig: (configFile?: string | {
  */
 declare function rpcPlugin(devOptions?: Partial<RpcPluginOptions>): Plugin;
 //#endregion
-export { type AdapterName, type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type DispatchContext, type DispatchErrorRecord, type DispatchFacts, type DispatchOutcome, type EmitDispatch, type FormFallbackOptions, type FormFallbackOutcome, type FrameworkHooks, type FrameworkMiddlewareFn, type InferInput, type InferOutput, type InferShape, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type OnDispatch, type OriginOption, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type StandardSchemaIssue, type StandardSchemaResult, type StandardSchemaV1, type StandardSchemaValidateOptions, type StubOptions, type SupportableContentType, type ValidationErrorBody, type ValidationIssue, rpcPlugin as default, loadRPCConfig };
+export { type AdapterName, type BodyResult, type ClientFunction, type ClientFunctionWithOptions, type ContentType, type Credentials, type DispatchContext, type DispatchErrorRecord, type DispatchFacts, type DispatchOutcome, type EmitDispatch, type FormFallbackOptions, type FormFallbackOutcome, type FrameworkHooks, type FrameworkMiddlewareFn, type InferInput, type InferOutput, type InferShape, type InnerModReturn, type JsonArray, type JsonObject, type JsonPrimitive, type JsonValue, type MiddlewareOptions, type NoArgClientFunction, type OnDispatch, type OriginOption, type RpcPluginOptions, type RpcPluginOptionsInternal, type ScanConfig, type ServerFnArgs, type ServerFnEntry, type ServerFunction, type ServerFunctionInit, type ServerFunctionOptions, type StandardSchemaIssue, type StandardSchemaResult, type StandardSchemaV1, type StandardSchemaValidateOptions, type StubOptions, type SupportableContentType, type ValidationErrorBody, type ValidationIssue, rpcPlugin as default, loadRPCConfig };
 //# sourceMappingURL=index.d.mts.map

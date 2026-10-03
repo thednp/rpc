@@ -14,7 +14,10 @@ const USERS: Record<string, { password: string; role: "admin" | "user" }> = {
 
 export const login = createServerFunction(
   "login",
-  async (_signal, username: string, password: string) => {
+  async (
+    _signal,
+    { username, password }: { username: string; password: string },
+  ) => {
     auditLog();
     const entry = USERS[username];
     if (!entry || entry.password !== password) {

@@ -315,6 +315,9 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
                 // `sent` covers hijacked and already-ended replies; a header
                 // staged after the flush would be dropped silently anyway.
                 if (reply.sent) return;
+                // `typeof` narrows cleanly where `Array.isArray` does not (see
+                // the express adapter). An empty array sets nothing.
+                if (typeof value !== "string" && value.length === 0) return;
                 reply.header(name, value);
               },
             };
@@ -334,7 +337,7 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
                   : VALIDATION_HINT,
               });
               if (!checked.ok) throw checked.error;
-              args = [checked.value as JsonValue, ...args.slice(1)];
+              args = [checked.value as JsonValue];
             }
 
             const { data: dataResult, cancel } = provideRequestContext(
@@ -344,7 +347,11 @@ export const createRPCMiddleware: FastifyMiddlewareFn = (
               // that answers "what did the client send".
               () => {
                 if (emit) seen.args = args;
-                return serverFunction.handler(...args);
+                // Single input: the wire is still an array, and its first
+                // element is the call's input. Always passed explicitly
+                // (possibly `undefined`) so dispatch and direct calls
+                // observe the same shape.
+                return serverFunction.handler(args[0]);
               },
             );
             const onClose = () => cancel(CLIENT_DISCONNECTED);

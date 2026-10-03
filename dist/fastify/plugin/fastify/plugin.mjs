@@ -1042,6 +1042,7 @@ const createRPCMiddleware = (initialOptions = {}) => {
 						},
 						header: (name, value) => {
 							if (reply.sent) return;
+							if (typeof value !== "string" && value.length === 0) return;
 							reply.header(name, value);
 						}
 					};
@@ -1052,11 +1053,11 @@ const createRPCMiddleware = (initialOptions = {}) => {
 							hint: serverFunction.options?.hint ? `${serverFunction.options.hint} — ${VALIDATION_HINT}` : VALIDATION_HINT
 						});
 						if (!checked.ok) throw checked.error;
-						args = [checked.value, ...args.slice(1)];
+						args = [checked.value];
 					}
 					const { data: dataResult, cancel } = provideRequestContext(requestEvent, () => {
 						if (emit) seen.args = args;
-						return serverFunction.handler(...args);
+						return serverFunction.handler(args[0]);
 					});
 					const onClose = () => cancel(CLIENT_DISCONNECTED);
 					req.raw.on("close", onClose);

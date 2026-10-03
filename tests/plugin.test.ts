@@ -314,10 +314,23 @@ describe("createServerFunction", () => {
       "test",
       fn as unknown as ServerFunctionInit,
     );
-    const { data } = wrapped("hello", 42);
+    const { data } = wrapped("hello");
     await data;
     expect(fn).toHaveBeenCalledOnce();
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "hello", 42);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "hello");
+  });
+
+  it("should pass explicit undefined for a zero-arg direct call", async () => {
+    // Same shape dispatch has: the input slot is always passed, so a direct
+    // `fn()` and a dispatch with an empty wire array observe identically.
+    // The suite's wide `fn` binding needs the established cast to resolve to
+    // the general overload; the intersection stub then covers both arities.
+    const wrapped = createServerFunction(
+      "no-input",
+      fn as unknown as ServerFunctionInit,
+    );
+    await wrapped().data;
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), undefined);
   });
 
   it("should resolve data with the fn result", async () => {
@@ -356,7 +369,7 @@ describe("createServerFunction", () => {
   });
 
   it("should work with no args", async () => {
-    fn = vi.fn().mockResolvedValue("no-args-result");
+    fn = vi.fn(async () => "no-args-result");
     const wrapped = createServerFunction(
       "no-args",
       fn as unknown as ServerFunctionInit,
@@ -374,6 +387,19 @@ describe("createServerFunction", () => {
     );
     const { data } = wrapped();
     await expect(data).resolves.toBe(dateResult);
+  });
+
+  it("should accept a void result without casting", async () => {
+    // Fire-and-forget mutations are the common void shape: the handler
+    // awaits its work and returns nothing. This only compiles because the
+    // factories constrain `TResult` to `JsonValue | void`.
+    const wrapped = createServerFunction(
+      "void-fn",
+      async (_s: AbortSignal, _input: string) => {
+        await Promise.resolve();
+      },
+    );
+    await expect(wrapped("x").data).resolves.toBeUndefined();
   });
 
   it("should accept non-JSON argument types without casting", async () => {

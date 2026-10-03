@@ -366,7 +366,7 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
               : VALIDATION_HINT,
           });
           if (!checked.ok) throw checked.error;
-          args = [checked.value as JsonValue, ...args.slice(1)];
+          args = [checked.value as JsonValue];
         }
 
         // ─── Dispatch ────────────────────────────────────────────────────
@@ -400,13 +400,21 @@ export const createRPCMiddleware: ExpressMiddlewareFn = (
             // After `send` the response is committed; Node would throw
             // ERR_HTTP_HEADERS_SENT on a late header.
             if (res.headersSent) return;
+            // `typeof` narrows cleanly where `Array.isArray` does not: the
+            // negated array guard keeps `readonly string[]` in the union,
+            // which the mutable host slots reject. An empty array sets
+            // nothing; anything else flows through.
+            if (typeof value !== "string" && value.length === 0) return;
             setHeader(name, value);
           },
         };
 
         const { data, cancel } = provideRequestContext(
           requestEvent,
-          () => serverFunction.handler(...args),
+          // Single input: the wire is still an array, and its first element
+          // is the call's input. Always passed explicitly (possibly
+          // `undefined`) so dispatch and direct calls observe the same shape.
+          () => serverFunction.handler(args[0]),
         );
         const onClose = () => cancel(CLIENT_DISCONNECTED);
         req.on("close", onClose);

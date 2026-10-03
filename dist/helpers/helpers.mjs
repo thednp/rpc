@@ -54,6 +54,12 @@ var RPCResponseError = class extends Error {
 * On success, parses JSON and returns `result.data` — or throws if `result.error` is set.
 * @param response - Fetch Response object from the RPC endpoint
 * @returns The response data, or void on cancellation
+*
+* `R` is deliberately unconstrained: the client only *asserts* the response
+* shape (interfaces included — they have no implicit index signature and can
+* never satisfy `JsonValue`), while the serializability requirement is
+* enforced where values are produced, on the factory's `TResult`. The cast
+* below is the single point where the assertion meets the wire.
 */
 const handleResponse = async (response) => {
 	if (!response.ok) {
@@ -186,27 +192,27 @@ const makeStub = (prefix, name, options = {}) => {
 	const contentType = options.contentType ?? "application/json";
 	if (method === "GET") {
 		const headers = {};
-		return ((...args) => {
-			const json = JSON.stringify(args);
+		return ((input) => {
+			const json = JSON.stringify([input]);
 			return innerModule(json, headers, credentials, prefix, name, method);
 		});
 	}
 	switch (contentType) {
 		case "text/plain": {
 			const headers = { "Content-Type": "text/plain" };
-			return ((...args) => innerModule(args[0], headers, credentials, prefix, name, method));
+			return ((input) => innerModule(input, headers, credentials, prefix, name, method));
 		}
 		case "application/x-www-form-urlencoded": {
 			const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-			return ((...args) => innerModule(new URLSearchParams(args[0]).toString(), headers, credentials, prefix, name, method));
+			return ((input) => innerModule(new URLSearchParams(input).toString(), headers, credentials, prefix, name, method));
 		}
 		case "multipart/form-data": {
 			const headers = {};
-			return ((...args) => innerModule(args[0], headers, credentials, prefix, name, method));
+			return ((input) => innerModule(input, headers, credentials, prefix, name, method));
 		}
 		default: {
 			const headers = { "Content-Type": "application/json" };
-			return ((...args) => innerModule(JSON.stringify(args), headers, credentials, prefix, name, method));
+			return ((input) => innerModule(JSON.stringify([input]), headers, credentials, prefix, name, method));
 		}
 	}
 };
@@ -221,7 +227,7 @@ const makeStub = (prefix, name, options = {}) => {
 * @param prefix - RPC prefix (e.g. "admin:rpc")
 * @param name - Registered function name
 * @param options - Optional `method`, `credentials`, `contentType`
-* @returns Client stub `(...args) => {data,cancel}`
+* @returns Client stub `(input) => {data,cancel}`
 * @example
 * import { getClientStub } from "@thednp/rpc/helpers";
 * const adminGetUser = getClientStub("admin:rpc","get-user");

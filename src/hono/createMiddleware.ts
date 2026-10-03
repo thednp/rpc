@@ -284,9 +284,20 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
               },
               // Hono's `c.redirect`/`c.json`/`c.body` return a `Response` built
               // after the dispatch; `c.header()` state is merged into it by
-              // `#newResponse`.
+              // `#newResponse`. `c.header()` replaces, so a multi-line value
+              // accumulates with `append`; an empty array sets nothing.
+              // `typeof` narrows cleanly where `Array.isArray` does not (see
+              // the express adapter).
               header: (name, value) => {
-                c.header(name, value);
+                if (typeof value === "string") {
+                  c.header(name, value);
+                  return;
+                }
+                if (value.length === 0) return;
+                c.header(name, value[0]);
+                for (const v of value.slice(1)) {
+                  c.header(name, v, { append: true });
+                }
               },
             };
             // Input validation, before the handler is entered. The schema describes
@@ -305,7 +316,7 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
                   : VALIDATION_HINT,
               });
               if (!checked.ok) throw checked.error;
-              args = [checked.value as JsonValue, ...args.slice(1)];
+              args = [checked.value as JsonValue];
             }
 
             const fnResult = provideRequestContext(
@@ -315,7 +326,11 @@ export const createRPCMiddleware: HonoMiddlewareFn = (initialOptions = {}) => {
               // that answers "what did the client send".
               () => {
                 if (emit) seen.args = args;
-                return serverFunction.handler(...args);
+                // Single input: the wire is still an array, and its first
+                // element is the call's input. Always passed explicitly
+                // (possibly `undefined`) so dispatch and direct calls
+                // observe the same shape.
+                return serverFunction.handler(args[0]);
               },
             );
             const onAbort = () => fnResult.cancel(CLIENT_DISCONNECTED);

@@ -657,10 +657,10 @@ describe("Koa createRPCMiddleware", () => {
     createServerFunction("echoFn", fn);
     const mw = createRPCMiddleware();
     const ctx = makeKoaCtx({ url: "/__rpc/echoFn", method: "POST" });
-    simulateKoaBody(ctx, JSON.stringify(["a", "b"]));
+    simulateKoaBody(ctx, JSON.stringify(["a"]));
     const next = makeKoaNext();
     await mw(ctx, next);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a");
   });
 
   // ─── content-type enforcement ──────────────────────────────────────
@@ -900,7 +900,9 @@ describe("Koa createRPCMiddleware", () => {
     const ctx = makeKoaCtx({ url: "/__rpc/koa-bare-get", method: "GET" });
     const next = makeKoaNext();
     await mw(ctx, next);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    // The input slot is always passed explicitly, so an empty wire array
+    // arrives as `undefined` — the same shape a direct `fn()` call has.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), undefined);
     expect(ctx.status).toBe(200);
     expect(ctx.body).toEqual({ data: "no-args" });
   });
@@ -1567,5 +1569,67 @@ describe("Koa staged response headers (RequestEvent.header)", () => {
     expect(ctx.set).toHaveBeenCalledWith("X-Staged", "yes");
     expect(ctx.status).toBe(200);
     expect(ctx.body).toEqual({ data: "hello koa" });
+  });
+
+  it("writes a staged array as one header line per element", async () => {
+    createServerFunction(
+      "cookie-multi",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", ["sid=1", "theme=dark"]);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/cookie-multi",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    simulateKoaBody(ctx, "email=a%40b.c");
+    await mw(ctx as never, makeKoaNext());
+
+    expect(ctx.set).toHaveBeenCalledWith("Set-Cookie", ["sid=1", "theme=dark"]);
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/thanks",
+    );
+  });
+
+  it("sets nothing for an empty staged array", async () => {
+    createServerFunction(
+      "cookie-empty",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Empty", []);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const ctx = makeKoaCtx({
+      url: "/__rpc/cookie-empty",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    simulateKoaBody(ctx, "email=a%40b.c");
+    await mw(ctx as never, makeKoaNext());
+
+    expect(ctx.set).not.toHaveBeenCalledWith("X-Empty", expect.anything());
+    expect(ctx.redirect.mock.calls[0]?.[0] as string ?? null).toContain(
+      "/thanks",
+    );
   });
 });

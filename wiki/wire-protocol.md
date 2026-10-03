@@ -29,7 +29,7 @@ Requests whose method doesn't match the function's configured method are rejecte
 
 ### POST + `application/json` (default)
 
-The request body is a **bare JSON array of positional arguments** — `JSON.stringify(args)`:
+The request body is a **bare JSON array wrapping the single input** — `JSON.stringify([input])`:
 
 ```bash
 # sayHi(name)  →  POST /__rpc/say-hi  body: ["World"]
@@ -38,7 +38,7 @@ curl -s -X POST http://localhost:5173/__rpc/say-hi \
   -d '["World"]'
 ```
 
-> The body is the array itself, **not** `{"args":[...]}` or `{"data":[...]}`. This is the most common mistake when hand-writing requests — the client sends `JSON.stringify(args)`.
+> The body is the array itself, **not** `{"args":[...]}` or `{"data":[...]}`. This is the most common mistake when hand-writing requests — the client sends `JSON.stringify([input])`. The handler receives element `0` as its input; a second element has no parameter to land on.
 
 ### POST + `text/plain`
 

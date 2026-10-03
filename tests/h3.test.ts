@@ -613,9 +613,9 @@ describe("h3 createRPCMiddleware", () => {
     createServerFunction("echoFn", fn);
     const app = new H3();
     app.use(createRPCMiddleware({ origin: APP_HOST }));
-    const res = await app.fetch(postJSON("/__rpc/echoFn", ["a", "b"]));
+    const res = await app.fetch(postJSON("/__rpc/echoFn", ["a"]));
     expect(res.status).toBe(200);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a");
   });
 
   // ─── content-type enforcement ──────────────────────────────────────
@@ -806,7 +806,9 @@ describe("h3 createRPCMiddleware", () => {
     const res = await app.fetch(
       appRequest(`${APP_HOST}/__rpc/h3-public-no-args`),
     );
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    // The input slot is always passed explicitly, so an empty wire array
+    // arrives as `undefined` — the same shape a direct `fn()` call has.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), undefined);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: "no-args" });
   });
@@ -1635,5 +1637,50 @@ describe("h3 staged response headers (RequestEvent.header)", () => {
     expect(location).toContain("/contact");
     expect(location).toContain(FLASH_PARAM);
     expect(res.headers.get("x-staged")).toBe("yes");
+  });
+
+  it("sends one header line per staged array element", async () => {
+    createServerFunction(
+      "cookie-multi",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", ["sid=1", "theme=dark"]);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware({ origin: APP_HOST }));
+
+    const res = await app.fetch(postForm("cookie-multi", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/thanks");
+    // The load-bearing assertion: two staged cookies arrive as two lines,
+    // not one comma-joined line (which would not parse as two cookies).
+    expect(res.headers.getSetCookie()).toEqual(["sid=1", "theme=dark"]);
+  });
+
+  it("sets nothing for an empty staged array", async () => {
+    createServerFunction(
+      "cookie-empty",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", []);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const app = new H3();
+    app.use(createRPCMiddleware({ origin: APP_HOST }));
+
+    const res = await app.fetch(postForm("cookie-empty", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 });

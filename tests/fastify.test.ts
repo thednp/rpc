@@ -716,12 +716,12 @@ describe("Fastify createRPCMiddleware", () => {
       url: "/__rpc/echoFn",
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(["a", "b"]),
+      body: JSON.stringify(["a"]),
     });
     const reply = makeFastifyReply();
     const done = makeFastifyDone();
     await mw(req as never, reply as never, done);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a");
   });
 
   // ─── content-type enforcement ──────────────────────────────────────
@@ -937,7 +937,9 @@ describe("Fastify createRPCMiddleware", () => {
     const reply = makeFastifyReply();
     const done = makeFastifyDone();
     await mw(req as never, reply as never, done);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    // The input slot is always passed explicitly, so an empty wire array
+    // arrives as `undefined` — the same shape a direct `fn()` call has.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), undefined);
     expect(reply.status).toHaveBeenCalledWith(200);
   });
 
@@ -1711,5 +1713,79 @@ describe("Fastify staged response headers (RequestEvent.header)", () => {
 
     expect(reply.header).not.toHaveBeenCalledWith("X-Late", "1");
     expect(reply.send).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it("writes a staged array as one header line per element", async () => {
+    createServerFunction(
+      "cookie-multi",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", ["sid=1", "theme=dark"]);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const request = makeFastifyReq({
+      url: "/__rpc/cookie-multi",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+      rawBody: "email=a%40b.c",
+    });
+    simulateRawBody(request, "email=a%40b.c");
+    const reply = makeFastifyReply();
+    await mw(request as never, reply as never, makeFastifyDone());
+
+    expect(reply.header).toHaveBeenCalledWith("Set-Cookie", [
+      "sid=1",
+      "theme=dark",
+    ]);
+    expect(reply.redirect).toHaveBeenCalledWith(
+      expect.stringContaining("/thanks"),
+      303,
+    );
+  });
+
+  it("sets nothing for an empty staged array", async () => {
+    createServerFunction(
+      "cookie-empty",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Empty", []);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const request = makeFastifyReq({
+      url: "/__rpc/cookie-empty",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+      rawBody: "email=a%40b.c",
+    });
+    simulateRawBody(request, "email=a%40b.c");
+    const reply = makeFastifyReply();
+    await mw(request as never, reply as never, makeFastifyDone());
+
+    expect(reply.header).not.toHaveBeenCalledWith(
+      "X-Empty",
+      expect.anything(),
+    );
+    expect(reply.redirect).toHaveBeenCalledWith(
+      expect.stringContaining("/thanks"),
+      303,
+    );
   });
 });

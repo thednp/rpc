@@ -1136,22 +1136,21 @@ const runValidation = async (schema, value, options = {}) => {
 function createServerFunction(name, handler, fnOptions = {}) {
 	const options = Object.assign({}, defaultServerFnOptions, fnOptions);
 	const rpcPrefix = resolveRPCPrefix(fnOptions.rpcPrefix);
-	if (fnOptions.schema && handler.length > 2) console.warn(`[rpc] "${name}" takes ${handler.length - 1} argument(s) but its schema only validates the first. Pass a single object argument, or validate the rest in the handler — see wiki/server-functions.md#limits-worth-knowing`);
-	const wrappedFunction = (...args) => {
+	const wrappedFunction = (input) => {
 		const controller = new AbortController();
 		const cancel = (reason) => controller.abort(reason);
 		const fetcher = async () => {
 			if (controller.signal.aborted) throw new Error(OPERATION_ABORTED);
 			const schema = options.schema;
 			if (schema) {
-				const checked = await runValidation(schema, args[0], {
+				const checked = await runValidation(schema, input, {
 					hints: options.hints,
 					hint: options.hint ? `${options.hint} — ${VALIDATION_HINT}` : VALIDATION_HINT
 				});
 				if (!checked.ok) throw checked.error;
-				return await handler(controller.signal, ...[checked.value, ...args.slice(1)]);
+				return await handler(controller.signal, checked.value);
 			}
-			return await handler(controller.signal, ...args);
+			return await handler(controller.signal, input);
 		};
 		return {
 			data: fetcher(),

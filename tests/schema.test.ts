@@ -769,7 +769,7 @@ describe("array payloads are rejected", () => {
     // calling the function in-process instead of over HTTP.
     const fn = createServerFunction(
       "tupleish",
-      async (_s, _a: unknown) => "x",
+      async (_s: AbortSignal, _a: unknown) => "x",
       {
         schema: tupleish as never,
       },
@@ -998,7 +998,11 @@ describe("vendor-agnostic validation", () => {
     it(`behaves identically for vendor "${vendor}" on both call paths`, async () => {
       const fn = createServerFunction(
         `coerce-${vendor}`,
-        async (_s, age) => age,
+        // Explicitly hostile types on purpose: the schema is `as never`, so
+        // inference is defeated and the test isolates runtime behaviour —
+        // identical validation on both call paths — from whatever the types
+        // happen to say. An annotated `never` input keeps it compiling.
+        async (_s: AbortSignal, _age: never) => _age,
         {
           schema: makeSchema(vendor) as never,
           hint: "send a number",
@@ -1037,9 +1041,13 @@ describe("vendor-agnostic validation", () => {
     // `describeOriginRequest`-style vendor strings reach the client nowhere:
     // a 400 body carries the message and the path, never the vendor, so the
     // error surface cannot be used to fingerprint which library a project uses.
-    const fn = createServerFunction("vendor-leak", async (_s, age) => age, {
-      schema: makeSchema("arktype") as never,
-    });
+    const fn = createServerFunction(
+      "vendor-leak",
+      async (_s: AbortSignal, _age: never) => _age,
+      {
+        schema: makeSchema("arktype") as never,
+      },
+    );
     try {
       await fn("nope" as never).data;
       expect.unreachable("should have rejected");

@@ -661,11 +661,11 @@ describe("Hono createRPCMiddleware", () => {
       path: "/__rpc/echoFn",
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(["a", "b"]),
+      body: JSON.stringify(["a"]),
     });
     const next = makeHonoNext();
     await mw(c, next);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a");
   });
 
   // ─── content-type enforcement ──────────────────────────────────────
@@ -872,7 +872,9 @@ describe("Hono createRPCMiddleware", () => {
     });
     const next = makeHonoNext();
     await mw(c, next);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    // The input slot is always passed explicitly, so an empty wire array
+    // arrives as `undefined` — the same shape a direct `fn()` call has.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), undefined);
     expect(c.json).toHaveBeenCalledWith({ data: "no-args" }, 200);
   });
 
@@ -1822,5 +1824,50 @@ describe("Hono staged response headers (RequestEvent.header)", () => {
     expect(location).toContain("/contact");
     expect(location).toContain(FLASH_PARAM);
     expect(res.headers.get("x-staged")).toBe("yes");
+  });
+
+  it("sends one header line per staged array element", async () => {
+    createServerFunction(
+      "cookie-multi",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", ["sid=1", "theme=dark"]);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST }));
+
+    const res = await app.fetch(postForm("cookie-multi", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/thanks");
+    // The load-bearing assertion: two staged cookies arrive as two lines,
+    // not one comma-joined line (which would not parse as two cookies).
+    expect(res.headers.getSetCookie()).toEqual(["sid=1", "theme=dark"]);
+  });
+
+  it("sets nothing for an empty staged array", async () => {
+    createServerFunction(
+      "cookie-empty",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", []);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const app = new Hono();
+    app.use(createRPCMiddleware({ origin: HOST }));
+
+    const res = await app.fetch(postForm("cookie-empty", "email=a%40b.c"));
+    expect(res.status).toBe(303);
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 });

@@ -1,13 +1,48 @@
-# Migrating to `@thednp/rpc` 0.4.0
+# Migrating to `@thednp/rpc` 0.4.x
 
-Two guides, depending on where you are:
+Three guides, depending on where you are:
 
+- **[From 0.4.x](#from-04x)** — the 0.4.2 calling-convention change: one input
+  per function instead of positional arguments.
 - **[From 0.3.x](#from-03x)** — an in-place upgrade. Nothing was removed, but
   two defaults changed and one of them will surface as a `403` or a `413`.
 - **[From another RPC framework](#from-another-rpc-framework)** — a new setup.
 
 The full change list is in [`CHANGELOG.md`](../CHANGELOG.md). This page is the
 part you need in order to not be surprised.
+
+---
+
+## From 0.4.x
+
+Since 0.4.2 every server function takes **one input** — `(signal, input)` —
+instead of positional arguments. The wire is unchanged (still a JSON array, now
+always of length one), so old and new servers/clients disagree loudly at the
+type level rather than silently at runtime. Three edits, all mechanical:
+
+1. **Handlers.** Collapse parameters into one object:
+   ```ts
+   // before
+   async (_signal, username: string, password: string) => { ... }
+   // after
+   async (_signal, { username, password }: { username: string; password: string }) => { ... }
+   ```
+   Annotate the input (keep `signal` bare — context still flows to it); an
+   unannotated input by itself is fine too, but then it is `JsonValue` and any
+   property access needs its own narrowing.
+2. **Callers.** Collapse arguments the same way: `login(user, pass)` becomes
+   `login({ username: user, password: pass })`. Calling with zero arguments
+   still works for input-less functions (`getTime()`); calling a function
+   that takes input with zero arguments is a type error, as before.
+3. **Native clients.** `getClientStub` takes one input as well; a `FormData`
+   input needs an explicit type argument (`getClientStub<FormData>(...)`),
+   since `FormData` is not JSON.
+
+What did *not* change: the wire bodies (`[input]`, `?args=[input]`), `args[0]`
+validation, the `{ data, cancel }` shape, status codes, the fallback, and
+`getClientStub`'s runtime behaviour. A stale old client sending `["a", "b"]`
+gets its first element as the input — no crash, but the second element is
+dropped, so upgrade both sides together.
 
 ---
 

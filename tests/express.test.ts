@@ -30,7 +30,6 @@ import {
 } from "../src/express/createMiddleware.ts";
 import { createServerFunction } from "../src/createFunction.ts";
 import { clientErrorStatus } from "../src/server-helpers.ts";
-import type { JsonValue } from "../src/types.d.ts";
 import type { DispatchContext } from "../src/types.d.ts";
 import { setGlobalPrefix } from "../src/server.ts";
 import rpcPlugin, { loadRPCConfig } from "../src/index.ts";
@@ -765,6 +764,78 @@ describe("Express staged response headers (RequestEvent.header)", () => {
     const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
     expect(sentData).toEqual({ ok: true });
   });
+
+  it("writes a staged array as one header line per element", async () => {
+    createServerFunction(
+      "cookie-multi",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("Set-Cookie", ["sid=1", "theme=dark"]);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/cookie-multi",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, "email=a%40b.c");
+    await mw(req, res, makeNext());
+
+    expect(res.header).toHaveBeenCalledWith("Set-Cookie", [
+      "sid=1",
+      "theme=dark",
+    ]);
+    expect(res.redirect).toHaveBeenCalledWith(
+      303,
+      expect.stringContaining("/thanks"),
+    );
+  });
+
+  it("sets nothing for an empty staged array", async () => {
+    createServerFunction(
+      "cookie-empty",
+      vi.fn().mockImplementation(async () => {
+        getRequestContext().header("X-Empty", []);
+        return "sent";
+      }),
+      {
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        fallback: "/thanks",
+      },
+    );
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/cookie-empty",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+      },
+    });
+    const res = makeRes();
+    simulateBody(req, "email=a%40b.c");
+    await mw(req, res, makeNext());
+
+    expect(res.header).not.toHaveBeenCalledWith(
+      "X-Empty",
+      expect.anything(),
+    );
+    expect(res.redirect).toHaveBeenCalledWith(
+      303,
+      expect.stringContaining("/thanks"),
+    );
+  });
 });
 
 describe("Express createRPCMiddleware handler", () => {
@@ -799,6 +870,25 @@ describe("Express createRPCMiddleware handler", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     const sentData = JSON.parse(res.send.mock.calls[0][0] as string);
     expect(sentData).toEqual({ data: "hello" });
+  });
+
+  it("should answer 200 for a void-returning function", async () => {
+    const fn = vi.fn().mockImplementation(async () => {
+      await Promise.resolve();
+    });
+    createServerFunction("void-fn", fn);
+    const mw = createRPCMiddleware();
+    const req = makeReq({
+      originalUrl: "/__rpc/void-fn",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const res = makeRes();
+    const next = makeNext();
+    simulateBody(req, JSON.stringify(["arg"]));
+    await mw(req, res, next);
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "arg");
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
   it("should use default prefix when rpcPrefix is undefined", async () => {
@@ -975,7 +1065,11 @@ describe("Express createRPCMiddleware handler", () => {
     const next = makeNext();
     simulateBody(req, JSON.stringify(["a", "b"]));
     await mw(req, res, next);
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a", "b");
+    // Single input: the wire is still an array, and the handler receives
+    // its first element. A trailing element has no parameter to land on —
+    // multi-argument calls are a type error since 0.4.2, and an old client
+    // sending one gets its first argument, not a crash.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), "a");
   });
 
   it("should pass parsed urlencoded body as single object arg", async () => {
@@ -1225,7 +1319,9 @@ describe("Express createRPCMiddleware handler", () => {
     });
     const res = makeRes();
     await mw(req, res, makeNext());
-    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal));
+    // The input slot is always passed explicitly, so an empty wire array
+    // arrives as `undefined` — the same shape a direct `fn()` call has.
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal), undefined);
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -2181,70 +2277,13 @@ describe("schema on the direct call path", () => {
     );
   });
 
-  it("leaves a function with no schema untouched", async () => {
+  it("exposes a single-input signature for a function with no schema", async () => {
     const fn = createServerFunction(
       "direct-plain",
       async (_s: AbortSignal, input: string) => input,
     );
     expect(await fn("anything").data).toBe("anything");
-    // A function with no schema must not grow a schema-shaped signature.
-    expect(fn.length).toBe(0);
-  });
-});
-
-describe("schema arity warning", () => {
-  const S = () => schema({ a: field.number() });
-
-  let warn: ReturnType<typeof vi.spyOn>;
-  beforeEach(() => {
-    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  });
-  afterEach(() => {
-    warn.mockRestore();
-  });
-
-  it("warns when a schema is attached to a handler taking more than one argument", () => {
-    // The schema covers `args[0]` and only that, so on a two-argument handler
-    // the second parameter is unchecked while the author believes it is not.
-    // Silence is the dangerous outcome, so it is worth a warning.
-    // The first parameter is annotated to the schema's Output, because a
-    // handler annotated with a type the schema does not produce is a type error
-    // for a reason that has nothing to do with arity. The second is the
-    // unvalidated one this warning is about.
-    createServerFunction(
-      "arity-warns",
-      async (_s: AbortSignal, _input: { a: number }, _extra: JsonValue) => "x",
-      { schema: S() },
-    );
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain("only validates the first");
-    expect(warn.mock.calls[0][0]).toContain("arity-warns");
-  });
-
-  it("says nothing for the ordinary single-argument case", () => {
-    createServerFunction("arity-quiet", async (_s, _input) => "x", {
-      schema: S(),
-    });
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it("says nothing when there is no schema at all", () => {
-    createServerFunction(
-      "arity-no-schema",
-      async (_s: AbortSignal, _a: string, _b: string) => "x",
-    );
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it("stays quiet when a default parameter hides the second one", () => {
-    // `fn.length` under-reports with a default or rest parameter, so this is a
-    // false *negative* — the safe direction. A false positive would train people
-    // to ignore the warning, which is worse than missing one.
-    createServerFunction(
-      "arity-default",
-      async (_s: AbortSignal, _input: { a: number }, _b: JsonValue = 1) => "x",
-      { schema: S() },
-    );
-    expect(warn).not.toHaveBeenCalled();
+    // One input slot: the stub takes exactly the handler's input.
+    expect(fn.length).toBe(1);
   });
 });

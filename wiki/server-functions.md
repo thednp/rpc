@@ -25,9 +25,9 @@ The core API for defining server-side functions.
 ### Signature
 
 ```ts
-function createServerFunction<TArgs extends JsonArray, TResult>(
+function createServerFunction<TInput extends FormData | JsonValue, TResult extends JsonValue | void>(
   name: string,
-  handler: ServerFunctionInit<TArgs, TResult>,
+  handler: ServerFunctionInit<TInput, TResult>,
   options?: {
     contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data',
     credentials?: "same-origin" | "include" | "omit",
@@ -35,17 +35,17 @@ function createServerFunction<TArgs extends JsonArray, TResult>(
     rpcPrefix?: string,
       fallback?: string | FormFallbackOptions,
   }
-): ClientFunction<TArgs, TResult>;
+): ClientFunction<TInput, TResult> | NoArgClientFunction<TResult>;
 ```
 
-`ClientFunction` is what you get back — the `{ data, cancel }` handle described above. It is a different type from `ServerFunctionInit`, which is the *handler* signature. `TArgs` defaults to `JsonArray` and the handler is `ServerFunctionInit<TArgs, TResult>` (an `AbortSignal` followed by your arguments).
+`ClientFunction` is what you get back — the `{ data, cancel }` handle described above. It is a different type from `ServerFunctionInit`, which is the *handler* signature. `TInput` defaults to `JsonValue` and the handler is `ServerFunctionInit<TInput, TResult>` (an `AbortSignal` followed by your single input). A handler taking no input keeps a zero-parameter stub, so getters stay callable as `fn()`.
 
-> **Note:** `TResult` is unconstrained (no `extends JsonValue` requirement). The actual wire protocol serialization still uses JSON, but the relaxed type allows wrapper libraries to define server functions with non-JSON return types without double-casts.
+> **Note:** `TResult` is constrained to `JsonValue | void` **at the factory and on `ServerFunctionInit`** — the entry points that actually serialize — so a handler returning `void` (fire-and-forget) or any JSON value type-checks, and one returning a class instance does not. The client-facing aliases (`ClientFunction`, `NoArgClientFunction`, `ServerFunction`) leave `TResult` open, so a wrapper library can name a non-JSON type in its own signatures without double-casts; the serialization requirement is enforced where the value enters the wire, not on every reference.
 
 ### Parameters
 
 - **`name`** (`string`) — The registered name used in RPC routing.
-- **`handler`** (`(signal: AbortSignal, ...args: JsonArray) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; remaining arguments come from the client. The return value must be JSON-serializable.
+- **`handler`** (`(signal: AbortSignal, input: JsonValue) => Promise<T>`) — The actual implementation. The first argument is always an `AbortSignal`; the second is the call's single input. The return value must be JSON-serializable — or `void` for fire-and-forget work, in which case `data` resolves without a usable value. A handler taking no input keeps a zero-parameter stub.
 - **`options`** — Optional credentials, serialization strategy, HTTP method, and RPC prefix
   * `contentType?: 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded' | 'multipart/form-data'` - Defaults to `'application/json'`.
   * `credentials?: "include" | "same-origin" | "omit"` - Defaults to `'same-origin'`.
@@ -82,9 +82,9 @@ The plugin generates a fetch-based stub for every server function — `body` and
 ```ts
 import { innerModule } from "@thednp/rpc/helpers";
 
-// contentType: "application/json" (default) — args travel as a JSON array body
-export const updateUser = (...args) => {
-  const body = JSON.stringify(args);
+// contentType: "application/json" (default) — the input travels wrapped in a JSON array body
+export const updateUser = (input) => {
+  const body = JSON.stringify([input]);
   const headers = { 'Content-Type': 'application/json' };
   const prefix = "__rpc";
   const name = "update-user";
@@ -93,9 +93,9 @@ export const updateUser = (...args) => {
   return innerModule(body, headers, credentials, prefix, name, method);
 }
 
-// contentType: "text/plain" — the raw first argument travels as text
-export const sayHi = (...args) => {
-  const body = args[0];
+// contentType: "text/plain" — the raw input travels as text
+export const sayHi = (input) => {
+  const body = input;
   const headers = { 'Content-Type': 'text/plain' };
   const prefix = "__rpc";
   const name = "say-hi";
@@ -105,8 +105,8 @@ export const sayHi = (...args) => {
 }
 
 // contentType: "multipart/form-data" — your FormData passes through untouched
-export const upload = (...args) => {
-  const body = args[0];
+export const upload = (input) => {
+  const body = input;
   const headers = {}; // ← deliberate: the browser must generate the boundary
   const prefix = "__rpc";
   const name = "upload";
@@ -116,8 +116,8 @@ export const upload = (...args) => {
 }
 
 // contentType: "application/x-www-form-urlencoded" — a plain object becomes form params
-export const submitForm = (...args) => {
-  const body = new URLSearchParams(args[0]).toString();
+export const submitForm = (input) => {
+  const body = new URLSearchParams(input).toString();
   const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
   const prefix = "__rpc";
   const name = "submit-form";
@@ -126,9 +126,9 @@ export const submitForm = (...args) => {
   return innerModule(body, headers, credentials, prefix, name, method);
 }
 
-// method: "GET" — args travel as the ?args= query parameter, no body at all
-export const publicData = (...args) => {
-  const body = JSON.stringify(args);
+// method: "GET" — the input travels wrapped in the ?args= query parameter, no body at all
+export const publicData = (input) => {
+  const body = JSON.stringify([input]);
   const headers = {}; // ← deliberate: no body, so no Content-Type
   const prefix = "__rpc";
   const name = "public-data";
@@ -414,12 +414,13 @@ Three things worth knowing:
 | | |
 | --- | --- |
 | **An array payload is refused, by name.** | `schema` describes one argument as *named fields*, and everything downstream — `fieldErrors`, the no-JS flash, a client resolver — keys off those names. A root array could only report positional issues (`items[0].sku`), which cannot label an input, so `z.array()` / `v.array()` as a whole payload throws. Wrap it: `{ items: field.custom(z.array(Item)) }`. |
-| **Only the first argument is validated.** | The schema describes `args[0]`, after the `AbortSignal`. `login(username, password)` validates the username and not the password — restructure to one object argument if both need checking. A schema on a handler declaring more than one argument logs a development warning rather than failing silently, but a default or rest parameter makes the check blind. |
+| **The schema describes the whole input.** | The schema validates the call's single input, after the `AbortSignal`. There is no second argument for it to miss: a handler declaring more than `(signal, input)` is a type error, so the old "validated args[0], unchecked rest" failure mode cannot be written. |
+| **Interfaces are not JSON values.** | `JsonValue` is structural and index-signature based, and an `interface` does not get an implicit index signature — so `interface User { id: string }` fails `TInput extends JsonValue` / `TResult extends JsonValue`. A `type User = { id: string }` alias, an inline object literal, or an array passes. If your payload type is an `interface`, either convert it to a `type` alias or annotate the handler parameter locally; the wire format is unchanged either way. |
 
 ### Validated functions take a single payload argument
 
-`schema` validates **`args[0]`** — the first argument after the `AbortSignal`, and
-nothing else. This is the one structural rule worth knowing before you design a
+`schema` validates **the input** — the single argument after the `AbortSignal`.
+This is the one structural rule worth knowing before you design a
 function's signature, because it decides the shape of every validated function.
 
 ```ts
@@ -428,14 +429,16 @@ createServerFunction("login", async (signal, input: { user: string; pass: string
   // input.user / input.pass are validated and, for a coercing schema, transformed
 }, { schema: schema({ user: field.string(), pass: field.string() }) });
 
-// ⚠️ positional: not validated at all
+// ❌ positional: not a shape functions come in anymore
 createServerFunction("add", async (signal, a: number, b: number) => a + b);
+// → type error ("Target signature provides too few arguments"): restructure
+// to one object argument, `add({ a, b })`, and describe that.
 ```
 
-So `login(user, pass)` and `add(a, b)` **cannot** be validated. There is no
-per-argument option, and no way to describe "validate each of my three arguments"
-— the wire format is a positional array (`[a, 1, 2]`) and rpc hands the schema
-element `0`.
+So `login(user, pass)` and `add(a, b)` **cannot** be written, let alone
+validated. The wire format is still a positional array (`[input]`), and rpc
+hands the schema its element `0` — but the handler side of that array has
+exactly one slot.
 
 **Array payloads are refused.** An array `args[0]` throws, by name, on both call
 paths:
@@ -475,31 +478,31 @@ deliberate narrowing, not an oversight.
 Two further reasons it is refused rather than tolerated:
 
 - **It is indistinguishable from a wrong signature.** `schema: z.tuple([...])`
-  against `add(a, b)` looks correct and is not — the schema is handed `a` alone
-  and rejects with "expected array, received number". Refusing arrays outright
-  names the real problem instead of reporting it as bad data.
-- **Positional arguments are not validated anyway.** `login(user, pass)` and
-  `add(a, b)` cannot use `schema` at all, so an array root is either a redundant
-  single argument or a mistaken attempt at positional validation. Send one
+  describes positional arguments, which functions no longer take — the schema
+  would be handed the single input and reject with "expected array, received
+  number". Refusing arrays outright names the real problem instead of reporting
+  it as bad data.
+- **There is nothing positional to describe.** `login(user, pass)` and
+  `add(a, b)` do not compile, so an array root is either a redundant single
+  argument or a mistaken attempt at positional validation. Send one
   object: `add({ a, b })`.
 
 **The trap worth naming.** A tuple schema *looks* like it should work and does not:
 
 ```ts
-schema: z.tuple([z.number(), z.number()])   // against add(1, 2)
+schema: z.tuple([z.number(), z.number()])   // against add([1, 2])
 ```
 
-`args[0]` is `1`, so the tuple is asked to validate a number and rejects with
-"expected array, received number" — a message that describes a wiring mistake as
-a data error. If you want positional arguments, call the function with the tuple
-as one value: `add([1, 2])`, which validates correctly.
+The schema is handed the single input `[1, 2]` — an array — and `runValidation`
+refuses array payloads outright (see above), because a root array can only
+produce positional issues. If you want a list, describe it as a field:
+`add({ items: [1, 2] })` with `schema({ items: field.custom(z.array(...)) })`,
+which validates correctly.
 
 **Why one payload is the right default anyway.** A form *is* one object, so
 validation errors map to named inputs rather than positions — which is what
 `fieldErrors`, the no-JS fallback's flash, and a client-side resolver all need. A
-position in an array is not something you can label. Positional args remain
-available and are the right choice for small, internal, trusted helpers; they
-simply are not validated.
+position in an array is not something you can label.
 
 
 | **Unknown keys: rpc rejects, the libraries ignore.** | Measured on the same input, `schema({ a })` **rejected** `{ a: 1, b: "x" }`, while zod, valibot and arktype all passed it (zod strips, the others ignore). The builder is deliberately the strict one; strictness is not configurable. |
@@ -724,8 +727,8 @@ interface RequestEvent {
   send: (status: number, body: unknown, headers?: Record<string, string>) => void;
   /** Set by `send` once issued; middleware checks this after `await`ing the handler */
   sent?: { status: number; body: unknown; headers?: Record<string, string> };
-  /** Staged response header — written into the host's response immediately, so it rides the `{ data }` JSON send, a `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. Set semantics: one value per name */
-  header: (name: string, value: string) => void;
+  /** Staged response header — written into the host's response immediately, so it rides the `{ data }` JSON send, a `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. Set semantics: one value per name; an array value sends one header line per element */
+  header: (name: string, value: string | readonly string[]) => void;
   /** Matched RPC function name (e.g. "greet") — useful for per-function rate limiting */
   functionName?: string;
   /** Per-request app data shared across the async tree of the dispatch */

@@ -134,7 +134,7 @@ Context-level helper (import from `@thednp/rpc/server`) equivalent to `getReques
 
 ### `event.header(name, value)`
 
-Stages a response header from anywhere inside the dispatch — a server function, a handler wrapper, middleware reading the context. The write lands in the host's response immediately, so it rides whatever the dispatch concludes with: the default `{ data }` JSON send, your own `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. Set semantics: one value per name, a later call replaces. (On Express and Fastify a call made after the response is already committed is ignored — never call it after your own `send`/`redirect`.)
+Stages a response header from anywhere inside the dispatch — a server function, a handler wrapper, middleware reading the context. The write lands in the host's response immediately, so it rides whatever the dispatch concludes with: the default `{ data }` JSON send, your own `send`/`redirect` short-circuit, the no-JS fallback's `303`, or an error response. Set semantics: one value per name, a later call replaces. An array value sends one header line per element (the `Set-Cookie` case — joining cookies with commas would not parse); an empty array sets nothing.
 
 ```ts
 import { createServerFunction, getRequestContext } from "@thednp/rpc/server";
@@ -146,6 +146,16 @@ export const login = createServerFunction("login", async (signal, credentials) =
   getRequestContext().header("Set-Cookie", `sid=${session.id}; HttpOnly; Path=/`);
   return { user: session.user };
 });
+```
+
+Two cookies in one dispatch need one call with both lines — a second call
+would replace the first:
+
+```ts
+getRequestContext().header("Set-Cookie", [
+  `sid=${session.id}; HttpOnly; Path=/`,
+  `theme=${theme}; Path=/`,
+]);
 ```
 
 ## Wrapping Official Framework Middleware
@@ -264,10 +274,10 @@ type Session = { id: string; role: 'admin' | 'user' } | null;
 
 /** Attach a session to `event.locals` before the handler runs. */
 export const withSession =
-  <TArgs extends unknown[], TResult>(
-    handler: (signal: AbortSignal, ...args: TArgs) => Promise<TResult>,
+  <TInput, TResult>(
+    handler: (signal: AbortSignal, input: TInput) => Promise<TResult>,
   ) =>
-  async (signal: AbortSignal, ...args: TArgs): Promise<TResult> => {
+  async (signal: AbortSignal, input: TInput): Promise<TResult> => {
     const event = getRequestContext();
     // `locals` is always present (every adapter sets it, and it is non-optional
   // on RequestEvent), so there is nothing to guard here.
@@ -281,7 +291,7 @@ export const withSession =
       const token = readCookie(cookie, 'sid');
       event.locals.session = token ? await verifySession(token) : null;
     }
-    return handler(signal, ...args);
+    return handler(signal, input);
   };
 ```
 

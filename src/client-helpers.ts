@@ -3,8 +3,8 @@ import type {
   ClientFunction,
   Credentials,
   InnerModReturn,
-  JsonArray,
   JsonValue,
+  NoArgClientFunction,
   StubOptions,
   ValidationIssue,
 } from "./types.d.ts";
@@ -66,8 +66,14 @@ export class RPCResponseError extends Error {
  * On success, parses JSON and returns `result.data` — or throws if `result.error` is set.
  * @param response - Fetch Response object from the RPC endpoint
  * @returns The response data, or void on cancellation
+ *
+ * `R` is deliberately unconstrained: the client only *asserts* the response
+ * shape (interfaces included — they have no implicit index signature and can
+ * never satisfy `JsonValue`), while the serializability requirement is
+ * enforced where values are produced, on the factory's `TResult`. The cast
+ * below is the single point where the assertion meets the wire.
  */
-export const handleResponse = async <R extends JsonValue>(
+export const handleResponse = async <R>(
   response: Response,
 ): Promise<R | void> => {
   if (!response.ok) {
@@ -212,20 +218,20 @@ export const unwrapEnvelope = <T>(json: unknown): T => {
  * modules (`src/getClientModules.ts:73`). Keeps body/header mapping in one
  * place so `innerModule` stays thin.
  */
-const makeStub = <T extends JsonArray, R extends JsonValue>(
+const makeStub = <TInput extends FormData | JsonValue, R>(
   prefix: string,
   name: string,
   options: Partial<StubOptions> = {},
-): ClientFunction<T, R> => {
+): ClientFunction<TInput, R> & NoArgClientFunction<R> => {
   const method = (options.method ?? "POST") as "GET" | "POST";
   const credentials = (options.credentials ?? "same-origin") as Credentials;
   const contentType = (options.contentType ?? "application/json") as string;
   if (method === "GET") {
     const headers = {} as HeadersInit;
-    return (<TArgs extends T, Res extends R>(
-      ...args: TArgs
+    return (<TIn extends TInput, Res extends R>(
+      input: TIn,
     ): InnerModReturn<Res> => {
-      const json = JSON.stringify(args);
+      const json = JSON.stringify([input]);
       return innerModule<Res>(
         json as BodyInit,
         headers,
@@ -234,67 +240,67 @@ const makeStub = <T extends JsonArray, R extends JsonValue>(
         name,
         method,
       );
-    }) as ClientFunction<T, R>;
+    }) as ClientFunction<TInput, R> & NoArgClientFunction<R>;
   }
   switch (contentType) {
     case "text/plain": {
       const headers = { "Content-Type": "text/plain" } as HeadersInit;
-      return (<TArgs extends T, Res extends R>(
-        ...args: TArgs
+      return (<TIn extends TInput, Res extends R>(
+        input: TIn,
       ): InnerModReturn<Res> =>
         innerModule(
-          (args[0] as string) as BodyInit,
+          (input as unknown as string) as BodyInit,
           headers,
           credentials,
           prefix,
           name,
           method,
-        )) as ClientFunction<T, R>;
+        )) as ClientFunction<TInput, R> & NoArgClientFunction<R>;
     }
     case "application/x-www-form-urlencoded": {
       const headers: HeadersInit = {
         "Content-Type": "application/x-www-form-urlencoded",
       };
-      return (<TArgs extends T, Res extends R>(
-        ...args: TArgs
+      return (<TIn extends TInput, Res extends R>(
+        input: TIn,
       ): InnerModReturn<Res> =>
         innerModule(
-          new URLSearchParams(args[0] as Record<string, string>)
+          new URLSearchParams(input as unknown as Record<string, string>)
             .toString() as BodyInit,
           headers,
           credentials,
           prefix,
           name,
           method,
-        )) as ClientFunction<T, R>;
+        )) as ClientFunction<TInput, R> & NoArgClientFunction<R>;
     }
     case "multipart/form-data": {
       const headers: HeadersInit = {};
-      return (<TArgs extends T, Res extends R>(
-        ...args: TArgs
+      return (<TIn extends TInput, Res extends R>(
+        input: TIn,
       ): InnerModReturn<Res> =>
         innerModule(
-          args[0] as BodyInit,
+          input as unknown as BodyInit,
           headers,
           credentials,
           prefix,
           name,
           method,
-        )) as ClientFunction<T, R>;
+        )) as ClientFunction<TInput, R> & NoArgClientFunction<R>;
     }
     default: {
       const headers: HeadersInit = { "Content-Type": "application/json" };
-      return (<TArgs extends T, Res extends R>(
-        ...args: TArgs
+      return (<TIn extends TInput, Res extends R>(
+        input: TIn,
       ): InnerModReturn<Res> =>
         innerModule(
-          JSON.stringify(args) as BodyInit,
+          JSON.stringify([input]) as BodyInit,
           headers,
           credentials,
           prefix,
           name,
           method,
-        )) as ClientFunction<T, R>;
+        )) as ClientFunction<TInput, R> & NoArgClientFunction<R>;
     }
   }
 };
@@ -310,7 +316,7 @@ const makeStub = <T extends JsonArray, R extends JsonValue>(
  * @param prefix - RPC prefix (e.g. "admin:rpc")
  * @param name - Registered function name
  * @param options - Optional `method`, `credentials`, `contentType`
- * @returns Client stub `(...args) => {data,cancel}`
+ * @returns Client stub `(input) => {data,cancel}`
  * @example
  * import { getClientStub } from "@thednp/rpc/helpers";
  * const adminGetUser = getClientStub("admin:rpc","get-user");
@@ -318,12 +324,15 @@ const makeStub = <T extends JsonArray, R extends JsonValue>(
  * @example
  * const adminStats = getClientStub("admin:rpc","stats", { method: "GET" });
  */
-export function getClientStub<T extends JsonArray, R extends JsonValue>(
+export function getClientStub<
+  TInput extends FormData | JsonValue = JsonValue,
+  R = JsonValue,
+>(
   prefix: string,
   name: string,
   options?: Partial<StubOptions>,
-): ClientFunction<T, R> {
-  return makeStub<T, R>(prefix, name, options);
+): ClientFunction<TInput, R> & NoArgClientFunction<R> {
+  return makeStub<TInput, R>(prefix, name, options);
 }
 
 /**
@@ -339,7 +348,7 @@ export function getClientStub<T extends JsonArray, R extends JsonValue>(
  * @param method - HTTP method to use, "POST" by default
  * @returns An object with `data` (promise resolving to the server response) and `cancel` (abort function)
  */
-export const innerModule = <R extends JsonValue>(
+export const innerModule = <R>(
   body: BodyInit,
   headers: HeadersInit,
   credentials: Credentials,

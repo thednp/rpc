@@ -396,23 +396,40 @@ type JsonValue = JsonPrimitive | JsonArray | JsonObject;
  * Server function initialization signature, identical to `ServerFunction`.
  * Used when registering a function with `createServerFunction`.
  */
-type ServerFunctionInit<TArgs extends FormData | JsonArray = JsonArray, TResult = JsonValue> = (signal: AbortSignal, ...args: TArgs) => Promise<TResult>;
+type ServerFunctionInit<TInput extends FormData | JsonValue = JsonValue, TResult extends JsonValue | void = JsonValue> = (signal: AbortSignal, input: TInput) => Promise<TResult>;
 /**
  * Client-side stub signature generated for each server function.
  * Returns a promise-backed `data` handle plus a `cancel` function
  * that aborts the underlying fetch request.
  */
-type ClientFunction<TArgs extends JsonArray = JsonArray, TResult = JsonValue> = (...args: TArgs) => {
+type ClientFunction<TInput extends FormData | JsonValue = JsonValue, TResult = JsonValue> = (input: TInput) => {
   /** Promise resolving to the server response data */
   data: Promise<TResult>;
   /** Aborts the in-flight request with the given reason */
   cancel: (reason: string) => void;
 };
 /**
+ * Client-side stub for a function taking no input. Callable with zero
+ * arguments — the pre-0.4.2 `(...args: [])` inference, spelled out, so
+ * zero-argument functions stay callable as `fn()`.
+ */
+type NoArgClientFunction<TResult = JsonValue> = {
+  (): {
+    /** Promise resolving to the server response data */
+    data: Promise<TResult>;
+    /** Aborts the in-flight request with the given reason */
+    cancel: (reason: string) => void;
+  };
+  /** Registered export name of the server function */
+  name: string;
+  /** Per-function content type and credentials options */
+  options?: ServerFunctionOptions;
+};
+/**
  * A client function augmented with its registered export name and
  * per-function options (content type, credentials).
  */
-type ClientFunctionWithOptions<T extends JsonArray = JsonArray, A extends JsonValue = JsonValue> = ClientFunction<T, A> & {
+type ClientFunctionWithOptions<TInput extends FormData | JsonValue = JsonValue, TResult = JsonValue> = ClientFunction<TInput, TResult> & {
   /** Registered export name of the server function */
   name: string;
   /** Per-function content type and credentials options */
@@ -850,9 +867,9 @@ export interface CreateServerFunctionOptions extends Partial<ServerFunctionOptio
  * annotated parameter must be a supertype of `InferOutput<TSchema>`. An
  * incompatible annotation therefore fails to compile.
  */
-export declare function createServerFunction<TSchema extends StandardSchemaV1<unknown, unknown>, TResult extends JsonValue = JsonValue>(name: string, handler: (signal: AbortSignal, input: InferOutput<TSchema>, ...rest: JsonValue[]) => Promise<TResult>, fnOptions: CreateServerFunctionOptions & {
+export declare function createServerFunction<TSchema extends StandardSchemaV1<unknown, unknown>, TResult extends JsonValue | void = JsonValue>(name: string, handler: (signal: AbortSignal, input: InferOutput<TSchema>) => Promise<TResult>, fnOptions: CreateServerFunctionOptions & {
   schema: TSchema;
-}): ClientFunction<[InferInput<TSchema> & JsonValue, ...JsonValue[]], TResult>;
+}): ClientFunction<InferInput<TSchema> & JsonValue, TResult>;
 /**
  * Creates a server function with no input schema.
  *
@@ -861,9 +878,9 @@ export declare function createServerFunction<TSchema extends StandardSchemaV1<un
  * failing the one above — the mismatch would otherwise be accepted with an
  * untyped input.
  */
-export declare function createServerFunction<TArgs extends JsonArray = JsonArray, TResult extends JsonValue = JsonValue>(name: string, handler: ServerFunctionInit<TArgs, TResult>, fnOptions?: CreateServerFunctionOptions & {
+export declare function createServerFunction<TInput extends FormData | JsonValue = JsonValue, TResult extends JsonValue | void = JsonValue>(name: string, handler: ServerFunctionInit<TInput, TResult>, fnOptions?: CreateServerFunctionOptions & {
   schema?: undefined;
-}): ClientFunction<TArgs, TResult>;
+}): ClientFunction<TInput, TResult> & NoArgClientFunction<TResult>;
 //#endregion
 //#region src/getClientModules.d.ts
 /**
@@ -1308,14 +1325,15 @@ export interface RequestEvent {
    * called, so it rides whatever this dispatch concludes with: the default
    * `{ data }` JSON response, an author `send`/`redirect` short-circuit, the
    * no-JS fallback's `303`, or a dispatch error response. Assigns (replaces)
-   * the value for `name` — call once per header name. Safe at any point
-   * during the dispatch; on Express and Fastify a call made after the
-   * response is already committed is ignored. Never call it after your own
-   * `send`/`redirect`.
+   * the value for `name` — call once per header name. An array value sends
+   * one header line per element (the `Set-Cookie` case); an empty array sets
+   * nothing. Safe at any point during the dispatch; on Express and Fastify
+   * a call made after the response is already committed is ignored. Never
+   * call it after your own `send`/`redirect`.
    * @param name - Header name (e.g. `"Set-Cookie"`)
-   * @param value - Single header value
+   * @param value - Single header value, or one element per line
    */
-  header: (name: string, value: string) => void;
+  header: (name: string, value: string | readonly string[]) => void;
   /**
    * The matched RPC function name for the current request, when available.
    * Useful for per-function rate limiting or auditing inside middleware.

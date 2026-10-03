@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.4.2] - 2026-10-03
+
+### ⚠️ Breaking: one input per function, never positional args
+
+`createServerFunction` handlers are now `(signal, input)` — a single input
+instead of `...args`. The wire is unchanged (still a JSON array, now always
+of length one), so old and new sides disagree loudly at the type level
+rather than silently at runtime:
+
+- **Handlers.** Collapse parameters into one object: `login(username,
+  password)` becomes `login({ username, password })`. A handler declaring
+  more than `(signal, input)` is a type error; a handler taking no input
+  keeps a zero-parameter stub (`fn()` still works).
+- **Callers.** Collapse arguments the same way. A second array element has no
+  parameter to land on — an old client sending `["a", "b"]` gets its first
+  element as the input, so upgrade both sides together.
+- **`getClientStub`** takes one input as well; a `FormData` input needs an
+  explicit type argument (`getClientStub<FormData>(...)`).
+- The schema arity warning is gone with the multi-argument handlers it
+  guarded — there is nothing for a schema to miss anymore.
+
+What did *not* change: the wire bodies (`[input]`, `?args=[input]`),
+`args[0]` validation, the `{ data, cancel }` shape, status codes, the
+fallback, and `getClientStub`'s runtime behaviour. See
+[Migration — From 0.4.x](./wiki/migration.md#from-04x).
+
+### Added
+
+- **Void-returning handlers.** `TResult` is now `JsonValue | void` at the factory and on `ServerFunctionInit`, so the common fire-and-forget shape type-checks with no cast:
+
+  ```ts
+  createServerFunction("save", async (_signal, input) => {
+    await db.save(input);
+  });
+  ```
+
+  `data` resolves to `undefined` and the wire body is `{}` (`JSON.stringify` drops it). The client-facing aliases (`ClientFunction`, `NoArgClientFunction`, `ServerFunction`) stay open so a wrapper can name a non-JSON result type; the constraint lives at the entry points that actually serialize.
+- **`RequestEvent.header()` accepts an array** for multi-line values — `header("Set-Cookie", ["sid=1", "theme=dark"])` sends one header line per element (a comma-joined line would not parse as two cookies). Bound per adapter (`Headers.append` on h3, `append: true` on Hono, native arrays on Express/Fastify/Koa); an empty array sets nothing.
+- **Client result types are open.** `getClientStub`'s `R` (with `handleResponse`/`innerModule`/`InnerModReturn` behind it) no longer requires `extends JsonValue`: the client only asserts the response shape, so an `interface` result — no implicit index signature, never `JsonValue` — now type-checks, which the advanced example's `getClientStub<string, UserFull>` needs. `getClientStub` still constrains its *input*, since that is what the client serializes; the factory keeps `TResult extends JsonValue | void` for what the server produces.
+
+### Fixed
+
+- **`check:ts5` actually checks TS 5.9 again.** The `typescript-5` npm alias had drifted to `typescript@7.0.2`, making the script a no-op duplicate of the root `tsc`. It is pinned back to `5.9.3` — which is how the interface-result break above was caught before publish.
+
 ## [0.4.1] - 2026-10-02
 
 ### Added: staged response headers
