@@ -265,8 +265,8 @@ importers:
   examples/express:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       compression:
         specifier: ^1.8.2
         version: 1.8.2
@@ -302,8 +302,8 @@ importers:
         specifier: ^10.1.5
         version: 10.1.5
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
@@ -327,8 +327,8 @@ importers:
   examples/h3:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       h3:
         specifier: 2.0.1-rc.32
         version: 2.0.1-rc.32
@@ -352,8 +352,8 @@ importers:
         specifier: ^2.1.3
         version: 2.1.3(hono@4.13.12)
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       hono:
         specifier: ^4.13.12
         version: 4.13.12
@@ -377,8 +377,8 @@ importers:
   examples/koa:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       compression:
         specifier: ^1.8.2
         version: 1.8.2
@@ -423,8 +423,8 @@ importers:
         specifier: ^5.104.0
         version: 5.104.0(react@19.3.0)
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       compression:
         specifier: ^1.8.2
         version: 1.8.2
@@ -472,8 +472,8 @@ importers:
         specifier: ^5.104.0
         version: 5.104.0(solid-js@1.9.15)
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       compression:
         specifier: ^1.8.2
         version: 1.8.2
@@ -509,8 +509,8 @@ importers:
   examples/spa:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       vite:
         specifier: ^8.3.2
         version: 8.3.2(@types/node@26.6.4)
@@ -528,8 +528,8 @@ importers:
   examples/ssr:
     dependencies:
       '@thednp/rpc':
-        specifier: ^0.4.1
-        version: 0.4.1(@types/node@26.6.4)
+        specifier: ^0.4.2
+        version: 0.4.2(@types/node@26.6.4)
       vite:
         specifier: ^8.3.2
         version: 8.3.2(@types/node@26.6.4)
@@ -908,6 +908,9 @@ packages:
 
   '@thednp/rpc@0.4.1':
     resolution: {integrity: sha512-wzjfwBy71BQYY4sykEkxl2yvlVt1rpYGVje5KnOYZEVPcRUDfKAMQbNZw03ABpmlxzN/QnDtJxeDCng59XNztQ==}
+
+  '@thednp/rpc@0.4.2':
+    resolution: {integrity: sha512-QrOMhM2GwLi0mFe7pi68npHF/X/201Cn08kiXm94LjmwMYZrqxA8jvcBEMdCFUWRfCz/XWyflxKnHQ2TY/+fsA==}
 
   '@types/accepts@1.3.7':
     resolution: {integrity: sha512-Pay9fq2lM2wXPWbteBsRAGiWH2hig4ZE2asK+mm7kUzlxRTfL961rj89I6zV/E3PcIkDqyuBEcMxFT7rccugeQ==}
@@ -2963,6 +2966,32 @@ snapshots:
       solid-js: 1.9.15
 
   '@thednp/rpc@0.4.1(@types/node@26.6.4)':
+    dependencies:
+      express: 5.2.1
+      fastify: 5.12.5
+      fastify-plugin: 6.0.0
+      h3: 2.0.1-rc.32
+      hono: 4.13.12
+      koa: 3.2.1
+      vite: 8.3.2(@types/node@26.6.4)
+    transitivePeerDependencies:
+      - '@types/node'
+      - '@vitejs/devtools'
+      - crossws
+      - esbuild
+      - jiti
+      - less
+      - ocache
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  '@thednp/rpc@0.4.2(@types/node@26.6.4)':
     dependencies:
       express: 5.2.1
       fastify: 5.12.5
